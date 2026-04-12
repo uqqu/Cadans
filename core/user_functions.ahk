@@ -49,7 +49,7 @@ ToggleLayers(layers*) {
         } else {
             ActiveLayers.Add(layer_name, , layer_pos)
             if AllLayers.map[layer_name] is Integer {
-                _MergeLayer(layer_name)
+                MergeLayer(layer_name)
             }
         }
     }

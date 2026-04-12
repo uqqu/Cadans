@@ -1,8 +1,8 @@
 [🇬🇧 English](README.md) • [🇷🇺 Русский](README.ru.md)
 
-# Tap-Dance-for-Windows
+# Cadans
 
-Welcome to **TDFW** — a global remapper of any input events. Set dozens and hundreds of assignments for any, up to the most exotic events for any keys, mouse buttons or its movement – gestures. Create chains of assignments with your own unique actions, from typing template text to accessing external api. Without firmware, drivers or special hardware – works with any device.
+Welcome to **Cadans** — a global remapper of any input events. Set dozens and hundreds of assignments for any, up to the most exotic events for any keys, mouse buttons or its movement – gestures. Create chains of assignments with your own unique actions, from typing template text to accessing external api. Without firmware, drivers or special hardware – works with any device.
 
 
 ## 🚀 Key Features & Interactions
@@ -12,42 +12,42 @@ Welcome to **TDFW** — a global remapper of any input events. Set dozens and hu
 ### **> Tap-Hold**  
 Basic events of any key, branching of which opens the first level of variability. Add two assignments to a key – one for a quick press and one for a short hold.  
 
-<img src="https://raw.githubusercontent.com/uqqu/Tap-Dance-for-Windows/refs/heads/main/gifs/1.gif" width="400">
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/1.gif" width="400">
   
   
 Here and hereafter: no functionality overrides native behavior in general. If there is no assignment, as here for holding a particular key, there will be the expected system result.  
 
-<img src="https://raw.githubusercontent.com/uqqu/Tap-Dance-for-Windows/refs/heads/main/gifs/2.gif" width="400">
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/2.gif" width="400">
   
   
 ### **> Sequences of events**  
 Each event doesn't just perform the assigned action, but is a chain element for unique nested assignments. With support for tap and hold branching, of course.  
 With each new triggered event, you move on to the next assignment until you reach the end of the chain, performing the final action, and return to the beginning. If an event at the first level has no child assignments, it is also a chain, just of one element, and the action is performed immediately.  
 
-<img src="https://raw.githubusercontent.com/uqqu/Tap-Dance-for-Windows/refs/heads/main/gifs/3.gif" width="400">
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/3.gif" width="400">
   
   
 The chain can also be interrupted by performing an action of the current element before reaching the final one. In the most basic case, this is a timer interrupt. If the next event has not occurred, we perform the action of the current one.
 There are no depth limitations for chains – Morse code, autocorrect for words, whatever you can think of. Each press is potentially a new level and a new field for assignments.  
 
-<img src="https://raw.githubusercontent.com/uqqu/Tap-Dance-for-Windows/refs/heads/main/gifs/4.gif" width="400">
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/4.gif" width="400">
   
   
 You can use chains only for final actions, where intermediate events are ignored, or you can specify additional actions, at any level. As in the following example – the most common input is performed, but it's actually a progression through the chain with an additional final action. It's a bit of a joke, but it works.  
 
-<img src="https://raw.githubusercontent.com/uqqu/Tap-Dance-for-Windows/refs/heads/main/gifs/5.gif" width="400">
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/5.gif" width="400">
   
   
 ### **> Custom modifier keys**  
 Also any key/button on hold can be assigned as a modifier for other events with more and more fields for assignments. Modifier combinations also have their own “fields”. Pressing a modifier is not a separate transition in the chain, but it modifies the others on its own level.  
 
-<img src="https://raw.githubusercontent.com/uqqu/Tap-Dance-for-Windows/refs/heads/main/gifs/6.gif" width="400">
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/6.gif" width="400">
   
   
 ### **> Chords/combo**  
 Add an assignment to an entire combination of keys at once, which will trigger when they are pressed together. This too can be a chain element, up to and including a chain of just chords.  
 
-<img src="https://raw.githubusercontent.com/uqqu/Tap-Dance-for-Windows/refs/heads/main/gifs/7.gif" width="400">
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/7.gif" width="400">
 
 > Each level of each sequence is assigned independently of the others, and a single key can be both a modifier and part of a chord, and have its own events and transitions. Each new level is a new, clean field for assignments.  
 `\[mod]+e, \ (tap), \ (hold), chord(\+z+x) 🡒 ƒ Turn on Pomodoro-timer`
@@ -55,24 +55,24 @@ Add an assignment to an entire combination of keys at once, which will trigger w
 ### **> Gestures**
 And at the same time, each assignment (except for chords) can also be a trigger for new events – gestures. If one or more child gestures are added to an assignment, mouse movements will leave a trace while holding down the assigned key, and releasing it will execute the action of the gesture if a match is found. Gestures are complete elements of chains, and in the same way can be continued by any further events, including assignments with all new gestures. Having gestures under an assignment does not override other child assignments, but complements them, and you can continue the chain with a gesture or any other event. Whichever event is triggered, we'll move on to that one.  
 
-![](https://raw.githubusercontent.com/uqqu/Tap-Dance-for-Windows/refs/heads/main/gifs/8.gif)  
+![](https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/8.gif)  
   
   
 Each gesture can also be given its own recognition options, such as: independence from the figure rotation, from the drawing direction, the scale influence, and for closed figures the option of independence from the first point of drawing is also available, when the figure is important, not the drawing order. All options can be combined in a single gesture and in different gestures at the same level, as desired. Assignments where gestures start also have their own settings for them, but already graphical – line colors, position and visibility of the live recognition text.  
 
-![](https://raw.githubusercontent.com/uqqu/Tap-Dance-for-Windows/refs/heads/main/gifs/9.gif)  
+![](https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/9.gif)  
   
   
 On top of all this, gestures are divided into 9 independent pools – 4 edge pools, 4 corner pools, one center pool, depending on where the gesture was started drawing from. This not only logically separates the categories of assignments and increases their possible number, but also allows you to set more precise assignments in combinations with native behavior, because the start of drawing and recognition is triggered only when the assigned event does not just have child gestures, but when they are in the pool at the current cursor position. This means you can set assignments for part of the pools without changing the behavior outside of them, as in the example below, where there are assignments for all but the central pool under the RMB. Again, no overriding actions if they don't lead to anything.  
 
-![](https://raw.githubusercontent.com/uqqu/Tap-Dance-for-Windows/refs/heads/main/gifs/rbm%20gestures%20demo.gif)  
+![](https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/rmb%20gestures%20demo.gif)  
 
 The last example is not artificial, but one of the preset layers in action, which you can try as is, and adjust to your needs if you wish.  
 
 ### **> Final actions and fine-tuning assignment options**  
 As final and intermediate actions you can set... anything? Character, text, simulation of other keys, native behavior, execution of any function. And the last ones don't necessarily have to be related to input.  
 
-<img src="https://raw.githubusercontent.com/uqqu/Tap-Dance-for-Windows/refs/heads/main/gifs/10.gif" width="600">
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/10.gif" width="600">
   
 And to configure any desired behavior, assignments can also be used to specify parameters for triggering related events by overriding global ones – hold threshold, child event waiting time (if there is any), behavior at child events without assignments, instant/intermediate execution, saving at this level of transitions, additional action when releasing a key, as well as suggestive text in the GUI and color settings when drawing child gestures.
 
@@ -108,13 +108,13 @@ You can set assignments for different layouts on each layer.
 
 All of the above is assigned and configured via the GUI.
 
-![](https://raw.githubusercontent.com/uqqu/Tap-Dance-for-Windows/refs/heads/main/gifs/1i.png)
+![](https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/1i.png)
 
 Go through any sequence of events, add assignments, link them to existing layers, or create new ones.  
 All assignments, with additional indicators, the number of child transitions, and the display of cross-assignments from different layers—everything is right in front of your eyes. For example:
 
-![](https://raw.githubusercontent.com/uqqu/Tap-Dance-for-Windows/refs/heads/main/gifs/2i.png)
-> A modified layout is not a reassignment, it is simply a [different layout](https://github.com/uqqu/layout)
+![](https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/2i.png)
+> A modified layout is not a reassignment, it is simply a [different layout](https://github.com/uqqu/qPhyx_layout)
 
 All added assignments become available for use immediately. Change functionality on the fly.
 
@@ -128,7 +128,6 @@ All added assignments become available for use immediately. Change functionality
 2. **Try** some of predefined layers
 3. **Define** your own assignments
 4. **Use** new assignments immediately, without restarts
-5. **Add** `main.*` to the system startup
 
 ### 🔧 Prerequisites
 

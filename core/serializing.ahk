@@ -2,15 +2,14 @@
     for lang, values in mp {
         _CleanMap(values)
     }
+    m := LayersMeta[filename]
 
-    tags_str := ""
-    for tag in LayerTags.Get(filename, []) {
-        tags_str .= tag . ", "
-    }
-
-    json := Dump(mp, "", conv)
     try FileDelete("layers/" . filename . ".json")
-    FileAppend("// 0.71`n// " . SubStr(tags_str, 1, -2) . "`n" . json, "layers/" . filename . ".json", "UTF-8")
+    FileAppend(
+        "// 0.80`r`n// " . m["rtags"] . "`r`n// "
+        . m["rdescription"] . "`r`n// " . m["rprocesses"] . "`r`n" . Dump(mp, "", conv),
+        "layers/" . filename . ".json", "UTF-8"
+    )
 }
 
 
@@ -46,7 +45,7 @@ _CleanMap(mp, parent_md:=0) {
 
 DeserializeMap(filename) {
     data := FileRead("layers/" . filename . ".json")
-    ver := GetLayerVersion(data)
+    ver := LayersMeta[filename]["version"]
     struct := Load(StripLineComments(data))
     if ver < 0.71 {
         UpdateLayerVersion(struct, ver)
@@ -55,36 +54,88 @@ DeserializeMap(filename) {
 }
 
 
-GetLayerVersion(data) {
-    first_line := Trim(StrSplit(data, "`n",, 2)[1], "`r`n`t ")
-    if RegExMatch(first_line, "^//\s*([0-9]+(?:\.[0-9]+)?)", &m) {
-        return Number(m[1])
+_GetMetaInfo(data) {
+    res := Map("version", 0.6, "rtags", "", "rdescription", "", "rprocesses", "",
+        "tags", [], "processes", Map("*", true))
+    lns := StrSplit(data, "`n", "`r`n`t ", 5)
+
+    if RegExMatch(lns[1], "^//\s*([0-9]+(?:\.[0-9]+)?)", &m) {
+        res["version"] := Number(m[1])
     }
-    return 0.6
-}
 
-
-GetLayerTags(data) {
-    global AllTags
-
-    tags := []
-    for tag in StrSplit(SubStr(StrSplit(data, "`n",, 3)[2], 3), ",") {
-        tag := Trim(tag, "`r`n`t ")
-        if StrLen(tag) {
-            tags.Push(tag)
-            AllTags[tag] := true
+    for i, name in ["rtags", "rdescription", "rprocesses"] {
+        if StrLen(lns[i+1]) > 3 && SubStr(lns[i+1], 1, 2) == "//" {
+            res[name] := Trim(SubStr(lns[i+1], 3), "`r`n`t ")
         }
     }
-    return tags
+
+    if StrLen(res["rtags"]) {
+        for tag in StrSplit(res["rtags"], ",", "`r`n`t ") {
+            if StrLen(tag) {
+                res["tags"].Push(tag)
+                AllTags[tag] := true
+            }
+        }
+    }
+    if !res["tags"].Length {
+        res["tags"].Push("<untagged>")
+        AllTags["<untagged>"] := true
+    }
+
+    if StrLen(res["rprocesses"]) {
+        res["processes"] := ParseProcessesRule(res["rprocesses"])
+    }
+
+    return res
 }
 
 
-GetLayerDescription(data) {
-    descr := StrSplit(data, "`n",, 4)[3]
-    if SubStr(descr, 1, 2) !== "//" {
-        return ""
+ParseProcessesRule(rule_str) {
+    ops := OrderedMap()
+    rule_str := Trim(rule_str)
+
+    if !rule_str {
+        return Map("*", true)
     }
-    return Trim(SubStr(descr, 3))
+
+    has_plus := false
+    current_sign := ""
+
+    for part in StrSplit(rule_str, ",", " `t`r`n") {
+        part := Trim(part)
+        if !part {
+            continue
+        }
+
+        sign := SubStr(part, 1, 1)
+        if sign == "+" || sign == "-" {
+            current_sign := sign
+            name := NormName(SubStr(part, 2))
+        } else {
+            if !current_sign {
+                continue
+            }
+            name := NormName(part)
+            sign := current_sign
+        }
+
+        if !name {
+            continue
+        }
+
+        if sign == "+" {
+            has_plus := true
+        }
+
+        ops.Set(name, sign == "+")
+    }
+
+    res := Map("*", !has_plus)
+    for name in ops.order {
+        res[name] := ops[name]
+    }
+
+    return res
 }
 
 
@@ -360,11 +411,12 @@ Dump(obj, indent:="", conv:=false) {
     if obj is Map {
         out := "{"
         for k, v in obj {
-            out .= "`n" . indent . "  " . "`"" . EscapeStr(k) . "`": "
+            out .= "`n" . indent . "  " . "`"" . EscapeStr(k, conv) . "`": "
                 . Dump(v, indent . "  ", conv) . ","
         }
         return out ~= ",$" ? SubStr(out, 1, -1) . "`n" . indent . "}" : out . "}"
     }
+
     if obj is Array {
         out := "["
         for v in obj {
@@ -372,12 +424,24 @@ Dump(obj, indent:="", conv:=false) {
         }
         return out ~= ",$" ? SubStr(out, 1, -1) . "`n" . indent . "]" : out . "]"
     }
+
+    if IsObject(obj) {
+        out := "{"
+        for k, v in obj.OwnProps() {
+            out .= "`n" . indent . "  " . "`"" . EscapeStr(k, conv) . "`": "
+                . Dump(v, indent . "  ", conv) . ","
+        }
+        return out ~= ",$" ? SubStr(out, 1, -1) . "`n" . indent . "}" : out . "}"
+    }
+
     if obj is Number {
         return obj
     }
+
     if obj == "" {
         return "null"
     }
+
     return "`"" . EscapeStr(obj, conv) . "`""
 }
 

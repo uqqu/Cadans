@@ -198,7 +198,7 @@ CollectPool(gestures) {
     pool := GetPool(x, y)
     pool_gestures := []
     for _, mod_mp in gestures {
-        if mod_mp.Has(0) && mod_mp[0].fin.opts.pool == pool {
+        if mod_mp.Has(0) && _GetFin(mod_mp[0]).opts.pool == pool {
             pool_gestures.Push(mod_mp[0])
         }
     }
@@ -221,7 +221,10 @@ StartDraw(gestures:=false, *) {
     PresentOverlay()
     gest_overlay.Show("NA")
     MouseGetPos(&prev_x, &prev_y)
-    SetOverlayOpts((gest_node ? gest_node.fin.gesture_opts : ""), GetPool(prev_x, prev_y))
+    SetOverlayOpts(
+        (await_gest ? _GetFin(await_gest[1]).gesture_opts : ""),
+        GetPool(prev_x, prev_y)
+    )
     SetTimer(TrackMouse, track_period)
     points := [[prev_x, prev_y]]
     cum_len := 0.0
@@ -281,38 +284,25 @@ EndDraw(*) {
 
     if init_drawing {
         init_drawing := false
-        try form["Save"].Opt("-Disabled")
-        try form["SaveWithReturn"].Opt("-Disabled")
+        try form["Save"].Enabled := true
+        try form["SaveWithReturn"].Enabled := true
         try form["SetGesture"].Text := "Saved!"
         SetTimer(_ReturnButtonText, -2000)
 
         res := Resample(points)
         pts := res[1]
         if Sqrt((pts[1][1]-pts[-1][1])**2 + (pts[1][2]-pts[-1][2])**2) < (res[2] / 10) {
-            try form["Phase"].Opt("-Disabled")
+            try form["Phase"].Enabled := true
         }
         try WinActivate "ahk_id " . form.Hwnd
+        return -1
     } else {
-        SetTimer(Fin.Bind(points, pool_gestures), -1)
+        ret := cum_len > Max(CONF.min_gesture_len.v, 10) ? Recognize(points, pool_gestures) : false
     }
 
     overlay_opts := false
     pool_gestures := false
-}
-
-
-Fin(pts, gestures) {
-    global gest_node
-
-    res := cum_len > Max(CONF.min_gesture_len.v, 10) ? Recognize(pts, gestures) : false
-
-    gest_node := false
-    if res && res[1] >= CONF.min_cos_similarity.v && res[2] !== "" {
-        TransitionProcessing(res[2])
-    } else if gest_pending {
-        gest_pending()
-    }
-    DestroyGestOverlay()
+    return ret
 }
 
 
@@ -436,9 +426,9 @@ LiveHint(pts, gestures) {
     try {
         if res[1] < CONF.min_cos_similarity.v {
             txt := !CONF.live_hint_extended.v ? "" : ("Not recognized. Best match: '"
-                . res[2].fin.gui_shortname . "' " . Round(res[1], 2))
+                . _GetFin(res[2]).gui_shortname . "' " . Round(res[1], 2))
         } else {
-            txt := res[2].fin.gui_shortname
+            txt := _GetFin(res[2]).gui_shortname
         }
     }
 
@@ -492,9 +482,14 @@ LiveHint(pts, gestures) {
     shadow_off := Round(Max(fs * 0.06, 1.0))
     bar_h := line_h + pad_y * 2
 
-    y := overlay_opts.live_hints == 1 ? margin_y
-        : (overlay_opts.live_hints == 2 ? ((A_ScreenHeight - bar_h) / 2.0)
-            : (A_ScreenHeight - bar_h - margin_y))
+    try {
+        t := overlay_opts.live_hints
+    } catch {
+        t := CONF.gest_live_hint.v
+    }
+    y := t == 1 ? margin_y
+        : (t == 2 ? ((A_ScreenHeight - bar_h) / 2.0)
+        : (A_ScreenHeight - bar_h - margin_y))
 
     rect := Buffer(16, 0)
     NumPut("float", 0.0, rect, 0)
@@ -528,7 +523,7 @@ LiveHint(pts, gestures) {
     }
 
     DllCall("gdiplus\GdipFillRectangle", "ptr", g, "ptr", brush_bg,
-        "float", bx, "float", by, "float", bw, "float", bh)
+        "float", bx, "float", by, "float", bw, "float", bh)  ; NTT
 
     if shadow_off > 0 {
         rect_sh := Buffer(16, 0)
@@ -566,17 +561,28 @@ DrawExisting(gesture_obj) {
     hy := (gesture_obj.opts.pool - 1) // 3
     hy := !hy ? e : hy == 1 ? A_ScreenHeight // 2 : A_ScreenHeight - e
     h := gesture_obj.opts.scaling = 0 ? A_ScreenHeight : 1
-    vec := gesture_obj.vec
-    if gesture_obj.opts.dirs && Random(0, 1) > 0.5 {  ; show bidir
-        vec := []
-        i := 1
-        while i < gesture_obj.vec.Length {
-            vec.Push(gesture_obj.vec[-i - 1], gesture_obj.vec[-i])
-            i += 2
+    vec := gesture_obj.vec.Clone()
+
+    if gesture_obj.opts.closed {  ; show phase shift
+        pts_cnt := vec.Length // 2
+        if pts_cnt > 2 {
+            sh := Random(0, pts_cnt - 1)
+            if sh {
+                vec := _RotateVecStart(vec, sh)
+            }
         }
-    } else {
-        vec := gesture_obj.vec
     }
+
+    if gesture_obj.opts.dirs && Random(0, 1) > 0.5 {  ; show bidir
+        rev := []
+        i := vec.Length
+        while i >= 2 {
+            rev.Push(vec[i - 1], vec[i])
+            i -= 2
+        }
+        vec := rev
+    }
+
     prev_x := vec[1] * h + hx
     prev_y := vec[2] * h + hy
     prev_w := 0
@@ -595,10 +601,16 @@ DrawExisting(gesture_obj) {
         d := Sqrt(dx*dx + dy*dy)
         len += d
 
-        target := BrushWidth(len)
-        width := target
-        if target > prev_w {
-            width := Min(target, prev_w + 1)
+        if gesture_obj.opts.closed {
+            prog := (i - 3) / Max(vec.Length - 3, 1)
+            target := Round(1 + (w_max - 1) * Sin(prog * PI))
+            width := target
+        } else {
+            target := BrushWidth(len)
+            width := target
+            if target > prev_w {
+                width := Min(target, prev_w + 1)
+            }
         }
 
         try {
@@ -619,4 +631,31 @@ DrawExisting(gesture_obj) {
     }
     cur_grad_len := 0
     SetTimer(DestroyGestOverlay, -2000)
+}
+
+
+_RotateVecStart(vec, point_shift) {
+    pts_cnt := vec.Length // 2
+    if pts_cnt <= 1 {
+        return vec.Clone()
+    }
+
+    point_shift := Mod(point_shift, pts_cnt)
+    if point_shift == 0 {
+        return vec.Clone()
+    }
+
+    out := []
+    start := point_shift * 2 + 1
+    i := start
+    while i <= vec.Length {
+        out.Push(vec[i], vec[i + 1])
+        i += 2
+    }
+    i := 1
+    while i < start {
+        out.Push(vec[i], vec[i + 1])
+        i += 2
+    }
+    return out
 }

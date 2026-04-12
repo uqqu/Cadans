@@ -20,14 +20,238 @@ DrawLayout(init:=false) {
 
     try UI.Destroy()
 
-    UI := Gui(, "TapDance for Windows")
+    UI := Gui(, proj_name)
     UI.Opt("-DPIScale")
     UI.Add("Edit", "x-999 y-999 w0 h0 vHidden")
     UI.path := []
     UI.current_values := []
-    UI.extra_tags := []
+    UI.main_tags := []  ; active, inactive, sep, first_line_tags*
+    UI.extra_tags := []  ; expand?, other_tags*
     UI.buttons := Map()
+    UI.SetFont("Norm s" . Round(8 * CONF.font_scale.v))
 
+    DrawOther()
+    DrawKeys()
+    DrawLayersLV()
+    DrawGesturesLV()
+    DrawChordsLV()
+    DrawCurrentValues()
+
+    uncat := [UI["BtnAddNewLayer"], UI["BtnBackToRoot"]]
+    for arr in [
+        UI.layer_ctrl_btns, UI.layer_move_btns, UI.chs_back, UI.chs_front,
+        UI.gest_btns, UI.drag_btns, UI.buffer, uncat
+    ] {
+        for btn in arr {
+            f := SubStr(btn.Name, 4)
+            btn.OnEvent("Click", %f%)
+        }
+    }
+
+    ToggleVisibility(0, UI.chs_back)
+    ToggleVisibility(root_text !== "root", UI["BtnBackToRoot"])
+    ToggleVisibility(
+        root_text == "root", UI.layer_move_btns, UI.layer_ctrl_btns, UI["BtnAddNewLayer"]
+    )
+
+    UI.SetFont("Norm")
+
+    if !init || !CONF.start_minimized.v {
+        UI.Show(Scale(,, 1294))
+        ChangePath(-1, false)
+    }
+}
+
+
+DrawKeys() {
+    global ALL_SCANCODES
+    static keyboard_layouts:=Map("ANSI", _BuildLayout("ANSI"), "ISO", _BuildLayout("ISO"))
+
+    ALL_SCANCODES := []
+    len := keyboard_layouts[CONF.layout_format.v].Length
+    x_offset := 10
+    y_offset := 50 * CONF.gui_scale.v
+    spacing := 5
+    height := (CONF.ref_height.v * CONF.gui_scale.v - (spacing * (len - 1)) - y_offset)
+        / (CONF.extra_k_row.v ? len - 0.3 : len)
+
+    for row_idx, row in keyboard_layouts[CONF.layout_format.v] {
+        y := y_offset
+            + (row_idx - (row_idx > 1 && CONF.extra_k_row.v ? 1.3 : 1)) * (height + spacing)
+        x := x_offset * 1.0
+
+        for data in row {
+            logical_w := data[1]
+            w := logical_w * CONF.gui_scale.v
+
+            if data.Length > 1 {
+                sc := data[2]
+                if sc !== "CurrMod" {
+                    ALL_SCANCODES.Push(sc)
+                }
+                if sc == 0x11D {
+                    UI[CONF.layout_format.v == "ISO" ? "54" : "310"].GetPos(&shx, , &shw)
+                    w := shx + shw - x * CONF.gui_scale.v + 1
+                }
+
+                h := height + (
+                    sc == 0x11C || sc == 0x4E || sc == 0x1C && CONF.layout_format.v == "ISO"
+                    ? height + spacing : 0
+                )
+                if row_idx == 1 && CONF.extra_k_row.v {
+                    h /= 1.5
+                }
+
+                btn := UI.Add("Button",
+                    "v" . sc . " x" . x * CONF.gui_scale.v . " y" . y . " w" . w . " h" . h
+                    . " +0x8000"
+                )
+                btn.indicators := []
+                UI.buttons[sc] := btn
+                if sc !== "CurrMod" {
+                    btn.OnEvent("Click", ButtonLMB.Bind(sc))
+                    btn.OnEvent("ContextMenu", ButtonRMB.Bind(sc))
+                } else {
+                    btn.OnEvent("Click", ChangePath.Bind(-1))
+                    btn.OnEvent("ContextMenu", ChangePath.Bind(-1))
+                }
+            }
+
+            x += logical_w + spacing
+        }
+    }
+}
+
+
+DrawLayersLV() {
+    icons := IL_Create(4, 1, false)
+    IL_Add(icons, A_ScriptDir . "\ico\cb_blank.ico")
+    IL_Add(icons, A_ScriptDir . "\ico\cb_checked.ico")
+    IL_Add(icons, A_ScriptDir . "\ico\folder.ico")
+    IL_Add(icons, A_ScriptDir . "\ico\back.ico")
+
+    p := Scale(10, CONF.ref_height.v + 29, 425, CONF.ref_height.v)
+    UI.AddListView("vLV_layers " . p, ["", "P", "Layer", "Base", "→", "Hold", "→"])
+    UI["LV_layers"].OnEvent("DoubleClick", LVLayerDoubleClick)
+    UI["LV_layers"].OnEvent("Click", LVLayerClick)
+    UI["LV_layers"].OnEvent("ContextMenu", LVLayerClick)
+    UI["LV_layers"].SetImageList(icons)
+
+    for i, w in [20, 20, 110, 95, 30, 95, 30] {
+        UI["LV_layers"].ModifyCol(i, Max(w * CONF.gui_scale.v, 16 * USER_DPI))
+    }
+    btns_wh := "w" . (428 * CONF.gui_scale.v / 6) . " h" . (20 * CONF.gui_scale.v)
+
+    for i, arr in [
+        ["vBtnAddNewLayer", "✨ New"],
+        ["vBtnViewSelectedLayer", "🔍 View"],
+        ["vBtnEditSelectedLayer", "✏️ Meta"],
+        ["vBtnDeleteSelectedLayer", "🗑️ Delete"],
+        ["vBtnMoveUpSelectedLayer", "🔼 Move up"],
+        ["vBtnMoveDownSelectedLayer", "🔽 Move dn"]]
+    {
+        UI.Add("Button", arr[1] . (i == 1 ? " xp0 y+0 " : " x+-1 yp0 ") . btns_wh, arr[2])
+    }
+    UI.Add("Button", "vBtnBackToRoot " . ("x" . (10 * CONF.gui_scale.v) . " yp0"
+        . " w" . (425 * CONF.gui_scale.v)
+        . " h" . (20 * CONF.gui_scale.v)
+        ), "🔙 Back to all active layers"
+    )
+
+    UI["BtnMoveUpSelectedLayer"].OnEvent("ContextMenu", _MoveSelectedLayer.Bind(-1, true))
+    UI["BtnMoveDownSelectedLayer"].OnEvent("ContextMenu", _MoveSelectedLayer.Bind(1, true))
+
+    UI.layer_move_btns := [UI["BtnMoveUpSelectedLayer"], UI["BtnMoveDownSelectedLayer"]]
+    UI.layer_ctrl_btns := [
+        UI["BtnViewSelectedLayer"], UI["BtnEditSelectedLayer"], UI["BtnDeleteSelectedLayer"]
+    ]
+}
+
+
+DrawGesturesLV() {
+    p := Scale(434, CONF.ref_height.v + 29, 425, CONF.ref_height.v)
+    UI.AddListView("vLV_gestures " . p,
+        ["Gesture name", "Value", "Options", "→", "Layer", "roll it back"])
+    UI["LV_gestures"].OnEvent("DoubleClick", LVGestureDoubleClick)
+    UI["LV_gestures"].OnEvent("Click", LVGestureClick)
+    for i, w in [110, 110, 95, 30, 65, 0] {
+        UI["LV_gestures"].ModifyCol(i, w * CONF.gui_scale.v)
+    }
+
+    btns_wh := "w" . (426 * CONF.gui_scale.v / 4) . " h" . (20 * CONF.gui_scale.v)
+    UI.gest_btns := []
+    UI.gest_btns.Push(
+        UI.Add("Button", "vBtnAddNewGesture xp0 y+0 " . btns_wh, "✨ New"),
+        UI.Add("Button", "vBtnShowSelectedGesture x+-1 yp0 " . btns_wh, "👀 Show"),
+        UI.Add("Button", "vBtnChangeSelectedGesture x+-1 yp0 " . btns_wh, "✏️ Change"),
+        UI.Add("Button", "vBtnDeleteSelectedGesture x+-1 yp0 " . btns_wh, "🗑️ Delete")
+    )
+    UI.gest_toggles := [
+        UI["BtnShowSelectedGesture"],
+        UI["BtnChangeSelectedGesture"],
+        UI["BtnDeleteSelectedGesture"]
+    ]
+    ToggleEnabled(0, UI.gest_toggles)
+}
+
+
+DrawChordsLV() {
+    p := Scale(858.5, CONF.ref_height.v + 29, 425, CONF.ref_height.v)
+    UI.AddListView("vLV_chords " . p, ["Chord", "Value", "→", "Layer"])
+    UI["LV_chords"].OnEvent("DoubleClick", LVChordDoubleClick)
+    UI["LV_chords"].OnEvent("Click", LVChordClick)
+    for i, w in [120, 170, 30, 100] {
+        UI["LV_chords"].ModifyCol(i, w * CONF.gui_scale.v)
+    }
+
+    btns_wh := "w" . (426 * CONF.gui_scale.v / 3) . " h" . (20 * CONF.gui_scale.v)
+    UI.Add("Button", "vBtnAddNewChord xp0 y+0 " . btns_wh, "✨ New")
+    UI.Add("Button", "vBtnSaveEditedChord xp0 yp0 " . btns_wh, "✔ Save")
+    UI.Add("Button", "vBtnChangeSelectedChord x+-1 yp0 " . btns_wh, "✏️ Change")
+    UI.Add("Button", "vBtnDiscardChordEditing xp0 yp0 " . btns_wh, "↩ Discard")
+    UI.Add("Button", "vBtnDeleteSelectedChord x+-1 yp0 " . btns_wh, "🗑️ Delete")
+    UI.Add("Button", "vBtnCancelChordEditing xp0 yp0 " . btns_wh, "❌ Cancel")
+    UI.chs_front := [
+        UI["BtnAddNewChord"], UI["BtnChangeSelectedChord"], UI["BtnDeleteSelectedChord"]
+    ]
+    UI.chs_back := [
+        UI["BtnSaveEditedChord"], UI["BtnDiscardChordEditing"], UI["BtnCancelChordEditing"]
+    ]
+    UI.chs_toggles := [UI["BtnChangeSelectedChord"], UI["BtnDeleteSelectedChord"]]
+    ToggleEnabled(0, UI.chs_toggles)
+}
+
+
+DrawCurrentValues() {
+    UI.SetFont("Norm")
+    sh := 255
+    UI.current_values.Push(
+        UI.Add("Text", Scale(1270 - sh, 0, 50, 23) . " +0x200 Center vTextBase"),
+        UI.Add("Text", Scale(1270 - sh, 23, 50, 23) . " +0x200 Center vTextHold"),
+        UI.Add("Button", Scale(1325 - sh, 0, 160, 23) . " vBtnBase"),
+        UI.Add("Button", Scale(1325 - sh, 23, 160, 23) . " vBtnHold"),
+        UI.Add("Button", Scale(1490 - sh, 0, 25, 23) . " vBtnBaseClear", "✕"),
+        UI.Add("Button", Scale(1490 - sh, 23, 25, 23) . " vBtnHoldClear", "✕"),
+        UI.Add("Button", Scale(1515 - sh, 0, 25, 23) . " vBtnBaseClearNest", "🕳"),
+        UI.Add("Button", Scale(1515 - sh, 23, 25, 23) . " vBtnHoldClearNest", "🕳")
+    )
+    UI["BtnBase"].OnEvent("Click", OpenForm.Bind(0))
+    UI["BtnHold"].OnEvent("Click", OpenForm.Bind(1))
+    UI["BtnBaseClear"].OnEvent("Click", ClearCurrentValue.Bind(0))
+    UI["BtnHoldClear"].OnEvent("Click", ClearCurrentValue.Bind(1))
+    UI["BtnBaseClearNest"].OnEvent("Click", ClearNested.Bind(0))
+    UI["BtnHoldClearNest"].OnEvent("Click", ClearNested.Bind(1))
+    UI["BtnBase"].indicators := []
+    UI["BtnHold"].indicators := []
+
+    UI.Add("Button", Scale(1490 - sh, 0, 25, 46) . " vSwapBufferView", "⇕").Visible := false
+    UI["SwapBufferView"].OnEvent("Click", SwapBufferView)
+
+    ToggleVisibility(0, UI.current_values)
+}
+
+
+DrawOther() {
     rh := CONF.ref_height.v + 3 * CONF.gui_scale.v
 
     UI.SetFont("s" . Round(7 * CONF.font_scale.v), CONF.font_name.v)
@@ -37,16 +261,19 @@ DrawLayout(init:=false) {
             UI["Langs"].Text := val
         }
     }
-    SendMessage(0x1701, 0, 0xFFFFFF, UI["Langs"].Hwnd)
     UI["Langs"].OnEvent("Change", (*) => ChangeLang(UI["Langs"].Value))
 
     UI.SetFont("Norm s" . Round(8 * CONF.font_scale.v))
 
+    UI.Add("DropDownList", Scale(840, rh, 160) " Choose1 vDdlProcCtx")
+        .OnEvent("Change", GuiProcCtxChanged)
+
     UI.Add("Button", "vBtnEnableDragMode " . Scale(1015, rh, 26, 20), "🔀")
     UI.Add("Button", "vBtnShowBuffer " . Scale(1041, rh, 26, 20), "👁").OnEvent("Click", ShowBuffer)
-    UI.Add("Button", "vBtnShowCopyMenu " . Scale(1067, rh, 26, 20), "⧉").Enabled := false
-    UI.Add("Button", "vBtnShowPasteMenu " . Scale(1093, rh, 26, 20), "📋").Enabled := false
+    UI.Add("Button", "vBtnShowCopyMenu " . Scale(1067, rh, 26, 20), "⧉")
+    UI.Add("Button", "vBtnShowPasteMenu " . Scale(1093, rh, 26, 20), "📋")
     UI.buffer := [UI["BtnShowCopyMenu"], UI["BtnShowPasteMenu"]]
+    ToggleEnabled(false, UI.buffer)
 
     UI.Add("Button", "vBtnCancelDrag " . Scale(1015, rh, 45, 20), "Cancel").Visible := false
     UI.Add("Button", "vBtnSaveDrag " . Scale(1060, rh, 45, 20), "Save").Visible := false
@@ -109,398 +336,6 @@ DrawLayout(init:=false) {
     )
     UI.paste_options_menu.Disable("5&")
     UI.paste_options_menu.Check("5&")
-
-    _DrawLayerTags()
-
-    _DrawKeys()
-    _DrawLayersLV()
-    _DrawGesturesLV()
-    _DrawChordsLV()
-    _DrawCurrentValues()
-
-    uncat := [UI["BtnAddNewLayer"], UI["BtnBackToRoot"]]
-    for arr in [
-        UI.layer_ctrl_btns, UI.layer_move_btns, UI.chs_back, UI.chs_front,
-        UI.gest_btns, UI.drag_btns, UI.buffer, uncat
-    ] {
-        for btn in arr {
-            f := SubStr(btn.Name, 4)
-            btn.OnEvent("Click", %f%)
-        }
-    }
-
-    ToggleVisibility(0, UI.chs_back)
-    ToggleVisibility(root_text !== "root", UI["BtnBackToRoot"])
-    ToggleVisibility(
-        root_text == "root", UI.layer_move_btns, UI.layer_ctrl_btns, UI["BtnAddNewLayer"]
-    )
-
-    UI.SetFont("Norm")
-
-    if !init || !CONF.start_minimized.v {
-        UI.Show(Scale(,, 1294))
-        ChangePath(-1, false)
-    }
-}
-
-
-_DrawLayerTags() {
-    global extra_tags_height:=0
-
-    act := UI.Add("Text", "vLayerTagActive"
-        . Scale(13, CONF.ref_height.v + 7, , 20), "Active")
-    act.OnEvent("Click", (*) => ToggleLayersTag("Active"))
-    act.OnEvent("DoubleClick", (*) => 0)
-    act.Opt(CONF.tags["Active"] ? "cGreen" : "cRed")
-
-    inact := UI.Add("Text", "vLayerTagInactive x+10" . Scale(, , , 20), "Inactive")
-    inact.OnEvent("Click", (*) => ToggleLayersTag("Inactive"))
-    inact.OnEvent("DoubleClick", (*) => 0)
-    inact.Opt(CONF.tags["Inactive"] ? "cGreen" : "cRed")
-
-    UI.Add("Text", "cGray x+10" . Scale(, , , 20), "|")
-
-    act.GetPos(, &ay, &aw)
-    inact.GetPos(,, &iw)
-
-    curr_w := 100 + aw + iw
-    max_width := 425 * CONF.gui_scale.v
-    first_line := true
-
-    for tag in AllTags {
-        t := tag
-        elem := UI.Add("Text", (CONF.tags.Has(tag) ? CONF.tags[tag] ? "cGreen" : "cRed" : "cGray")
-            . " x+10" . Scale(, , , 20), tag)
-        elem.GetPos(,, &ew)
-        curr_w += ew + 10
-        if curr_w > max_width {
-            elem.Visible := false
-            if first_line {
-                first_line := false
-                UI.Add("Text", "cGray vExpandTags xp+1" . Scale(, , , 20), "▾")
-                    .OnEvent("Click", ExpandTags)
-            }
-            elem := UI.Add("Text", (CONF.tags.Has(tag) ? CONF.tags[tag] ? "cGreen" : "cRed" : "cGray")
-                . " y+1" . Scale(13, , , 20), tag)
-            curr_w := ew + 10
-        }
-        elem.Opt("vLayerTag" . t)
-        elem.OnEvent("Click", ToggleLayersTag.Bind(t))
-        elem.OnEvent("DoubleClick", ToggleLayersTag.Bind(t))
-        if !first_line {
-            UI.extra_tags.Push(elem)
-        }
-    }
-    elem.GetPos(, &ey)
-    extra_tags_height := ey - ay
-    ToggleVisibility(0, UI.extra_tags)
-}
-
-
-_DrawKeys() {
-    global ALL_SCANCODES
-    static keyboard_layouts:=Map("ANSI", _BuildLayout("ANSI"), "ISO", _BuildLayout("ISO"))
-
-    ALL_SCANCODES := []
-    len := keyboard_layouts[CONF.layout_format.v].Length
-    x_offset := 10
-    y_offset := 50 * CONF.gui_scale.v
-    spacing := 5
-    height := (CONF.ref_height.v * CONF.gui_scale.v - (spacing * (len - 1)) - y_offset)
-        / (CONF.extra_k_row.v ? len - 0.3 : len)
-
-    for row_idx, row in keyboard_layouts[CONF.layout_format.v] {
-        y := y_offset
-            + (row_idx - (row_idx > 1 && CONF.extra_k_row.v ? 1.3 : 1)) * (height + spacing)
-        x := x_offset * 1.0
-
-        for data in row {
-            logical_w := data[1]
-            w := logical_w * CONF.gui_scale.v
-
-            if data.Length > 1 {
-                sc := data[2]
-                if sc !== "CurrMod" {
-                    ALL_SCANCODES.Push(sc)
-                }
-                if sc == 0x11D {
-                    UI[CONF.layout_format.v == "ISO" ? "54" : "310"].GetPos(&shx, , &shw)
-                    w := shx + shw - x * CONF.gui_scale.v + 1
-                }
-
-                h := height + (
-                    sc == 0x11C || sc == 0x4E || sc == 0x1C && CONF.layout_format.v == "ISO"
-                    ? height + spacing : 0
-                )
-                if row_idx == 1 && CONF.extra_k_row.v {
-                    h /= 1.5
-                }
-
-                btn := UI.Add("Button",
-                    "v" . sc . " x" . x * CONF.gui_scale.v . " y" . y . " w" . w . " h" . h
-                    . " +0x8000"
-                )
-                btn.indicators := []
-                UI.buttons[sc] := btn
-                if sc !== "CurrMod" {
-                    btn.OnEvent("Click", ButtonLMB.Bind(sc))
-                    btn.OnEvent("ContextMenu", ButtonRMB.Bind(sc))
-                } else {
-                    btn.OnEvent("Click", ChangePath.Bind(-1))
-                }
-            }
-
-            x += logical_w + spacing
-        }
-    }
-}
-
-
-_DrawLayersLV() {
-    icons := IL_Create(4, 1, false)
-    IL_Add(icons, A_ScriptDir . "\ico\cb_blank.ico")
-    IL_Add(icons, A_ScriptDir . "\ico\cb_checked.ico")
-    IL_Add(icons, A_ScriptDir . "\ico\folder.ico")
-    IL_Add(icons, A_ScriptDir . "\ico\back.ico")
-
-    p := Scale(10, CONF.ref_height.v + 29, 425, CONF.ref_height.v)
-    UI.AddListView("vLV_layers " . p, ["", "P", "Layer", "Base", "→", "Hold", "→"])
-    UI["LV_layers"].OnEvent("DoubleClick", LVLayerDoubleClick)
-    UI["LV_layers"].OnEvent("Click", LVLayerClick)
-    UI["LV_layers"].SetImageList(icons)
-
-    for i, w in [20, 20, 110, 95, 30, 95, 30] {
-        UI["LV_layers"].ModifyCol(i, Max(w * CONF.gui_scale.v, 16 * USER_DPI))
-    }
-    btns_wh := "w" . (428 * CONF.gui_scale.v / 6) . " h" . (20 * CONF.gui_scale.v)
-
-    for i, arr in [
-        ["vBtnAddNewLayer", "✨ New"],
-        ["vBtnViewSelectedLayer", "🔍 View"],
-        ["vBtnRenameSelectedLayer", "✏️ Rename"],
-        ["vBtnDeleteSelectedLayer", "🗑️ Delete"],
-        ["vBtnMoveUpSelectedLayer", "🔼 Move up"],
-        ["vBtnMoveDownSelectedLayer", "🔽 Move dn"]]
-    {
-        UI.Add("Button", arr[1] . (i == 1 ? " xp0 y+0 " : " x+-1 yp0 ") . btns_wh, arr[2])
-    }
-    UI.Add("Button", "vBtnBackToRoot " . ("x" . (10 * CONF.gui_scale.v) . " yp0"
-        . " w" . (425 * CONF.gui_scale.v)
-        . " h" . (20 * CONF.gui_scale.v)
-        ), "🔙 Back to all active layers"
-    )
-
-    UI.layer_move_btns := [UI["BtnMoveUpSelectedLayer"], UI["BtnMoveDownSelectedLayer"]]
-    UI.layer_ctrl_btns := [
-        UI["BtnViewSelectedLayer"], UI["BtnRenameSelectedLayer"], UI["BtnDeleteSelectedLayer"]
-    ]
-}
-
-
-_DrawGesturesLV() {
-    p := Scale(434, CONF.ref_height.v + 29, 425, CONF.ref_height.v)
-    UI.AddListView("vLV_gestures " . p,
-        ["Gesture name", "Value", "Options", "→", "Layer", "roll it back"])
-    UI["LV_gestures"].OnEvent("DoubleClick", LVGestureDoubleClick)
-    UI["LV_gestures"].OnEvent("Click", LVGestureClick)
-    for i, w in [110, 110, 95, 30, 65, 0] {
-        UI["LV_gestures"].ModifyCol(i, w * CONF.gui_scale.v)
-    }
-
-    btns_wh := "w" . (426 * CONF.gui_scale.v / 4) . " h" . (20 * CONF.gui_scale.v)
-    UI.gest_btns := []
-    UI.gest_btns.Push(
-        UI.Add("Button", "vBtnAddNewGesture xp0 y+0 " . btns_wh, "✨ New"),
-        UI.Add("Button", "vBtnShowSelectedGesture x+-1 yp0 " . btns_wh, "👀 Show"),
-        UI.Add("Button", "vBtnChangeSelectedGesture x+-1 yp0 " . btns_wh, "✏️ Change"),
-        UI.Add("Button", "vBtnDeleteSelectedGesture x+-1 yp0 " . btns_wh, "🗑️ Delete")
-    )
-    UI.gest_toggles := [
-        UI["BtnShowSelectedGesture"],
-        UI["BtnChangeSelectedGesture"],
-        UI["BtnDeleteSelectedGesture"]
-    ]
-    ToggleEnabled(0, UI.gest_toggles)
-}
-
-
-_DrawChordsLV() {
-    p := Scale(858.5, CONF.ref_height.v + 29, 425, CONF.ref_height.v)
-    UI.AddListView("vLV_chords " . p, ["Chord", "Value", "→", "Layer"])
-    UI["LV_chords"].OnEvent("DoubleClick", LVChordDoubleClick)
-    UI["LV_chords"].OnEvent("Click", LVChordClick)
-    for i, w in [120, 170, 30, 100] {
-        UI["LV_chords"].ModifyCol(i, w * CONF.gui_scale.v)
-    }
-
-    btns_wh := "w" . (426 * CONF.gui_scale.v / 3) . " h" . (20 * CONF.gui_scale.v)
-    UI.Add("Button", "vBtnAddNewChord xp0 y+0 " . btns_wh, "✨ New")
-    UI.Add("Button", "vBtnSaveEditedChord xp0 yp0 " . btns_wh, "✔ Save")
-    UI.Add("Button", "vBtnChangeSelectedChord x+-1 yp0 " . btns_wh, "✏️ Change")
-    UI.Add("Button", "vBtnDiscardChordEditing xp0 yp0 " . btns_wh, "↩ Discard")
-    UI.Add("Button", "vBtnDeleteSelectedChord x+-1 yp0 " . btns_wh, "🗑️ Delete")
-    UI.Add("Button", "vBtnCancelChordEditing xp0 yp0 " . btns_wh, "❌ Cancel")
-    UI.chs_front := [UI["BtnAddNewChord"], UI["BtnChangeSelectedChord"], UI["BtnDeleteSelectedChord"]]
-    UI.chs_back := [UI["BtnSaveEditedChord"], UI["BtnDiscardChordEditing"], UI["BtnCancelChordEditing"]]
-    UI.chs_toggles := [UI["BtnChangeSelectedChord"], UI["BtnDeleteSelectedChord"]]
-    ToggleEnabled(0, UI.chs_toggles)
-}
-
-
-_DrawCurrentValues() {
-    UI.SetFont("Norm")
-    sh := 255
-    UI.current_values.Push(
-        UI.Add("Text", Scale(1270 - sh, 0, 50, 23) . " +0x200 Center vTextBase"),
-        UI.Add("Text", Scale(1270 - sh, 23, 50, 23) . " +0x200 Center vTextHold"),
-        UI.Add("Button", Scale(1325 - sh, 0, 160, 23) . " vBtnBase"),
-        UI.Add("Button", Scale(1325 - sh, 23, 160, 23) . " vBtnHold"),
-        UI.Add("Button", Scale(1490 - sh, 0, 25, 23) . " vBtnBaseClear", "✕"),
-        UI.Add("Button", Scale(1490 - sh, 23, 25, 23) . " vBtnHoldClear", "✕"),
-        UI.Add("Button", Scale(1515 - sh, 0, 25, 23) . " vBtnBaseClearNest", "🕳"),
-        UI.Add("Button", Scale(1515 - sh, 23, 25, 23) . " vBtnHoldClearNest", "🕳")
-    )
-    UI["BtnBase"].OnEvent("Click", OpenForm.Bind(0))
-    UI["BtnHold"].OnEvent("Click", OpenForm.Bind(1))
-    UI["BtnBaseClear"].OnEvent("Click", ClearCurrentValue.Bind(0))
-    UI["BtnHoldClear"].OnEvent("Click", ClearCurrentValue.Bind(1))
-    UI["BtnBaseClearNest"].OnEvent("Click", ClearNested.Bind(0))
-    UI["BtnHoldClearNest"].OnEvent("Click", ClearNested.Bind(1))
-    UI["BtnBase"].indicators := []
-    UI["BtnHold"].indicators := []
-
-    UI.Add("Button", Scale(1490 - sh, 0, 25, 46) . " vSwapBufferView", "⇕").Visible := false
-    UI["SwapBufferView"].OnEvent("Click", SwapBufferView)
-
-    ToggleVisibility(0, UI.current_values)
-}
-
-
-_CreateOverlay() {
-    global overlay
-
-    if overlay {
-        _CleanOverlay()
-        return
-    }
-
-    if CONF.overlay_type.v == 1 {
-        return
-    }
-
-    overlay := Gui("+AlwaysOnTop +E0x20 -Caption +ToolWindow +Parent" . UI.Hwnd)
-    overlay.elems := []
-    overlay.Opt("-DPIScale")
-    overlay.BackColor := "FFFFFF"
-    overlay.SetFont("s" . 6 * CONF.font_scale.v . " cGreen")
-    WinSetTransColor("FFFFFF", overlay.Hwnd)
-    DllCall("SetWindowLongPtr", "Ptr", overlay.Hwnd, "Int", -8, "Ptr", UI.Hwnd)
-    WinGetPos(,, &w, &h, "ahk_id " . UI.Hwnd)
-    overlay.Show("x0 y0 w" . w . " h" . h)
-}
-
-
-_CleanOverlay() {
-    for elem in overlay.elems {
-        try elem.Visible := false
-    }
-    overlay.elems := []
-}
-
-
-_AddOverlayItem(x, y, colour, txt:="") {
-    if !overlay || CONF.overlay_type.v == 1 {
-        return false
-    }
-
-    if !txt {
-        elem := overlay.AddText("x" . x . " y" . y . " " . Scale(,, 3, 3) . " Background" . colour)
-    } else {
-        elem := overlay.AddText("x" . x . " y" . y . " c" . colour, txt)
-    }
-    overlay.elems.Push(elem)
-    return elem
-}
-
-
-_GetKeyName(sc, with_keytype:=false, to_short:=false, from_sc_str:=false) {
-    static fixed_names:=Map(
-        "PrintScreen", "Print`nScreen", "ScrollLock", "Scroll`nLock", "Numlock", "Num`nLock",
-        "Volume_Mute", "Mute", "Volume_Down", "VolD", "Volume_Up", "VolU", "Media_Next", "Next",
-        "Media_Prev", "Prev", "Media_Stop", "Stop", "Media_Play_Pause", "Play",
-        "Browser_Back", "Back", "Browser_Forward", "Forw", "Browser_Refresh", "Refr",
-        "Browser_Stop", "Stop", "Browser_Search", "Srch", "Browser_Favorites", "Fav",
-        "Browser_Home", "Home", "Launch_Mail", "Mail", "Launch_Media", "Media",
-        "Launch_App1", "App1", "Launch_App2", "App2", "LButton", "LMB", "RButton", "RMB",
-        "MButton", "Wheel`nClick", "XButton1", "XMB1", "XButton2", "XMB2", "WheelLeft", "Wheel`n🡐",
-        "WheelDown", "Wheel`n🡓", "WheelUp", "Wheel`n🡑", "WheelRight", "Wheel`n🡒"
-    )
-    static short_names:=Map(
-        "PrintScreen", "PrtSc", "ScrollLock", "ScrLk", "Numlock", "NumLk",
-        "Backspace", "BS", "LControl", "LCtrl", "RControl", "RCtrl", "AppsKey", "Menu",
-        "WheelLeft", "WhLeft", "WheelDown", "WhDown", "WheelUp", "WhUp", "WheelRight", "WhRight",
-        "MButton", "WhClick"
-    )
-
-    if with_keytype && CONF.keyname_type.v == 2 {
-        return "&" . sc
-    }
-
-    res := sc
-    if from_sc_str {
-        res := GetKeyName(SubStr(from_sc_str, 2, -1))
-        if !res {
-            return from_sc_str
-        }
-    } else if IsNumber(sc) {
-        if gui_sysmods {
-            res := GetKeyNameWithMods(Integer(sc)) || GetKeyName(SC_STR[Integer(sc)])
-        } else {
-            res := GetKeyName(SC_STR[Integer(sc)])
-        }
-    }
-
-    return res == "RAlt" && CONF.layout_format.v == "ISO" ? "AltGr"
-        : to_short && short_names.Has(res) ? short_names[res]
-        : fixed_names.Has(res) ? fixed_names[res]
-        : InStr(res, "Numpad") ? "n" . SubStr(res, 7)
-        : with_keytype && CONF.keyname_type.v == 3 && !res ? "&" . sc
-        : res
-}
-
-
-GetKeyNameWithMods(sc) {
-    hkl := DllCall("GetKeyboardLayout", "uint", 0, "ptr")
-    vk := DllCall("MapVirtualKeyEx", "uint", sc, "uint", 3, "ptr", hkl, "uint")
-
-    if vk >= 0x60 && vk <= 0x6F {
-        return ""
-    }
-
-    state := Buffer(256, 0)
-
-    if gui_sysmods & 1 {
-        NumPut("UChar", 0x80, state, 0x10)
-    } else if CONF.layout_format.v == "ISO" && (gui_sysmods & 8)
-        || (gui_sysmods & 6) == 6 || (gui_sysmods & 10) == 10 {
-        NumPut("UChar", 0x80, state, 0x11)
-        NumPut("UChar", 0x80, state, 0x12)
-    } else {
-        return ""
-    }
-
-    buf := Buffer(8, 0)
-
-    if DllCall(
-        "ToUnicodeEx", "uint", vk, "uint", sc, "ptr", state, "ptr",
-        buf, "int", 4, "uint", 0, "ptr", hkl, "int"
-    ) {
-        ch := StrGet(buf, "UTF-16")
-        if Ord(ch) > 31 {
-            return ch
-        }
-    }
-    return ""
 }
 
 

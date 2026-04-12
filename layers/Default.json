@@ -1,6 +1,7 @@
-﻿// 0.71
+﻿// 0.80
 // daily, sysmods
 // 83 additional extended punctuation characters in the alphabetic part with only one modifier
+// -games
 {
   "0": [
     null,
@@ -1501,24 +1502,6 @@
           0,
           5,
           "→Symbs",
-          null,
-          {},
-          {},
-          {}
-        ]
-      },
-      "325": {
-        "0": [
-          5,
-          "ToggleLayers([1, NumLock])",
-          1,
-          null,
-          0,
-          0,
-          0,
-          0,
-          4,
-          "NumLk",
           null,
           {},
           {},

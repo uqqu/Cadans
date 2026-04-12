@@ -1,6 +1,7 @@
-﻿// 0.71
+﻿// 0.80
 // mouse, gestures, daily
 // Many daily functions, from window position control, to autoscrolling and Wiki hints, with edge/corner simple gestures under RMB. Right clicks in the center pool are still native.
+// -games
 {
   "0": [
     null,

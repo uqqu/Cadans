@@ -1,6 +1,7 @@
-﻿// 0.71
+﻿// 0.80
 // daily, sysmods
 // A new perspective on the familiar positioning of control keys. It also features additional media keys, hjkl navigation, and several everyday functions, such as increasing/decreasing the number under the cursor, CAPS on one word, delayed start/stop of music, and other small features
+// -games
 {
   "0": [
     null,

@@ -1,45 +1,15 @@
-class OrderedMap {
-    __New() {
-        this.map := Map()
-        this.order := []
-        this.Length := 0
+class ActiveVariant {
+    __New(fin:=false, next_priors:=false) {
+        this.fin := fin
+        this.next_priors := next_priors || []
+
+        this.scancodes := Map()
+        this.chords := Map()
+        this.gestures := Map()
     }
 
-    __Item[name] {
-        get => this.map.Get(name, false)
-    }
-
-    Add(name, data?, pos_?) {
-        if !this.map.Has(name) {
-            this.Length += 1
-            this.map[name] := data ?? this.Length
-            IsSet(pos_) ? this.order.InsertAt(pos_, name) : this.order.Push(name)
-        }
-    }
-
-    GetAll() {
-        result := []
-        for name in this.order {
-            result.Push(this.map[name])
-        }
-        return result
-    }
-
-    Has(name) {
-        return this.map.Has(name)
-    }
-
-    Remove(name) {
-        if this.map.Has(name) {
-            this.Length -= 1
-            this.map.Delete(name)
-            for i, existing in this.order {
-                if existing == name {
-                    this.order.RemoveAt(i)
-                    break
-                }
-            }
-        }
+    HasAny() {
+        return this.fin || this.scancodes.Count || this.chords.Count || this.gestures.Count
     }
 }
 
@@ -69,48 +39,63 @@ class CombNode {
 class UnifiedNode {
     __New() {
         this.layers := OrderedMap()
-        this.fin := false
 
         this.scancodes := Map()
         this.chords := Map()
         this.gestures := Map()
 
-        this.active_scancodes := Map()
-        this.active_chords := Map()
-        this.active_gestures := Map()
+        this.proc_variants := Map()
+        this.proc_ctx_to_variant := Map()
+        this._build_stamp := 0
     }
 
-    ToArray() {
-        res := []
-        res.Push([])
-        for c_node in this.layers.GetAll() {
-            res[-1].Push([__NodeToArray(c_node[1]), __NodeToArray(c_node[0])])
+    GetActiveVariant(ctx_id:=0) {
+        if !ctx_id {
+            ctx_id := current_ctx
         }
-        for t in [this.scancodes, this.chords, this.gestures,
-            this.active_scancodes, this.active_chords, this.active_gestures] {
-            res.Push(Map())
-            for sc, mods in t {
-                res[-1][sc] := Map()
-                for md, nested_unode in mods {
-                    res[-1][sc][md] := nested_unode.ToArray()
-                }
-            }
+
+        if !this.proc_ctx_to_variant.Has(ctx_id) {
+            return ActiveVariant()
         }
-        res.Push(__NodeToArray(this.fin))
-        return res
+
+        return this.proc_variants[this.proc_ctx_to_variant[ctx_id]]
     }
 
-    GetNode(schex, md:=0, is_chord:=false, is_gesture:=false, is_active:=false) {
+    GetActiveFin(ctx_id:=0) {
+        return this.GetActiveVariant(ctx_id).fin
+    }
+
+    GetNode(schex, md:=0, is_chord:=false, is_gesture:=false, is_active:=false, ctx_id:=0) {
+        if !is_active {
+            mp := is_chord
+                ? this.chords
+                : is_gesture
+                    ? this.gestures
+                    : this.scancodes
+            return mp.Has(schex) ? mp[schex].Get(md, false) : false
+        }
+
+        view := this.GetActiveVariant(ctx_id)
         mp := is_chord
-            ? is_active ? this.active_chords : this.chords
+            ? view.chords
             : is_gesture
-                ? is_active ? this.active_gestures : this.gestures
-                : is_active ? this.active_scancodes : this.scancodes
+                ? view.gestures
+                : view.scancodes
+
         return mp.Has(schex) ? mp[schex].Get(md, false) : false
     }
 
+    GetRawFin() {
+        if !this.layers.Length {
+            return false
+        }
+
+        c_node := this.layers.GetAll()[1]
+        return c_node[0] || c_node[1]
+    }
+
     GetBaseHoldMod(
-        schex, md:=0, is_chord:=false, is_gesture:=false, is_active:=false, is_fin:=true
+        schex, md:=0, is_chord:=false, is_gesture:=false, is_active:=false, is_fin:=true, ctx_id:=0
     ) {
         res := {}
 
@@ -120,17 +105,22 @@ class UnifiedNode {
             }
             if !this.scancodes[schex].Has(md) {
                 this.scancodes[schex][md] := UnifiedNode()
-                this.scancodes[schex][md].fin := GetDefaultNode(schex, md)
             }
         }
 
-        res.ubase := this.GetNode(schex, md, is_chord, is_gesture, is_active)
-        res.uhold := this.GetNode(schex, md+1, is_chord, is_gesture, is_active)
-        mod_unode := md ? this.GetNode(schex, 1, is_chord, is_gesture, is_active) : res.uhold
+        res.ubase := this.GetNode(schex, md, is_chord, is_gesture, is_active, ctx_id)
+        res.uhold := this.GetNode(schex, md+1, is_chord, is_gesture, is_active, ctx_id)
+
+        mod_unode := md
+            ? this.GetNode(schex, 1, is_chord, is_gesture, is_active, ctx_id)
+            : res.uhold
 
         if is_fin {
-            res.umod := mod_unode && mod_unode.fin && mod_unode.fin.down_type == TYPES.Modifier
-                ? mod_unode : false
+            fin := is_active
+                ? (mod_unode ? mod_unode.GetActiveFin(ctx_id) : false)
+                : (mod_unode ? mod_unode.GetRawFin() : false)
+
+            res.umod := fin && fin.down_type == TYPES.Modifier ? mod_unode : false
         } else {
             res.umod := false
             try res.umod := _GetFirst(mod_unode).down_type == TYPES.Modifier ? mod_unode : false
@@ -139,16 +129,22 @@ class UnifiedNode {
         return res
     }
 
-    GetModFin(sc) {
-        md := this.GetNode(sc, 1)
-        return md && md.fin && md.fin.down_type == TYPES.Modifier ? md.fin : false
+    GetModFin(sc, is_active:=false, ctx_id:=0) {
+        md_unode := this.GetNode(sc, 1, false, false, is_active, ctx_id)
+        if !md_unode {
+            return false
+        }
+
+        fin := is_active ? md_unode.GetActiveFin(ctx_id) : md_unode.GetRawFin()
+        return fin && fin.down_type == TYPES.Modifier ? fin : false
     }
 
     MergeNodeRecursive(raw_node, sc, md, layer_name, is_g:=false) {
         if !raw_node {
             return
         }
-        node_obj := _BuildNode(raw_node, sc, md)
+
+        node_obj := BuildNode(raw_node, sc, md)
         node_obj.layer_name := layer_name
 
         if this.layers.Has(layer_name) {
@@ -174,90 +170,189 @@ class UnifiedNode {
         }
     }
 
-    BuildActives(prior_layers, sc:=0, md:=0) {
-        this.active_scancodes := Map()
-        this.active_chords := Map()
-        this.active_gestures := Map()
-        this.fin := false
-
+    ResolveForCtx(prior_layers, ctx_id) {
+        fin := false
         next_priors := []
-        for layer in prior_layers {
-            if this.layers.Has(layer) {
-                node := this.layers[layer][0] || this.layers[layer][1]
-                if !this.fin {
-                    this.fin := node
-                    next_priors.Push(layer)
-                    continue
-                }
-                n_def := (node.down_type == TYPES.Default)
-                t_def := (this.fin.down_type == TYPES.Default)
 
-                if t_def && !n_def {
-                    this.fin := node
-                    next_priors.Push(layer)
-                } else if !t_def && n_def || _EqualNodes(this.fin, node) {
-                    next_priors.Push(layer)
-                }
+        for layer in prior_layers {
+            if !LayerAllowedInCtx(layer, ctx_id) || !this.layers.Has(layer) {
+                continue
+            }
+
+            node := this.layers[layer][0] || this.layers[layer][1]
+            if !fin {
+                fin := node
+                next_priors.Push(layer)
+                continue
+            }
+
+            n_def := (node.down_type == TYPES.Default)
+            t_def := (fin.down_type == TYPES.Default)
+
+            if t_def && !n_def {
+                fin := node
+                next_priors.Push(layer)
+            } else if (!t_def && n_def) || EqualNodes(fin, node) {
+                next_priors.Push(layer)
             }
         }
 
+        return {fin: fin, next_priors: next_priors}
+    }
+
+    BuildVariantChildren(variant, ctx_ids) {
+        next_priors := variant.next_priors
+        if !next_priors.Length {
+            return
+        }
+
         for arr in [
-            [this.scancodes, this.active_scancodes],
-            [this.chords, this.active_chords],
-            [this.gestures, this.active_gestures]
+            [this.scancodes, variant.scancodes],
+            [this.chords, variant.chords],
+            [this.gestures, variant.gestures]
         ] {
-            for schex, mods in arr[1] {
+            src := arr[1]
+            trg := arr[2]
+
+            for schex, mods in src {
                 for md, next_unode in mods {
+                    has_candidate := false
+
                     for layer in next_priors {
                         if next_unode.layers.Has(layer) {
-                            if next_unode.BuildActives(next_priors, schex, md) {
-                                if !arr[2].Has(schex) {
-                                    arr[2][schex] := Map()
-                                }
-                                arr[2][schex][md] := next_unode
-                            }
+                            has_candidate := true
                             break
                         }
+                    }
+
+                    if !has_candidate {
+                        continue
+                    }
+
+                    if next_unode.BuildActives(next_priors, schex, md, ctx_ids) {
+                        if !trg.Has(schex) {
+                            trg[schex] := Map()
+                        }
+                        trg[schex][md] := next_unode
                     }
                 }
             }
         }
+    }
 
-        return this.active_scancodes.Count || this.active_chords.Count
-            || this.active_gestures.Count  || this.fin
+    BuildActives(prior_layers, sc:=0, md:=0, ctx_ids:=0) {
+        if !ctx_ids {
+            ctx_ids := PROC_CTX.all_ids
+        }
+
+        if this._build_stamp !== version {
+            this.proc_variants := Map()
+            this.proc_ctx_to_variant := Map()
+            this._build_stamp := version
+        }
+
+        groups := Map()
+        order := []
+
+        for ctx_id in ctx_ids {
+            res := this.ResolveForCtx(prior_layers, ctx_id)
+            sig_key := NodeSig(res.fin) . "||" . JoinArr(res.next_priors, "|")
+
+            if !groups.Has(sig_key) {
+                groups[sig_key] := {
+                    key: sig_key,
+                    ctx_ids: [],
+                    fin: res.fin,
+                    next_priors: res.next_priors
+                }
+                order.Push(sig_key)
+            }
+            groups[sig_key].ctx_ids.Push(ctx_id)
+        }
+
+        if !order.Length {
+            return false
+        }
+
+        default_key := ""
+        for key in order {
+            if ArrayHasValue(groups[key].ctx_ids, PROC_CTX.other_id) {
+                default_key := key
+                break
+            }
+        }
+
+        if !default_key {
+            max_len := -1
+            for key in order {
+                len := groups[key].ctx_ids.Length
+                if len > max_len {
+                    max_len := len
+                    default_key := key
+                }
+            }
+        }
+
+        default_group := groups[default_key]
+
+        if this.proc_variants.Has(default_key) {
+            default_variant := this.proc_variants[default_key]
+        } else {
+            default_variant := ActiveVariant(default_group.fin, default_group.next_priors)
+            this.proc_variants[default_key] := default_variant
+        }
+
+        this.BuildVariantChildren(default_variant, default_group.ctx_ids)
+
+        for ctx_id in default_group.ctx_ids {
+            this.proc_ctx_to_variant[ctx_id] := default_key
+        }
+
+        for key in order {
+            if key == default_key {
+                continue
+            }
+
+            grp := groups[key]
+
+            if this.proc_variants.Has(key) {
+                variant := this.proc_variants[key]
+            } else {
+                variant := ActiveVariant(grp.fin, grp.next_priors)
+                this.proc_variants[key] := variant
+            }
+
+            this.BuildVariantChildren(variant, grp.ctx_ids)
+
+            for ctx_id in grp.ctx_ids {
+                this.proc_ctx_to_variant[ctx_id] := key
+            }
+        }
+
+        for _, variant in this.proc_variants {
+            if variant.HasAny() {
+                return true
+            }
+        }
+
+        return false
     }
 }
 
 
-__NodeToArray(node) {
-    if !node {
-        return []
-    }
-
-    res := []
-    for name in [
-        "down_type", "down_val", "up_type", "up_val", "is_instant", "is_irrevocable",
-        "custom_lp_time", "custom_nk_time", "child_behavior",
-        "gui_shortname", "gesture_opts", "sc", "md", "layer_name",
-    ] {
-        try res.Push(node.%name%)
-    }
-    return res
-}
-
-
-_BuildNode(raw_node, sc, md, down_type:=false) {
-    default_opts:={
+BuildNode(raw_node, sc, md, down_type:=false) {
+    static default_opts:={
         pool: 5, rotate: CONF.gest_rotate.v, scaling: CONF.scale_impact.v,
         dirs: 0, closed: 0, len: 1
     }
-    b := raw_node.Length == 4  ; root
+
+    is_root := raw_node.Length == 4
     node_obj := {sc: sc, md: md}
     for i, name in [
         "down_type", "down_val", "up_type", "up_val", "is_instant", "is_irrevocable",
         "custom_lp_time", "custom_nk_time", "child_behavior", "gui_shortname", "gesture_opts",
     ] {
-        node_obj.%name% := b ? 0 : raw_node[i]
+        node_obj.%name% := is_root ? 0 : raw_node[i]
     }
 
     if StrLen(sc) > 256 {  ; gesture ^^'
@@ -303,7 +398,7 @@ GetDefaultNode(sc, md) {
 }
 
 
-_GetDefaultJsonNode(mod_val:=0, given_type:=false) {
+GetDefaultJsonNode(mod_val:=0, given_type:=false) {
     return [
         (given_type || (mod_val ? TYPES.Disabled : TYPES.Default)),
         "", TYPES.Disabled, "", 0, 0, 0, 0, 4, "", "", Map(), Map(), Map()
@@ -323,32 +418,42 @@ _RepairValue(node_obj) {
 }
 
 
-_EqualNodes(f_node, s_node) {
-    return f_node is Object && s_node is Object
-        && f_node.down_type == s_node.down_type
-        && f_node.down_val == s_node.down_val
-        && f_node.up_type == s_node.up_type
-        && f_node.up_val == s_node.up_val
-        && f_node.is_instant == s_node.is_instant
-        && f_node.is_irrevocable == s_node.is_irrevocable
-        && f_node.custom_lp_time == s_node.custom_lp_time
-        && f_node.custom_nk_time == s_node.custom_nk_time
-        && f_node.child_behavior == s_node.child_behavior
+EqualNodes(f_node, s_node) {
+    return f_node is Object && s_node is Object && NodeSig(f_node) == NodeSig(s_node)
+}
+
+
+NodeSig(node) {
+    if !node {
+        return "__false__"
+    }
+
+    return (
+        node.down_type . "|"
+        . node.down_val . "|"
+        . node.up_type . "|"
+        . node.up_val . "|"
+        . node.is_instant . "|"
+        . node.is_irrevocable . "|"
+        . node.custom_lp_time . "|"
+        . node.custom_nk_time . "|"
+        . node.child_behavior
+    )
 }
 
 
 ReadLayers() {
-    global AllLayers, ActiveLayers, LayerTags, AllTags
+    global AllLayers, ActiveLayers, LayersMeta, AllTags
 
     AllLayers := OrderedMap()
     ActiveLayers := OrderedMap()
-    LayerTags := Map()
+    LayersMeta := Map()
     AllTags := Map()
 
     loop Files, "layers\*.json", "R" {
         name := SubStr(A_LoopFilePath, 8, -5)
         AllLayers.Add(name)
-        LayerTags[name] := GetLayerTags(FileRead(A_LoopFilePath))
+        LayersMeta[name] := _GetMetaInfo(FileRead(A_LoopFilePath))
     }
     if !AllLayers.Length {
         AllLayers.Add("default_layer")
@@ -367,7 +472,7 @@ ReadLayers() {
 
     ; rewrite active layers w/o missing
     str_value := SubStr(str_value, 1, -2)
-    if str_value != conf_layers {
+    if str_value !== conf_layers {
         IniWrite(str_value, "config.ini", "Main", "ActiveLayers")
     }
 }
@@ -377,11 +482,13 @@ UpdLayers() {
     global curr_unode, version
 
     ToggleFreeze(1)
-    curr_unode := ROOTS[CurrentLayout]
+    FinalizeProcessRules()
+    SetCurrentProcessContext(active_proc)
     version += 1
-    for lang, root in ROOTS {
+    for _, root in ROOTS {
         root.BuildActives(ActiveLayers.order)
     }
+    curr_unode := ROOTS[gui_lang ?? 0]
     SetSysModHotkeys()
     ToggleFreeze(0)
 }
@@ -404,8 +511,12 @@ FillRoots() {
         ? [[ActiveLayers, Map()]] : [[ActiveLayers, Map()], [AllLayers, ActiveLayers]]) {
         for layer in arr[1].map {
             if !arr[2].Has(layer) {
-                _MergeLayer(layer)
+                MergeLayer(layer)
             }
+        }
+        if selected_layer ?? 0 && !ActiveLayers.Has(selected_layer)
+            && AllLayers.map[selected_layer] is Integer {
+            MergeLayer(selected_layer)
         }
     }
 
@@ -419,9 +530,10 @@ FillRoots() {
     }
 }
 
-_MergeLayer(layer) {
+
+MergeLayer(layer) {
     raw_roots := DeserializeMap(layer)
-    AllLayers.map[layer] := _CountLangMappings(raw_roots)
+    AllLayers.map[layer] := CountLangMappings(raw_roots)
     for lang, root in raw_roots {
         if !LANGS.Has(lang) {
             if !CONF.unfam_layouts.v {
@@ -440,7 +552,8 @@ _MergeLayer(layer) {
     }
 }
 
-_CountLangMappings(raw_roots) {
+
+CountLangMappings(raw_roots) {
     res := Map()
     for lang, root in raw_roots {
         stack := [root[-3], root[-2], root[-1]]
@@ -459,41 +572,4 @@ _CountLangMappings(raw_roots) {
         res[lang] := cnt
     }
     return res
-}
-
-
-_WalkJson(json_node, path, is_hold:=false, soft_mode:=false) {
-    if !path.Length {
-        return json_node
-    }
-
-    if !(path[1] is Array) {
-        path := [path]
-    }
-
-    last_i := path.Length
-    for i, arr in path {
-        sc := arr[1]
-        md := arr[2] + (i == last_i ? is_hold : 0)
-        is_chord := arr[3]
-        is_gesture := arr[4]
-        curr_map := json_node[-3 + (is_chord is String) + (is_gesture is String) * 2]
-
-        if !curr_map.Has(sc) {
-            if soft_mode {
-                return false
-            }
-            curr_map[sc] := Map()
-        }
-        entry := curr_map[sc]
-        if !entry.Has(md) {
-            if soft_mode {
-                return false
-            }
-            entry[md] := _GetDefaultJsonNode(, (md || is_chord ? TYPES.Disabled : TYPES.Default))
-        }
-
-        json_node := entry[md]
-    }
-    return json_node
 }

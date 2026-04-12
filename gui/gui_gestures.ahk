@@ -77,7 +77,7 @@ DeleteSelectedGesture(*) {
     ubase := gui_entries.ubase.GetBaseHoldMod(selected_gesture, gui_mod_val, false, true).ubase
     child_node := _GetFirst(ubase)
     for layer in checked_layers {
-        if _EqualNodes(child_node, _GetFirst(ubase, layer)) {
+        if EqualNodes(child_node, _GetFirst(ubase, layer)) {
             gest_layer := layer
             break
         }
@@ -98,9 +98,4 @@ DeleteSelectedGesture(*) {
     FillRoots()
     UpdLayers()
     ChangePath()
-}
-
-
-_ReturnButtonText(*) {
-    try form["SetGesture"].Text := "Redraw saved gesture"
 }

@@ -1,4 +1,4 @@
-﻿_FillPathline() {
+FillPathline() {
     UI.SetFont("Italic")
     root := UI.Add("Button", "+0x80 -Wrap" . Scale(10, 5), root_text)
     ToggleVisibility(0, UI.path)
@@ -27,7 +27,7 @@
 }
 
 
-_FillSetButtons() {
+FillSetButtons() {
     UI["SwapBufferView"].Visible := false
     if !current_path.Length && !buffer_view {
         ToggleVisibility(0, UI.current_values)
@@ -72,12 +72,10 @@ _FillSetButtons() {
                 continue
             }
             if !curr_node {
-                UI["Btn" . txt . "Clear"].Opt("+Disabled")
-                UI["Btn" . txt . "ClearNest"].Opt("+Disabled")
+                ToggleEnabled(false, UI["Btn" . txt . "Clear"], UI["Btn" . txt . "ClearNest"])
                 continue
             } else if !curr_node.down_type {
-                UI["Text" . txt].Visible := false
-                UI["Btn" . txt].Visible := false
+                ToggleVisibility(false, [UI["Text" . txt], UI["Btn" . txt]])
                 continue
             }
             _AddIndicators(arr[2], UI["Btn" . txt], false, ignore_hold_count)
@@ -90,7 +88,7 @@ _FillSetButtons() {
                     UI["Btn" . txt].Text := "{Default}"
                     try UI["Btn" . txt].Text := _GetKeyName(path[-1][1], true, true)
                 case TYPES.Text:
-                    UI["Btn" . txt].Text := _CheckDiacr(curr_node.down_val)
+                    UI["Btn" . txt].Text := CheckDiacr(curr_node.down_val)
                 case TYPES.Function:
                     UI["Btn" . txt].Text := curr_node.down_val
                 case TYPES.KeySimulation:
@@ -99,19 +97,24 @@ _FillSetButtons() {
                     UI["Btn" . txt].Text := "Mod " . curr_node.down_val
                 case TYPES.Chord:
                     UI["Btn" . txt].Text := "Chord"
-                    UI["Btn" . txt].Opt("+Disabled")
-                    UI["Btn" . txt . "Clear"].Opt("+Disabled")
+                    ToggleEnabled(false, UI["Btn" . txt], UI["Btn" . txt . "Clear"])
             }
             if curr_node.gui_shortname {
                 UI["Btn" . txt].Text := curr_node.gui_shortname
             }
         }
     }
+
+    if current_path.Length == 1
+        && SubStr(current_path[-1][1], 2) == "Button" && current_path[-1][2] < 2
+        && _GetFirst(_GetUnholdEntries().ubase) == false {
+        ToggleEnabled(false, UI["BtnBase"], UI["BtnHold"])
+    }
     UI.SetFont("Norm")
 }
 
 
-_FillKeyboard() {
+FillKeyboard() {
     for sc, btn in UI.buttons {
         if sc == "CurrMod" {
             btn.SetFont("Italic")
@@ -124,14 +127,14 @@ _FillKeyboard() {
         }
         btn.dragged_sc := sc
         try btn.dragged_sc := Integer(sc)
-        _FillOneButton(sc, btn, sc)
+        FillOneButton(sc, btn, sc)
     }
 }
 
 
-_FillOneButton(sc, btn, d_sc) {
+FillOneButton(sc, btn, d_sc) {
     backgr := CONF.default_assigned_color.v
-    btn.Opt("-Disabled")
+    btn.Enabled := true
     btn.SetFont("Norm")
 
     res := gui_entries.ubase.GetBaseHoldMod(d_sc, gui_mod_val, false, false, false, false)
@@ -141,7 +144,9 @@ _FillOneButton(sc, btn, d_sc) {
 
     btxt := _GetKeyName(sc, true)
     if b_node {
-        if res.ubase.active_gestures.Count {
+        l := selected_layer ? selected_layer : buffer_view ? "buffer" : false
+        gsts := l ? GetLayerGestures(res.ubase, l) : _GetGestures(res.ubase, gui_proc_ctx)
+        if gsts.Count {
             opts := StrSplit(b_node.gesture_opts, ";")
             backgr := CONF.has_gestures_color.v
             try backgr := Format("{:#06x}", Integer("0x"
@@ -150,7 +155,7 @@ _FillOneButton(sc, btn, d_sc) {
             try backgr := Format("{:#06x}", Integer("0x" . opts[5]))
             try backgr := Format("{:#06x}", Integer("0x" . opts[2]))
         }
-        UI["BtnBaseClear"].Opt("-Disabled")
+        UI["BtnBaseClear"].Enabled := true
         _AddIndicators(res.ubase, btn)
         switch b_node.down_type {
             case TYPES.Default:
@@ -162,7 +167,7 @@ _FillOneButton(sc, btn, d_sc) {
                 btn.SetFont("Italic")
                 btxt := _GetKeyName(d_sc, false, false, b_node.down_val)
             default:
-                btxt := _CheckDiacr(b_node.down_val)
+                btxt := CheckDiacr(b_node.down_val)
         }
         if b_node.gui_shortname {
             btxt := b_node.gui_shortname
@@ -185,7 +190,7 @@ _FillOneButton(sc, btn, d_sc) {
             case TYPES.Default:
                 htxt := "`n" . _GetKeyName(sc)
             case TYPES.Text:
-                htxt := "`n" . _CheckDiacr(h_node.down_val)
+                htxt := "`n" . CheckDiacr(h_node.down_val)
             case TYPES.KeySimulation:
                 htxt := "`n" . _GetKeyName(d_sc, false, false, h_node.down_val)
             case TYPES.Function:
@@ -205,7 +210,7 @@ _FillOneButton(sc, btn, d_sc) {
     if temp_chord {
         if ONLY_BASE_SCS.Has(sc) || SYS_MODIFIERS.Has(sc)
             || !h_node && m_node && m_node.down_type == TYPES.Modifier {
-            btn.Opt("+Disabled")
+            btn.Enabled := false
         }
         if temp_chord.Has(String(sc)) {
             backgr := CONF.selected_chord_color.v
@@ -242,7 +247,7 @@ _AddIndicators(unode, btn, is_hold:=false, ignore_hold_count:=false) {
             : _AddOverlayItem(x + w - p, y + (is_hold ? h - p : 0), c)
         btn.indicators.Push(res)
     }
-    try UI[btn.Name . "ClearNest"].Opt((cnt ? "-" : "+") . "Disabled")
+    try UI[btn.Name . "ClearNest"].Enabled := cnt
     if is_hold {
         y += h - p
     }
@@ -262,7 +267,82 @@ _AddIndicators(unode, btn, is_hold:=false, ignore_hold_count:=false) {
 }
 
 
-_FillLayers() {
+FillLayerTags() {
+    global extra_tags_height:=0
+    static idx:=0
+
+    ToggleVisibility(0, UI.main_tags, UI.extra_tags)
+    UI.main_tags := []
+    UI.extra_tags := []
+
+    act := UI.Add("Text", "vLayerTag" . idx . Scale(13, CONF.ref_height.v + 7, , 20), "Active")
+    act.OnEvent("Click", ToggleLayersTag)
+    act.OnEvent("DoubleClick", (*) => 0)
+    act.Opt(CONF.tags["Active"] ? "cGreen" : "cRed")
+    idx += 1
+
+    inact := UI.Add("Text", "vLayerTag" . idx . " x+10" . Scale(, , , 20), "Inactive")
+    inact.OnEvent("Click", ToggleLayersTag)
+    inact.OnEvent("DoubleClick", (*) => 0)
+    inact.Opt(CONF.tags["Inactive"] ? "cGreen" : "cRed")
+    idx += 1
+
+    UI.main_tags.Push(act, inact, UI.Add("Text", "cGray x+10" . Scale(, , , 20), "|"))
+
+    act.GetPos(, &ay, &aw)
+    inact.GetPos(,, &iw)
+
+    curr_w := 100 + aw + iw
+    max_width := 425 * CONF.gui_scale.v
+    first_line := true
+
+    unt := "<untagged>"
+    tags := []
+    for tag in AllTags {
+        if tag !== unt {
+            tags.Push(tag)
+        }
+    }
+    if AllTags.Has(unt) {
+        tags.Push(unt)
+    }
+
+    for tag in tags {
+        t := tag
+        elem := UI.Add("Text", (CONF.tags.Has(tag) ? CONF.tags[tag] ? "cGreen" : "cRed" : "cGray")
+            . " x+10" . Scale(, , , 20), tag)
+        elem.GetPos(,, &ew)
+        curr_w += ew + 10
+        if curr_w > max_width {
+            elem.Visible := false
+            if first_line {
+                first_line := false
+                UI.extra_tags.Push(UI.Add("Text", "cGray xp+1" . Scale(, , , 20), "▾"))
+                UI.extra_tags[1].OnEvent("Click", ExpandTags)
+            }
+            elem := UI.Add("Text", (
+                CONF.tags.Has(tag) ? CONF.tags[tag] ? "cGreen" : "cRed" : "cGray"
+                ) . " y+1" . Scale(13, , , 20), tag)
+            curr_w := ew + 10
+        }
+        elem.Opt("vLayerTag" . idx)
+        idx += 1
+        elem.OnEvent("Click", ToggleLayersTag)
+        elem.OnEvent("DoubleClick", ToggleLayersTag)
+        if !first_line {
+            UI.extra_tags.Push(elem)
+        } else {
+            UI.main_tags.Push(elem)
+        }
+    }
+    elem.GetPos(, &ey)
+    extra_tags_height := ey - ay
+    ToggleVisibility(0, UI.extra_tags)
+    ToggleVisibility(1, UI.extra_tags[1])
+}
+
+
+FillLayers() {
     UI["LV_layers"].Delete()
 
     if layer_path.Length {
@@ -270,17 +350,21 @@ _FillLayers() {
     }
 
     temp_all_layers := Map()
-    if layer_editing {
-        for layer in AllLayers.map {
-            temp_all_layers[layer] := false
+    for layer in AllLayers.map {
+        temp_all_layers[layer] := ActiveLayers[layer]
+    }
+    if layer_editing && !buffer_view {
+        temp_all_layers[selected_layer] := "*"
+    }
+
+    to_del := []
+    for tag, _ in CONF.tags {
+        if tag !== "Active" && tag !== "Inactive" && !AllTags.Has(tag) {
+            to_del.Push(tag)
         }
-        if !buffer_view {
-            temp_all_layers[selected_layer] := "*"
-        }
-    } else {
-        for layer in AllLayers.map {
-            temp_all_layers[layer] := ActiveLayers[layer]
-        }
+    }
+    for tag in to_del {
+        CONF.tags.Delete(tag)
     }
 
     has_red_tags := false
@@ -311,7 +395,7 @@ _FillLayers() {
             allowed := true
             if has_green_tags {
                 allowed := false
-                for tag in LayerTags[name] {
+                for tag in LayersMeta[name]["tags"] {
                     if CONF.tags.Has(tag) {
                         if CONF.tags[tag] {
                             allowed := true
@@ -323,7 +407,7 @@ _FillLayers() {
                 }
             } else if has_red_tags {
                 allowed := true
-                for tag in LayerTags[name] {
+                for tag in LayersMeta[name]["tags"] {
                     if CONF.tags.Has(tag) {
                         allowed := false
                         break
@@ -336,7 +420,15 @@ _FillLayers() {
             }
         }
 
+        lvl := layer_path.Length + 1
         split := StrSplit(name, "\")
+        path := "layers\"
+        for i, s in split {
+            if i > lvl {
+                break
+            }
+            path .= s . "\"
+        }
 
         b := false
         for folder in layer_path {
@@ -349,13 +441,20 @@ _FillLayers() {
             continue
         }
 
-        lvl := layer_path.Length + 1
         if split.Length > lvl {
             if !folder_name {
                 folder_name := split[lvl]
+                folder_cnt := 0
+                loop Files, path . "*", "FR" {
+                    folder_cnt += 1
+                }
             } else if split[lvl] !== folder_name {
-                UI["LV_layers"].Add("Icon3", , , folder_name)
+                UI["LV_layers"].Add("Icon3", , , folder_name, folder_cnt || "")
                 folder_name := split[lvl]
+                folder_cnt := 0
+                loop Files, path . "*", "FR" {
+                    folder_cnt += 1
+                }
             }
             continue
         } else if split.Length < lvl {
@@ -363,8 +462,9 @@ _FillLayers() {
         }
 
         if folder_name {
-            UI["LV_layers"].Add("Icon3", , , folder_name)
+            UI["LV_layers"].Add("Icon3", , , folder_name, folder_cnt || "")
             folder_name := ""
+            folder_cnt := 0
         }
 
         if CONF.ignore_inactive.v && !v {
@@ -376,11 +476,15 @@ _FillLayers() {
             for lang, val in AllLayers.map[name] {
                 cnt[2 - (lang == gui_lang)] += val
             }
-            for i, val in [["Layer", 200], [UI["Langs"].Text, 80], ["", 0], ["Other roots", 80], ["", 0]] {
+            lang := UI["Langs"].Text == "Global assignments" ? "Global" : UI["Langs"].Text
+            for i, val in [
+                ["Layer", 200], [lang, 80], ["", 0], ["Other roots", 80], ["", 0]
+            ] {
                 UI["LV_layers"].ModifyCol(2+i, val[2] * CONF.gui_scale.v, val[1])
             }
             UI["LV_layers"].Add(
-                v ? "Icon2" : "Icon1", "", v || "", split[-1], cnt[1] || "", "", cnt[2] || "", ""
+                ActiveLayers.Has(name) ? "Icon2" : "Icon1", "", v || "",
+                split[-1], cnt[1] || "", "", cnt[2] || "", ""
             )
             continue
         }
@@ -406,7 +510,7 @@ _FillLayers() {
                 case TYPES.Default:
                     txt[i] := "{D}"
                 case TYPES.Text:
-                    txt[i] := "'" . _CheckDiacr(val) . "'"
+                    txt[i] := "'" . CheckDiacr(val) . "'"
                 case TYPES.KeySimulation:
                     txt[i] := val ? _GetKeyName(false, false, true, val) : ""
                 case TYPES.Function:
@@ -421,12 +525,13 @@ _FillLayers() {
             UI["LV_layers"].ModifyCol(2+i, val[2] * CONF.gui_scale.v, val[1])
         }
         UI["LV_layers"].Add(
-            v ? "Icon2" : "Icon1", "", v || "", split[-1], txt[1], cnt[1] || "", txt[2], cnt[2] || ""
+            ActiveLayers.Has(name) ? "Icon2" : "Icon1", "", v || "",
+            split[-1], txt[1], cnt[1] || "", txt[2], cnt[2] || ""
         )
     }
 
     if folder_name {
-        UI["LV_layers"].Add("Icon3", , , folder_name)
+        UI["LV_layers"].Add("Icon3", , , folder_name, folder_cnt || "")
     }
 
     ToggleEnabled(0, UI.layer_move_btns, UI.layer_ctrl_btns)
@@ -449,7 +554,7 @@ _CountChild(layer, levels, mod_val, scs, chs, gsts, combined:=false) {
                 }
                 if !layer {
                     for nlayer in unode.layers.map {
-                        if buffer_view || ActiveLayers.Has(nlayer)
+                        if (buffer_view || ActiveLayers.Has(nlayer))
                             && _IsCounted(unode.layers[nlayer][0]) {
                             cnt += 1
                             break
@@ -471,7 +576,7 @@ _IsCounted(node) {
 }
 
 
-_FillGestures() {
+FillGestures() {
     UI["LV_gestures"].Delete()
 
     path := buffer_view ? buffer_path : current_path
@@ -481,28 +586,29 @@ _FillGestures() {
         for i, val in [["Has nested gestures", 220], ["→", 190], ["", 0], ["", 0], ["", 0]] {
             UI["LV_gestures"].ModifyCol(i, val[2] * CONF.gui_scale.v, val[1])
         }
-        mp := selected_layer ? gui_entries.ubase.scancodes : gui_entries.ubase.active_scancodes
+        l := selected_layer ? selected_layer : buffer_view ? "buffer" : false
+        mp := l ? GetLayerScancodes(gui_entries.ubase, l)
+            : _GetScancodes(gui_entries.ubase, gui_proc_ctx)
         for sc, mods in mp {
             for md, node in mods {
-                if selected_layer {
-                    cnt := 0
-                    for _, g_mods in node.gestures {
-                        for _, g_node in g_mods {
-                            if g_node.layers.Has(selected_layer) {
-                                cnt += 1
-                            }
+                if !_GetFirst(node) {
+                    continue
+                }
+                cnt := 0
+                for _, g_mods in node.gestures {
+                    for _, g_node in g_mods {
+                        if buffer_view || _GetFirst(g_node) {
+                            cnt += 1
                         }
                     }
-                } else {
-                    cnt := node.active_gestures.Count
                 }
                 if cnt {
                     name := ""
-                    try name := node.fin.gui_shortname
+                    try name := _GetFin(node, gui_proc_ctx).gui_shortname
                     UI["LV_gestures"].Add(
                         "",
                         (name || _GetKeyName(sc, true))
-                            . (md ? (" (mod " . _DecomposeMods(md, true) . ")") : ""),
+                            . (md ? (" (mod " . DecomposeMods(md, true) . ")") : ""),
                         cnt, "", "", "",
                         sc . ";" . md
                     )
@@ -528,7 +634,7 @@ _FillGestures() {
         cnt := ubase ? _CountChild("", 0, 0, ubase.scancodes, ubase.chords, ubase.gestures) : 0
         layer_text := ""
         for layer in checked_layers {
-            if _EqualNodes(child_node, _GetFirst(ubase, layer)) {
+            if EqualNodes(child_node, _GetFirst(ubase, layer)) {
                 layer_text .= " & " . layer
             }
         }
@@ -536,7 +642,7 @@ _FillGestures() {
 
         switch child_node.down_type {
             case TYPES.Text:
-                val := "'" . _CheckDiacr(child_node.down_val) . "'"
+                val := "'" . CheckDiacr(child_node.down_val) . "'"
             case TYPES.KeySimulation:
                 val := _GetKeyName(false, false, true, child_node.down_val)
             case TYPES.Function:
@@ -561,7 +667,7 @@ _FillGestures() {
 
 _GestOptsToText(opts) {
     vals := StrSplit(opts, ";")
-    str := ["LT", "T", "RT", "L", "C", "R", "LB", "B", "RB"][Integer(vals[1])]
+    str := ["TL", "T", "TR", "L", "C", "R", "BL", "B", "BR"][Integer(vals[1])]
     if vals[2] + 1 != CONF.gest_rotate.v {
         str .= ", rotate: " . ["no", "de-noise", "invar."][Integer(vals[2]) + 1]
     }
@@ -578,7 +684,7 @@ _GestOptsToText(opts) {
 }
 
 
-_FillChords() {
+FillChords() {
     UI["LV_chords"].Delete()
     checked_layers := layer_editing ? [selected_layer] : ActiveLayers.order
     for chord_str, mods in gui_entries.ubase.chords {
@@ -593,7 +699,7 @@ _FillChords() {
 
         layer_text := ""
         for layer in checked_layers {
-            if !buffer_view && _EqualNodes(child_node, _GetFirst(ubase, layer)) {
+            if !buffer_view && EqualNodes(child_node, _GetFirst(ubase, layer)) {
                 layer_text .= " & " . layer
             }
         }
@@ -603,7 +709,7 @@ _FillChords() {
             case TYPES.Disabled:
                 val := "{D}"
             case TYPES.Text:
-                val := "'" . _CheckDiacr(child_node.down_val) . "'"
+                val := "'" . CheckDiacr(child_node.down_val) . "'"
             case TYPES.KeySimulation:
                 val := _GetKeyName(false, false, true, child_node.down_val)
             case TYPES.Function:
@@ -612,11 +718,16 @@ _FillChords() {
 
         chord_txt := ""
         for sc in StrSplit(chord_str, "-") {
-            try {
-                chord_txt .= GetKeyName(SC_STR[Integer(sc)]) . " "
-            } catch {
-                chord_txt .= GetKeyName(SC_STR[sc]) . " "
+            if CONF.keyname_type.v == 2 {
+                chord_txt .= "&" . sc . " "
+                continue
             }
+            try {
+                t := GetKeyName(SC_STR[Integer(sc)]) . " "
+            } catch {
+                t := GetKeyName(SC_STR[sc]) . " "
+            }
+            chord_txt .= t == " " ? ("&" . sc . " ") : t
         }
 
         UI["LV_chords"].Add(
@@ -631,7 +742,9 @@ _FillChords() {
 }
 
 
-_FillOther() {
+FillOther() {
+    global gui_proc_ctx
+
     if !current_path.Length {
         UI.copy_options_menu.Disable("3&")
     }
@@ -648,21 +761,16 @@ _FillOther() {
     } else {
         UI.copy_options_menu.Disable("3&")
     }
-}
 
+    if selected_layer {
+        return
+    }
 
-_CheckDiacr(value) {
-    if StrLen(value) !== 1 {
-        return value
+    UI["DdlProcCtx"].Enabled := true
+    UI["DdlProcCtx"].Delete()
+    UI["DdlProcCtx"].Add(GetGuiProcessItems())
+    UI["DdlProcCtx"].Text := GetGuiProcessTextByCtx(gui_proc_ctx)
+    if UI["DdlProcCtx"].Text == "*" {
+        gui_proc_ctx := 1
     }
-    code := Ord(value)
-    if code >= 0x0300 && code <= 0x036F
-        || code >= 0x1AB0 && code <= 0x1AFF
-        || code >= 0x1DC0 && code <= 0x1DFF
-        || code >= 0x20D0 && code <= 0x20FF
-        || code >= 0xFE20 && code <= 0xFE2F
-    {
-        return "◌" . value
-    }
-    return value == "&" ? "&&" : value
 }

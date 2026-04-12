@@ -1,6 +1,7 @@
 temp_pts := []
 temp_opt := 0
 gest_cache := Map()
+PI := 3.141592653589793
 
 
 GetPool(x, y) {
@@ -103,7 +104,6 @@ Normalize(pts) {
 
 
 Rotate(pts, fixed:=false) {
-    PI := 3.141592653589793
     dx := pts[2][1] - pts[1][1]
     dy := pts[2][2] - pts[1][2]
 
@@ -167,8 +167,8 @@ Recognize(raw_pts, gestures) {
 
         loop 2 {
             dir_i := A_Index - 1
-            if !(closed && gesture.fin.opts.closed) {
-                score := _ScoreAtPhase(0, gesture.fin, cur_pts, closed, dir_i)
+            if !(closed && _GetFin(gesture).opts.closed) {
+                score := _ScoreAtPhase(0, _GetFin(gesture), cur_pts, closed, dir_i)
             } else {
                 best_phase := 0
                 score := -1
@@ -176,7 +176,7 @@ Recognize(raw_pts, gestures) {
                 for step in [16, 4, 1] {  ; 64/4, 16/4, 4/4
                     for delta in [(A_Index == 1 ? 0 : -2*step), -step, step, 2*step] {
                         phase := Mod(best_phase + delta + 64, 64) + 1
-                        s := _ScoreAtPhase(phase, gesture.fin, cur_pts, closed, dir_i)
+                        s := _ScoreAtPhase(phase, _GetFin(gesture), cur_pts, closed, dir_i)
                         if s > score {
                             score := s
                             best_phase := phase
@@ -190,7 +190,7 @@ Recognize(raw_pts, gestures) {
                 best_gesture := gesture
             }
 
-            if !gesture.fin.opts.dirs || A_Index == 2 {
+            if !_GetFin(gesture).opts.dirs || A_Index == 2 {
                 break
             }
             cur_pts := []
@@ -290,6 +290,10 @@ GestureToStr(raw_pts, rot, scaling, dirs, phase) {
     rot1 := rot == 3
     rot8 := rot == 2
 
+    if phase {
+        pts := _CloseGestureSeamPts(pts, 0.2)
+    }
+
     pts := Centering(pts)
     if rot1 || rot8 {
         pts := Rotate(pts, rot1)
@@ -309,4 +313,61 @@ GestureToStr(raw_pts, rot, scaling, dirs, phase) {
     }
 
     return [vec_str, opt_str]
+}
+
+
+_CloseGestureSeamPts(pts, blend_portion:=0.2) {
+    pts_cnt := pts.Length
+    if pts_cnt < 3 {
+        return pts.Clone()
+    }
+
+    out := []
+    for pt in pts {
+        out.Push([pt[1], pt[2]])
+    }
+
+    first_x := pts[1][1]
+    first_y := pts[1][2]
+    last_x := pts[pts_cnt][1]
+    last_y := pts[pts_cnt][2]
+
+    anchor_x := (first_x + last_x) / 2
+    anchor_y := (first_y + last_y) / 2
+
+    start_dx := anchor_x - first_x
+    start_dy := anchor_y - first_y
+    end_dx := anchor_x - last_x
+    end_dy := anchor_y - last_y
+
+    blend_pts := Max(1, Round((pts_cnt - 1) * blend_portion))
+
+    i := 0
+    while i <= blend_pts {
+        idx := i + 1
+        t := i / blend_pts
+        w := (1 - t) * (1 - t)
+
+        out[idx][1] := pts[idx][1] + start_dx * w
+        out[idx][2] := pts[idx][2] + start_dy * w
+        i += 1
+    }
+
+    i := 0
+    while i <= blend_pts {
+        idx := pts_cnt - i
+        t := i / blend_pts
+        w := (1 - t) * (1 - t)
+
+        out[idx][1] := out[idx][1] + end_dx * w
+        out[idx][2] := out[idx][2] + end_dy * w
+        i += 1
+    }
+
+    out[1][1] := anchor_x
+    out[1][2] := anchor_y
+    out[pts_cnt][1] := anchor_x
+    out[pts_cnt][2] := anchor_y
+
+    return out
 }

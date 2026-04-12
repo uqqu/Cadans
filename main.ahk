@@ -1,290 +1,214 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
+OnError((*) => Suspend(true))
 TraySetIcon("ico\icon.ico")
+
+await_hold := false
+await_nest := false
+await_gest := false
+await_mod := false
+await_chord_part := false
+await_chord_full := false
+
+prev_unode := false
+child_behavior := false
+catched_entries := false
+catched_gui_func := false
+is_key_processing := false
+current_ctx := 1
+current_mod := 0
+
+current_presses := Map()
+chord_presses := OrderedMap()
+up_actions := Map()
+stack := []  ; queue of overlapping presses
+
+;#Include "core\logger.ahk"
+#Include "core\_utils.ahk"
 #Include "core\serializing.ahk"
 #Include "core\structs.ahk"
+#Include "core\processes.ahk"
 #Include "core\config.ahk"
 #Include "core\gesture_processing.ahk"
 #Include "core\gestures.ahk"
-#Include "gui\gui.ahk"
 #Include "core\user_functions.ahk"
-
-last_val := false  ; unsended value while we wait nested event (if the timer expires/interrupted)
-pending := false  ; tap value of assignment, while we wait if the hold will be confirmed
-delayed := false
-prev_unode := false
-catched_entries := false
-catched_gui_func := false
-current_presses := Map()
-unassigned_current_press := 0
-up_actions := Map()
-gest_node := false
-ResetModifiers()
-
+#Include "gui\gui.ahk"
 #Include "core\keys.ahk"
+
 SetSysModHotkeys()
 
-
-TimerSendCurrent() {
-    ; delayed send for assignments with child transitions, if there are no new presses
-    ;   …or for direct call when a new press is not found in the current table / layout has changed
-
-    SetTimer(TimerSendCurrent, 0)
-    if !last_val || !last_val[1].fin.is_irrevocable {
-        ToRoot()
-    }
-    ; mods/chords store the tap value with additional argument
-    if last_val && !last_val[2] {  ; skip mod/chord triggers
-        SendKbd(last_val[1].fin.down_type, last_val[1].fin.down_val)
-    }
-}
-
-
-TimerResetBase() {
-    ; mods and chords on hold save their tap value to last_val;
-    ; if the mod/chord key was released before activation of TimerResetBase
-    ;   …or before last_val was overwritten by other press – send the last_val
-    global last_val, prev_unode
-
-    last_val := false
-    prev_unode := false
-}
-
-
-TransitionProcessing(checked_unode, sc:=0) {
-    ; branching, whether we proceed to waiting for a child press or process the current one;
-    ; the sc comes from the calls with empty hold assignments
-    global curr_unode, prev_unode, last_val, gest_pending
-
-    if gest_node {
-        gest_pending := TransitionProcessing.Bind(checked_unode, sc)
-        return
-    }
-    gest_pending := false
-
-    if !checked_unode || !checked_unode.fin {  ; NTT
-        return
-    }
-
-    if checked_unode.fin.up_type !== TYPES.Disabled {
-        up_actions[sc] := checked_unode.fin
-    }
-
-    ; if there are no child assignments – send current and try to reset unode
-    if !checked_unode.active_scancodes.Count && !checked_unode.active_chords.Count {
-        SendKbd(checked_unode.fin.down_type, checked_unode.fin.down_val)
-        if !checked_unode.fin.is_irrevocable && curr_unode !== ROOTS[CurrentLayout] {
-            ToRoot()
-        } else if sc {  ; only if the curr_unode has not been reseted
-            if sc !== "WheelLeft" && sc !== "WheelRight" {
-                try current_presses.Delete(sc)  ; allow repeat on hold for the corresponding keys
-            }
-        }
-        return
-    }
-
-    ; if there are values in the next node – go to it
-    if checked_unode.fin.is_instant {
-        ; send immediately if so specified. doesn't cancel transitions
-        SendKbd(checked_unode.fin.down_type, checked_unode.fin.down_val)
-    } else {  ; store current value for processing, if there will not be a child press
-        last_val := [checked_unode, false]
-    }
-    if !checked_unode.fin.is_irrevocable {
-        SetTimer(TimerSendCurrent, -(checked_unode.fin.custom_nk_time || CONF.MS_NK.v))
-    }
-    if curr_unode !== checked_unode {
-        prev_unode := curr_unode
-        curr_unode := checked_unode
-    }
-
-    ; transfer the pressed modifiers, if they have the same values
-    TransferModifiers()
-}
-
-
-TransferModifiers(extra_mod:=0) {
-    global current_mod
-
-    current_mod := extra_mod
-    for sc in current_presses {
-        res_md := curr_unode.GetModFin(sc)
-        if res_md {
-            current_mod |= 1 << res_md.down_val
-        }
-    }
-}
-
-
-UnlockWhL() {
-    OnKeyUp("WheelLeft")
-}
-
-UnlockWhR() {
-    OnKeyUp("WheelRight")
-}
+;Logger.Start()
+;Logger.level := 3
 
 
 PreCheck(sc, *) {
-    ;; determine whether we will intercept the event or allow it to be executed natively
-    ;;  …with accompanying logic operations (in fact, everything except
-    ;;  …the final processing of the found assignment)
-    global catched_entries, pending, delayed, unassigned_current_press
+    global catched_entries
 
-    if gest_overlay && !gest_node {
-        DestroyGestOverlay()
-    }
-
-    if !(sc is Number) {
-        ; simulate wheel l/r up action manually
-        if sc == "WheelLeft" {
-            SetTimer(UnlockWhL, -CONF.wheel_unlock_time.v)
-        } else if sc == "WheelRight" {
-            SetTimer(UnlockWhR, -CONF.wheel_unlock_time.v)
-        }
-    }
-
-    ;; unprocessing conditions
-    ; deny repetition via holding (conflicts with hold catching)
-    if current_presses.Has(sc) {
+    if current_presses.Has(sc) || current_mod || is_key_processing
+        || await_hold || await_nest || await_gest || chord_presses.Length
+        || is_drawing || GuiCheck(sc) {
         return true
     }
 
-    ; pass unassigned that was manually triggered after pending branch to allow hold repetition
-    if unassigned_current_press == sc {
-        return false
-    }
-    ; and clear it from any other scs
-    unassigned_current_press := 0
+    CheckLayout()
 
-    if GuiCheck(sc) {
-        return true
+    catched_entries := GetEntries(sc)
+    if !catched_entries && curr_unode !== ROOTS[CONF.LayoutAliases[current_layout]] {
+        ToRoot()
+        catched_entries := GetEntries(sc)
     }
-
-    if curr_unode.fin is Integer {
-        return false
-    }
-
-    ; continue the chain of transitions, if the previous unsent push had a table of transitions
-    ; case: {a down (with hold assignment)}[keywait start]{b down}
-    if pending {
-        delayed := true  ; mark that next send will be sent after current
-        TransitionProcessing(pending)
-        pending := false
-    }
-
-    CheckLayout()  ; switch to a new root if the layout has changed
-
-    entries := GetEntries(sc)
-    if entries !== 2 {
-        SetTimer(TimerSendCurrent, 0)
-    }
-    if !entries {  ; no assignments found
-        if !delayed {  ; allow native press in the base case
-            return false
-        }
-        ; else (if there are cross sends) follow the send order with default simulation
-        TransitionProcessing(GetDefaultSim(sc)[1])
-        catched_entries := false
-        unassigned_current_press := sc
-        return true
-    } else if entries == 1 || entries == 2 {  ; processed as mod/basemod or blocked by child_bhv
-        return true
-    }
-    ; else catched_entries is obj
-    catched_entries := entries  ; memorize for main func; cannot be performed now due to keywait
-    return true
+    return catched_entries
 }
 
 
-GetEntries(sc, extra_mod:=0) {
-    global delayed
+CheckLayout() {
+    global current_layout
 
-    entries := curr_unode.GetBaseHoldMod(sc, current_mod, false, false, true)
-
-    if TreatMod(entries, sc) {
-        current_presses[sc] := true
-        return 1
+    layout := CONF.LayoutAliases[GetCurrentLayout()]
+    if layout == current_layout || !ROOTS.Has(layout) && !current_layout {
+        return
     }
 
-    if entries.ubase || entries.uhold {
-        if !entries.uhold && entries.ubase.fin.down_type == TYPES.Default  ; TODO?
-            && entries.ubase.fin.up_type == TYPES.Disabled
-            && !entries.ubase.active_scancodes.Count && !entries.ubase.active_chords.Count
-            && entries.ubase.active_gestures.Count {
-                CollectPool(entries.ubase.active_gestures)
-                if !pool_gestures.Length {
-                    return 0
+    current_layout := ROOTS.Has(layout) ? layout : 0
+    ToRoot()
+}
+
+
+GetEntries(sc) {
+    static cache:=Map(), mem_version:=0
+
+    if version !== mem_version {
+        cache := Map()
+        mem_version := version
+    }
+
+    t := ObjPtr(curr_unode) . "|" . sc . "|" . current_mod . "|" . current_ctx
+    try {
+        entries := cache[t]
+    } catch {
+        cache[t] := curr_unode.GetBaseHoldMod(sc, current_mod, false, false, true)
+        entries := cache[t]
+    }
+
+    if !entries.ubase && !entries.uhold && !entries.umod {
+        return false
+    } else if entries.umod || entries.uhold || entries.ubase && (
+        (fin := _GetFin(entries.ubase)) && (
+            fin.down_type != TYPES.Default
+            || fin.up_type != TYPES.Disabled
+            || _GetScancodes(entries.ubase).Count
+            || _GetChords(entries.ubase).Count
+        )
+    ) {
+        return entries
+    } else {
+        gests := _GetGestures(entries.ubase)
+        CollectPool(gests)
+        if pool_gestures.Length {
+            return entries
+        }
+        return false
+    }
+}
+
+
+TimerSendCurrent() {
+    SetTimer(TimerSendCurrent, 0)
+
+    if await_nest {
+        fin := _GetFin(await_nest[1])
+        t := fin && fin.is_irrevocable
+        SendAwaiting("n")
+        if !t {
+            ToRoot()
+        }
+    }
+}
+
+
+SendAwaiting(order, sc:=0) {
+    global await_hold, await_nest, await_gest, await_mod, await_chord_part
+
+    b := false
+
+    for symb in StrSplit(order) {
+        if symb == "h" && await_hold {
+            fin := _GetFin(await_hold[1])
+            t := await_hold
+            if !sc || t[2] == sc {
+                await_hold := false
+                if !b {
+                    TransitionProcessing(t[1], t[2])
+                    b := true
                 }
             }
-
-        return entries  ; has at least one assignment; there's a point in further processing
-    }
-
-    if curr_unode !== ROOTS[CurrentLayout] {
-        if curr_unode.fin.child_behavior == 5 {  ; block unassigned
-            return 2  ; do nothing else
-        } else if (curr_unode.fin.child_behavior == 1 || curr_unode.fin.child_behavior == 2)
-            && prev_unode {  ; backsearch
-            if last_val && curr_unode.fin.child_behavior == 2 {  ; force sending stored value
-                delayed := true
-                SendKbd(last_val[1].fin.down_type, last_val[1].fin.down_val)
+        }
+        if symb == "p" && await_hold {
+            fin := _GetFin(await_hold[3])
+            t := await_hold
+            if !sc || t[2] == sc {
+                await_hold := false
+                if !b {
+                    TransitionProcessing(t[3], t[2])
+                    b := true
+                }
             }
-            StepBack(extra_mod)
-            return GetEntries(sc)  ; repeat scmod check from previous step
-        } else {
-            if last_val && curr_unode.fin.child_behavior == 4 {
-                delayed := true
-                SendKbd(last_val[1].fin.down_type, last_val[1].fin.down_val)
+        }
+        if symb == "n" && await_nest {
+            fin := _GetFin(await_nest[1])
+            t := [await_nest[1], await_nest[2]]
+            await_nest := false
+            if !b {
+                if t[2] !== -1 && fin {
+                    SendKbd(fin.down_type, fin.down_val)
+                    if up_actions.Has(t[2]) {
+                        SendKbd(up_actions[t[2]].up_type, up_actions[t[2]].up_val)
+                        up_actions.Delete(t[2])
+                    }
+                }
             }
-            ToRoot(extra_mod)
-            return GetEntries(sc)
+        }
+        if symb == "g" && await_gest {
+            fin := _GetFin(await_gest[1])
+            t := await_gest
+            if !sc || t[2] == sc {
+                await_gest := false
+                if !b {
+                    res := EndDraw()
+                    if res !== -1 {
+                        if res == false || res[1] < CONF.min_cos_similarity.v || res[2] == "" {
+                            if !chord_presses.Has(t[2]) && (!current_mod || sc == t[2]) {
+                                TransitionProcessing(t*)
+                            }
+                        } else {
+                            TimerResetChord(t[2])
+                            TransitionProcessing(res[2])
+                        }
+                    }
+                    DestroyGestOverlay()
+                    b := true
+                }
+            }
+        }
+        if symb == "m" && await_mod {
+            fin := _GetFin(await_mod[1])
+            t := await_mod
+            await_mod := false
+            if !b && t[2] == sc {
+                TransitionProcessing(t*)
+                b := true
+            }
         }
     }
-
-    ;; root reached, not assigned, not blocked, not found on the prev node/root (if configured so)
-
-    ; to prevent the native press from being sent earlier than previous simulated. rare case
-    if last_val {  ; NTT
-        delayed := true
-        SendKbd(TYPES.KeySimulation, SC_STR_BR[sc])
-        return 1
-    }
-    return 0
 }
 
 
-TreatMod(entries, sc) {
-    global last_val, current_mod, gest_node
+ToRoot(extra_mod:=0) {
+    global curr_unode, prev_unode
 
-    ; if there is an assignment for hold, it has higher priority than basemod (1)
-    ; without `current_mod` – umod is uhold, so this is only for assignments under mods
-    if entries.uhold {
-        if entries.uhold.fin.down_type !== TYPES.Modifier {
-            return false
-        }
-        val := entries.uhold.fin.down_val
-    } else if !entries.umod {
-        return false
-    } else {
-        val := entries.umod.fin.down_val
-    }
-
-    ; mods and chord_parts are stored with their scs to indicate that the assignment will
-    ; …only triggered from its own event (without execution from cross-presses)
-    last_val := entries.ubase ? [entries.ubase, sc] : GetDefaultSim(sc, true)
-
-    if last_val[1].active_gestures.Count {
-        CollectPool(last_val[1].active_gestures)
-        if pool_gestures.Length {
-            gest_node := last_val[1]
-            StartDraw()
-        }
-    }
-
-    current_mod |= 1 << val
-    SetTimer(TimerResetBase, -(last_val[1].fin.custom_nk_time || CONF.MS_NK.v))
-    return true
+    curr_unode := ROOTS[current_layout]
+    prev_unode := false
+    TransferModifiers(extra_mod)
 }
 
 
@@ -301,136 +225,394 @@ StepBack(extra_mod:=0) {
 }
 
 
-ToRoot(extra_mod:=0) {
-    global curr_unode, prev_unode
+TreatMod(entries, sc) {
+    global current_mod, child_behavior, await_mod, await_gest
 
-    curr_unode := ROOTS[CurrentLayout]
+    if !entries.umod {
+        return false
+    }
+
+    fin := _GetFin(entries.umod)
+    if !fin {
+        return false
+    }
+
+    val := fin.down_val
+    child_behavior := fin.child_behavior
+
+    await_mod := entries.ubase ? [entries.ubase, sc] : GetDefaultSim(sc, true)
+    current_mod |= 1 << val
+
+    mfin := _GetFin(await_mod[1])
+    SetTimer(TimerResetMod, -((mfin && mfin.custom_lp_time) || CONF.MS_LP.v))
+    return true
+}
+
+
+TimerResetMod() {
+    global prev_unode, await_mod
+
+    try up_actions.Delete(await_mod[2])
+    await_mod := false
     prev_unode := false
-    TransferModifiers(extra_mod)
 }
 
 
-SysModComboDown(sc, extra_mod) {
-    global current_mod, catched_entries
+TimerResetChord(sc) {
+    global prev_node, await_chord_part
 
-    if current_presses.Has(sc) {
-        return
+    if chord_presses.Has(sc) {
+        try up_actions.Delete(sc)
+        chord_presses.Set(sc, false)
     }
-
-    current_mod |= extra_mod
-    catched_entries := GetEntries(sc, extra_mod)
-    if !IsObject(catched_entries) {
-        current_mod &= ~extra_mod
-        catched_entries := false
-        SetTimer(TimerSendCurrent, -CONF.MS_NK.v)
-        return
-    }
-    OnKeyDown(sc)
+    prev_unode := false  ;?
 }
 
 
-OnKeyDown(sc) {
-    global last_val, pending, catched_entries, catched_gui_func, delayed, gest_node
+TransitionProcessing(checked_unode, sc:=0) {
+    global curr_unode, prev_unode, current_presses, up_actions, await_nest, await_gest
+
+    if is_drawing {
+        return
+    }
+
+    fin := _GetFin(checked_unode)
+    if !checked_unode || !fin {
+        return
+    }
+
+    scs := _GetScancodes(checked_unode)
+    chs := _GetChords(checked_unode)
+
+    TreatUpAction(checked_unode, sc)
+
+    if !scs.Count && !chs.Count {
+        SendKbd(fin.down_type, fin.down_val)
+        if !fin.is_irrevocable && curr_unode !== ROOTS[current_layout] && !chord_presses.Length {
+            ToRoot()
+        } else if sc && !chord_presses.Has(sc) {
+            try current_presses.Delete(sc)
+        }
+        return
+    }
+
+    if fin.is_instant {
+        SendKbd(fin.down_type, fin.down_val)
+        await_nest := [checked_unode, -1]
+    } else {
+        await_nest := [checked_unode, sc]
+    }
+
+    if !fin.is_irrevocable {
+        SetTimer(TimerSendCurrent, -((fin.custom_nk_time) || CONF.MS_NK.v))
+    }
+    if curr_unode !== checked_unode {
+        prev_unode := curr_unode
+        curr_unode := checked_unode
+    }
+
+    TransferModifiers()
+}
+
+
+TransferModifiers(extra_mod:=0) {
+    global current_mod
+
+    if !current_mod {
+        current_mod := extra_mod
+        return
+    }
+
+    current_mod := extra_mod
+    for sc in current_presses {
+        res_md := curr_unode.GetModFin(sc, true)
+        if res_md {
+            current_mod |= 1 << res_md.down_val
+        }
+    }
+}
+
+
+TreatGest(entries, sc) {
+    global await_gest
+
+    gests := _GetGestures(entries.ubase)
+    if entries.ubase && gests.Count {
+        CollectPool(gests)
+        if pool_gestures.Length {
+            await_gest := [entries.ubase, sc]
+            StartDraw()
+        }
+    }
+}
+
+
+TreatChord(entries, sc) {
+    global await_chord_full, await_chord_part, chord_presses
+
+    SetTimer(SendChord, 0)
+    if !chord_presses.Has(sc) {
+        chord_presses.Set(sc, true)
+    }
+
+    res := curr_unode.GetNode(ChordToStr(chord_presses.map), current_mod, true, false, true)
+    if res {
+        fin := _GetFin(res)
+        if fin && fin.custom_lp_time {
+            await_chord_full := res
+            SetTimer(SendChord, -fin.custom_lp_time)
+        } else {
+            await_chord_full := false
+            for ch_sc in chord_presses.map {
+                TimerResetChord(ch_sc)
+            }
+            TransitionProcessing(res)
+        }
+        return true
+    }
+    return false
+}
+
+
+TreatTapHold(entries, sc) {
+    global await_hold
+
+    await_hold := [(entries.ubase ? entries.ubase : GetDefaultSim(sc)[1]), sc, entries.uhold]
+
+    fin := _GetFin(await_hold[1])
+    is_hold := KeyWait(
+        SC_STR[sc],
+        ((fin && fin.custom_lp_time) ? ("T" . fin.custom_lp_time / 1000) : CONF.T)
+    )
+
+    if is_hold && await_hold {
+        SendAwaiting("h", sc)
+    } else if !is_hold && await_hold {
+        TreatUpAction(catched_entries.uhold, sc)
+        if is_drawing {
+            await_gest := [catched_entries.uhold, sc]
+        } else {
+            TransitionProcessing(catched_entries.uhold)
+        }
+    }
+    await_hold := false
+}
+
+
+TreatUpAction(unode, sc) {
+    try up_actions[sc].Delete(sc)
+    fin := _GetFin(unode)
+    if fin && fin.up_type != TYPES.Disabled {
+        up_actions[sc] := fin
+    }
+}
+
+
+OnKeyDown(sc, extra_mod:=0, rec:=false, forced:=false) {
+    global catched_entries, catched_gui_func, is_key_processing, current_mod, await_nest
+
+    if init_drawing && sc == "RButton" {
+        StartDraw()
+        return
+    } else if is_drag_mode && active_hwnd == UI.Hwnd && (sc == "LButton" || sc == "RButton") {
+        return
+    }
+
+    wh := !(sc is Number) && SubStr(sc, 1, 5) == "Wheel"
+    if is_key_processing {
+        if !current_presses.Has(sc) {
+            if !wh {
+                current_presses[sc] := true
+            }
+            stack.Push([sc, extra_mod])
+            if await_hold && CONF.interruption_behavior.v > 1 {
+                SendAwaiting(CONF.interruption_behavior.v == 3 ? "gp" : "gh")
+                OnKeyDownRec()
+            }
+        }
+        return
+    }
+
+    if !rec && current_presses.Has(sc) {
+        return
+    }
+
+    is_key_processing := true
 
     if catched_gui_func {
-        if sc !== "WheelDown" && sc !== "WheelUp" {
+        if !wh {
             current_presses[sc] := true
         }
         catched_gui_func := false
         HandleKeyPress(sc)
+        OnKeyDownRec()
+        return
+    }
+
+    current_mod |= extra_mod
+    if !catched_entries {
+        CheckLayout()
+        SendAwaiting("g")
+        catched_entries := GetEntries(sc)
+    }
+
+    if !catched_entries {
+        cfin := _GetFin(curr_unode)
+        ch_bh := child_behavior || (cfin ? cfin.child_behavior : 0)
+
+        if curr_unode !== ROOTS[current_layout] {
+            if ch_bh == 5 {
+                OnKeyDownRec()
+                return
+            } else if ch_bh == 2 || ch_bh == 4 {
+                SendAwaiting("n")
+            }
+            if ch_bh < 3 && prev_unode {
+                StepBack(extra_mod)
+            } else {
+                ToRoot(extra_mod)
+            }
+            catched_entries := GetEntries(sc)
+        }
+    }
+
+    SetTimer(TimerResetMod, 0)
+    TimerResetMod()
+    if await_nest && up_actions.Has(await_nest[2]) {
+        up_actions.Delete(await_nest[2])
+    }
+    await_nest := false
+
+    if forced {
+        if catched_entries && catched_entries.ubase {
+            TransitionProcessing(catched_entries.ubase, sc)
+        } else {
+            TransitionProcessing(GetDefaultSim(sc, true)[1], sc)
+        }
+        OnKeyDownRec()
         return
     }
 
     if !catched_entries {
+        if current_mod && ch_bh == 5 {
+            OnKeyDownRec()
+            return
+        }
+        if chord_presses.Length {
+            is_key_processing := false
+            catched_entries := false
+            InterruptChord(extra_mod)
+        }
+        sim := GetDefaultNode(sc, current_mod)
+        if !rec {
+            stack.Push([sc, extra_mod])
+        } else {
+            SendKbd(sim.down_type, sim.down_val)
+        }
+        OnKeyDownRec()
         return
     }
 
-    SetTimer(TimerResetBase, 0)
-    TimerResetBase()
-
-    current_presses[sc] := true  ; store current press for repetition and chord checks
-
-    EndDraw()
-    if catched_entries.ubase && catched_entries.ubase.active_gestures.Count {
-        CollectPool(catched_entries.ubase.active_gestures)
-        if pool_gestures.Length {
-            gest_node := catched_entries.ubase
-            StartDraw()
-        }
+    if !wh {
+        current_presses[sc] := true
     }
 
-    ; only tap assigned or insignificant hold
-    if !catched_entries.uhold || catched_entries.uhold.fin.down_type == TYPES.Disabled
-        && !catched_entries.uhold.active_scancodes.Count
-        && !catched_entries.uhold.active_chords.Count {
-        TransitionProcessing(catched_entries.ubase, sc)
+    uhold_fin := _GetFin(catched_entries.uhold)
+    uhold_scs := _GetScancodes(catched_entries.uhold)
+    uhold_chs := _GetChords(catched_entries.uhold)
 
-    ; chord part
-    } else if catched_entries.uhold.fin.down_type == TYPES.Chord {
-        res := curr_unode.GetNode(ChordToStr(current_presses), current_mod, true)
-        if res {  ; chord matched!
-            TransitionProcessing(res)
+    if catched_entries.uhold && uhold_fin && uhold_fin.down_type == TYPES.Chord {
+        TreatChord(catched_entries, sc)
+        TreatGest(catched_entries, sc)
+    } else if chord_presses.Length && chord_presses.Any() {
+        is_key_processing := false
+        catched_entries := false
+        InterruptChord(extra_mod)
+        stack.Push([sc, extra_mod])
+    } else {
+        TreatGest(catched_entries, sc)
+        if catched_entries.umod {
+            TreatMod(catched_entries, sc)
+        } else if !catched_entries.uhold || (
+            uhold_fin
+            && uhold_fin.down_type == TYPES.Disabled
+            && uhold_fin.up_type == TYPES.Disabled
+            && !uhold_scs.Count
+            && !uhold_chs.Count
+        ) {
+            TransitionProcessing(catched_entries.ubase, sc)
         } else {
-            ; in other case store tap/default value with sc note
-            ; …(can be sent with corresponding KeyUp(sc) only)
-            if catched_entries.ubase {
-                last_val := [catched_entries.ubase, sc]
-                if catched_entries.ubase.fin.up_type !== TYPES.Disabled {
-                    up_actions[sc] := catched_entries.ubase.fin
-                }
-                SetTimer(TimerResetBase, -(catched_entries.ubase.fin.custom_nk_time || CONF.MS_NK.v))
-            } else {
-                last_val := GetDefaultSim(sc, true)
-                SetTimer(TimerResetBase, -CONF.MS_NK.v)
+            TreatTapHold(catched_entries, sc)
+        }
+    }
+    OnKeyDownRec()
+}
+
+
+OnKeyDownRec() {
+    global is_key_processing, catched_entries
+
+    catched_entries := false
+    is_key_processing := false
+    if stack.Length {
+        t := stack.RemoveAt(1)
+        OnKeyDown(t[1], t[2], true)
+    }
+}
+
+
+InterruptChord(extra_mod, up_sc:=0) {
+    global await_chord_full, chord_presses
+
+    b := false
+    for sc in chord_presses.order {
+        if chord_presses[sc] {
+            b := true
+            OnKeyDown(sc, extra_mod, true, true)
+            chord_presses.Set(sc, false)
+            if sc == up_sc && up_actions.Has(sc) {
+                SendKbd(up_actions[sc].up_type, up_actions[sc].up_val)
+                up_actions.Delete(sc)
             }
         }
-
-    ; full-fledged tap/hold
-    } else {
-        ; store base value for the case if KeyWait will be interrupted
-        pending := catched_entries.ubase || GetDefaultSim(sc)[1]
-        is_hold := KeyWait(SC_STR[sc],
-            (pending.fin.custom_lp_time ? "T" . pending.fin.custom_lp_time / 1000 : CONF.T))
-        ; determine tap/hold and than recheck pending that may be reset by other presses during KW
-
-        if pending && !delayed {
-            res_unode := is_hold ? pending : catched_entries.uhold
-            TransitionProcessing(res_unode)
-        }
-        pending := false
     }
-    catched_entries := false
+    if b {
+        SetTimer(SendChord, 0)
+        await_chord_full := false
+    }
 }
 
 
-CheckLayout() {
-    global CurrentLayout
+SendChord() {
+    global await_chord_full, chord_presses
 
-    layout := GetCurrentLayout()
-    if layout == CurrentLayout || !ROOTS.Has(layout) && !CurrentLayout {
+    if !await_chord_full {
         return
     }
-
-    ; force sending the last stored value and reset curr_unode to the root by the new layout
-    TimerSendCurrent()
-    CurrentLayout := ROOTS.Has(layout) ? layout : 0
-    ToRoot()
-}
-
-
-ResetModifiers() {
-    global current_mod
-
-    current_mod := 0
+    res := curr_unode.GetNode(ChordToStr(chord_presses.map), current_mod, true, false, true)
+    if res == await_chord_full {
+        for sc in chord_presses.map {
+            TimerResetChord(sc)
+        }
+        ;chord_presses := OrderedMap()
+        TransitionProcessing(res)
+    }
+    await_chord_full := false
 }
 
 
 GetDefaultSim(sc, extended:=false) {
+    view := {
+        fin: GetDefaultNode(sc, current_mod),
+        scancodes: Map(),
+        chords: Map(),
+        gestures: Map()
+    }
+
     return [
         {
-            scancodes: Map(), chords: Map(), gestures: Map(),
-            active_scancodes: Map(), active_chords: Map(), active_gestures: Map(),
-            fin: GetDefaultNode(sc, current_mod)
+            GetActiveVariant: ((this, ctx_id:=0) => view),
+            GetActiveFin: ((this, ctx_id:=0) => view.fin)
         },
         extended ? sc : false
     ]
@@ -438,76 +620,64 @@ GetDefaultSim(sc, extended:=false) {
 
 
 OnKeyUp(sc, extra_mod:=0) {
-    global current_mod
-
-    EndDraw()
+    global current_mod, child_behavior
 
     if extra_mod {  ; separately count modifiers from hotkeys with system keys
         current_mod &= ~extra_mod
     }
 
-    if up_actions.Has(sc) {
+    if chord_presses.Length && chord_presses.Any() {
+        SendAwaiting("g", sc)
+        InterruptChord(extra_mod, sc)
+    } else {
+        SendAwaiting("gmh", sc)
+    }
+
+    if up_actions.Has(sc) && !await_nest {
         SendKbd(up_actions[sc].up_type, up_actions[sc].up_val)
         up_actions.Delete(sc)
     }
 
     try current_presses.Delete(sc)
-    md := curr_unode.GetModFin(sc)
+
+    b := !await_nest && chord_presses.Length == 1 && chord_presses.Has(sc) && !current_mod
+    chord_presses.Remove(sc)
+    md := curr_unode.GetModFin(sc, true)
     if md {  ; release mod
         current_mod &= ~(1 << md.down_val)
-        ; there are no more modifiers ? reset the node to the root
-        if !current_mod && curr_unode !== ROOTS[CurrentLayout] {
-            ToRoot()
+        child_behavior := false
+        if !await_nest && !current_mod && curr_unode !== ROOTS[current_layout]
+            && !md.is_irrevocable {
+            b := true
         }
     }
-
-    if last_val && prev_unode {  ; same for previous level if exists
-        md := prev_unode.GetModFin(sc)
-        if md {
-            current_mod &= ~(1 << md.down_val)
-            TimerSendCurrent()
-            if !current_mod && curr_unode !== ROOTS[CurrentLayout] {
-                ToRoot()
-            }
-        }
-    }
-
-    ; deny last_val processing from other keys, when last_val get from mod/chord base
-    if last_val && (!last_val[2] || last_val[2] == sc) {
-        TransitionProcessing(last_val[1])
-        SetTimer(TimerResetBase, 0)
+    if b {
+        ToRoot()
     }
 }
 
 
 SendKbd(action_type, action_val) {
-    global last_val, delayed
-
-    last_val := false
-
     switch action_type {
         case TYPES.Text:
             if CONF.sendtext_output.v {  ; temp
-                delayed ? SetTimer((val := action_val) => (SendText(val), delayed := false), -1)
-                    : SendText(action_val)
+                SendText(action_val)
             } else {
-                delayed ? SetTimer((val := action_val) => (SendInput("{Raw}" . val), delayed := false), -1)
-                    : SendInput("{Raw}" . action_val)
+                SendInput("{Raw}" . action_val)
             }
         case TYPES.Default, TYPES.KeySimulation:
-            delayed ? SetTimer((val := action_val) => (SendInput(val), delayed := false), -1)
-                : SendInput(action_val)
+            SendInput(action_val)
         case TYPES.Function:
             if !RegExMatch(action_val, "^(?<name>\w+)(?:\((?<args>.*)\))?$", &m) {
                 throw Error("Wrong function value: " . action_val)
             }
             args := _ParseFuncArgs(m["args"])
-            %m["name"]%.Call(args*)
+            SetTimer(%m["name"]%.Bind(args*), -1)
     }
 }
 
 
-TreatAsOtherNode(path) {  ; custom func
+TreatAsOtherNode(path) {  ; custom func  ; NTT
     if !path || !path.Length {
         return
     }
@@ -515,7 +685,7 @@ TreatAsOtherNode(path) {  ; custom func
         path := [path]
     }
 
-    start_unode := ROOTS[CurrentLayout]
+    start_unode := ROOTS[current_layout]
     for arr in path {
         len := arr.Length
         start_unode := start_unode.GetNode(arr[1], len > 1 ? arr[2] : 0, len > 2 ? arr[3] : 0)
@@ -525,4 +695,37 @@ TreatAsOtherNode(path) {  ; custom func
     }
 
     TransitionProcessing(start_unode)
+}
+
+
+_GetActiveView(node_like, ctx_id:=0) {
+    if !node_like {
+        return false
+    }
+
+    try {
+        return node_like.GetActiveVariant(ctx_id)
+    } catch {
+        return false
+    }
+}
+
+_GetFin(node_like, ctx_id:=0) {
+    view := _GetActiveView(node_like, ctx_id)
+    return view ? view.fin : false
+}
+
+_GetScancodes(node_like, ctx_id:=0) {
+    view := _GetActiveView(node_like, ctx_id)
+    return view ? view.scancodes : Map()
+}
+
+_GetChords(node_like, ctx_id:=0) {
+    view := _GetActiveView(node_like, ctx_id)
+    return view ? view.chords : Map()
+}
+
+_GetGestures(node_like, ctx_id:=0) {
+    view := _GetActiveView(node_like, ctx_id)
+    return view ? view.gestures : Map()
 }

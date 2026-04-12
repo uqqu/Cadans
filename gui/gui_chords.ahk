@@ -26,7 +26,7 @@ _UnhighlightSelectedChord() {
         for sc in StrSplit(selected_chord, "-") {
             isc := sc
             try isc := Integer(sc)
-            _FillOneButton(isc, UI[sc], isc)
+            FillOneButton(isc, UI[sc], isc)
         }
     }
 }
@@ -108,7 +108,7 @@ DeleteSelectedChord(_, without_confirmation:=false, without_upd:=false) {
     ubase := gui_entries.ubase.GetBaseHoldMod(selected_chord, gui_mod_val, true).ubase
     child_node := _GetFirst(ubase)
     for layer in checked_layers {
-        if _EqualNodes(child_node, _GetFirst(ubase, layer)) {
+        if EqualNodes(child_node, _GetFirst(ubase, layer)) {
             layers.Push(layer)
         }
     }
@@ -131,29 +131,29 @@ DeleteSelectedChord(_, without_confirmation:=false, without_upd:=false) {
             json_chords[selected_chord].Delete(gui_mod_val)
         } else {
             json_chords.Delete(selected_chord)
-            scancodes := Map()
-            for sc in StrSplit(selected_chord, "-") {
-                scancodes[sc] := true
-            }
-            if json_chords.Count {
-                for buf, mods in json_chords {
-                    if mods.Has(gui_mod_val) {
-                        for sc in StrSplit(buf, "-") {
-                            try scancodes.Delete(sc)
-                        }
+        }
+        scancodes := Map()
+        for sc in StrSplit(selected_chord, "-") {
+            scancodes[sc] := true
+        }
+        if json_chords.Count {
+            for buf, mods in json_chords {
+                if mods.Has(gui_mod_val) {
+                    for sc in StrSplit(buf, "-") {
+                        try scancodes.Delete(sc)
                     }
                 }
             }
+        }
 
-            for sc in scancodes {
-                try {
-                    sc_node := json_scancodes[Integer(sc)][gui_mod_val+1]
-                } catch {
-                    sc_node := json_scancodes[sc][gui_mod_val+1]
-                }
-                sc_node[1] := TYPES.Disabled
-                sc_node[2] := ""
+        for sc in scancodes {
+            try {
+                sc_node := json_scancodes[Integer(sc)][gui_mod_val+1]
+            } catch {
+                sc_node := json_scancodes[sc][gui_mod_val+1]
             }
+            sc_node[1] := TYPES.Disabled
+            sc_node[2] := ""
         }
 
 	    SerializeMap(json_root, layer)
@@ -179,7 +179,7 @@ CancelChordEditing(_, without_confirmation:=false) {
     start_temp_chord := 0
 
     ToggleVisibility(2, UI.chs_back, UI.chs_front)
-    UI.Title := "TapDance for Windows"
+    UI.Title := proj_name
 
     UpdateKeys()
 }
@@ -219,6 +219,7 @@ SaveEditedChord(*) {
         if gui_entries.ubase.chords.Has(chord_txt)
             && gui_entries.ubase.chords[chord_txt].Has(gui_mod_val)
             && gui_entries.ubase.chords[chord_txt][gui_mod_val].layers.Has(layer)
+            && _GetFirst(gui_entries.ubase.GetBaseHoldMod(chord_txt, gui_mod_val, true).ubase)
             && MsgBox("Chord with these keys already exists on this layer. "
                 . "Do you want to overwrite it?", "Confirmation", "YesNo Icon?") == "No" {
             return
@@ -228,104 +229,11 @@ SaveEditedChord(*) {
 }
 
 
-WriteChord(chord:=false, *) {
-    global form, temp_chord, start_temp_chord
-
-    chord_txt := chord || ChordToStr(temp_chord)
-    chord_scs := chord ? StrSplit(chord, "-") : temp_chord
-
-    layers := GetLayerList()
-    temp_layer := layer_editing ? selected_layer
-        : (layers.Length == 1 ? layers[1] : form["LayersDDL"].Text)
-    json_root := DeserializeMap(temp_layer)
-    if !json_root.Has(gui_lang) {
-        json_root[gui_lang] := ["", Map(), Map(), Map()]
-    }
-    if chord {
-        path := current_path.Clone()
-        path.Length -= 1
-        res := current_path.Length > 1 ? _WalkJson(json_root[gui_lang], path)
-            : json_root[gui_lang]
-    } else {
-        res := current_path.Length ? _WalkJson(json_root[gui_lang], current_path)
-            : json_root[gui_lang]
-    }
-    json_scancodes := res[-3]
-    json_chords := res[-2]
-    if json_chords.Has(chord_txt) && json_chords[chord_txt].Has(gui_mod_val)
-        && MsgBox("Chord with these keys already exists on the selected layer. "
-            . "Do you want to overwrite it?", "Confirmation", "YesNo Icon?") == "No" {
-        return
-    }
-
-    UI.Title := "TapDance for Windows"
-    ToggleFreeze(1)
-
-    for sc, _ in chord_scs {
-        try sc := Integer(sc)
-        if !json_scancodes.Has(sc) {
-            json_scancodes[sc] := Map()
-        }
-        if json_scancodes[sc].Has(gui_mod_val+1) {
-            json_scancodes[sc][gui_mod_val+1][1] := TYPES.Chord
-            json_scancodes[sc][gui_mod_val+1][2] := ""
-        } else {
-            json_scancodes[sc][gui_mod_val+1] := _GetDefaultJsonNode(, TYPES.Chord)
-        }
-    }
-
-    if !json_chords.Has(chord_txt) {
-        json_chords[chord_txt] := Map()
-    }
-    try sc_mp := json_chords[chord_txt][gui_mod_val][-3]
-    try ch_mp := json_chords[chord_txt][gui_mod_val][-2]
-    json_chords[chord_txt][gui_mod_val] := [
-        TYPES.%form["TypeDDL"].Text%, form["ValInp"].Text . "", TYPES.Disabled, "",
-        Integer(form["CBInstant"].Value), Integer(form["CBIrrevocable"].Value),
-        0, Integer(form["CustomNK"].Text), Integer(form["ChildBehaviorDDL"].Value),
-        "", "", sc_mp ?? Map(), ch_mp ?? Map(), Map(),
-    ]
-
-    SerializeMap(json_root, temp_layer)
-
-    equal := true
-    if temp_chord && start_temp_chord && temp_chord.Count == start_temp_chord.Count {
-        for key, value in temp_chord {
-            if !start_temp_chord.Has(key) {
-                equal := false
-                break
-            }
-        }
-    } else if temp_chord && start_temp_chord {
-        equal := false
-    }
-
-    if selected_chord !== "" && !equal {
-        DeleteSelectedChord(0, true, true)
-    }
-
-    temp_chord := 0
-    start_temp_chord := 0
-
-    ToggleVisibility(2, UI.chs_back, UI.chs_front)
-
-    FillRoots()
-    if layer_editing {
-         AllLayers.map[selected_layer] := true
-        _MergeLayer(selected_layer)
-    }
-    UpdLayers()
-    ChangePath()
-
-    try form.Destroy()
-    form := false
-}
-
-
 ChordToStr(scs) {
     res := ""
     if scs is String {
         for key in StrSplit(scs, " ") {
+            key := LTrim(key, "&")
             if key {
                 int_sc := GetKeySC(key)
                 res .= (int_sc || key) . "-"
@@ -333,7 +241,7 @@ ChordToStr(scs) {
         }
     } else {
         for sc in scs {
-            res .= sc . "-"
+            res .= LTrim(sc, "&") . "-"
         }
     }
     return SubStr(Sort(res, "D-"), 1, -1)

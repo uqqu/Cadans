@@ -1,15 +1,15 @@
-LVLayerClick(lv, row) {
+LVLayerClick(lv, row, is_right_click:=false, *) {
     global last_selected_layer, selected_layer_priority
 
     _UnhighlightSelectedChord()
     ToggleEnabled(0, UI.chs_toggles, UI.gest_toggles)
 
-    if _GetColumnAtCursor(lv) == 1 {
-        LVLayerCheck(lv, row)
+    if GetColumnAtCursor(lv) == 1 {
+        LVLayerCheck(lv, row, is_right_click)
         return
     }
 
-    if layer_editing || _GetRowIconIndex(lv, row) > 1 {
+    if layer_editing || GetRowIconIndex(lv, row) > 1 {
         ToggleEnabled(0, UI.layer_move_btns, UI.layer_ctrl_btns)
         return
     }
@@ -42,11 +42,11 @@ LVLayerDoubleClick(lv, row, from_selected:=false) {
         return
     }
 
-    i := from_selected || _GetRowIconIndex(lv, row)
+    i := from_selected || GetRowIconIndex(lv, row)
 
-    if i == 3 {
+    if i == 3 {  ; 'back' icon
         layer_path.Length -= 1
-    } else if i == 2 {
+    } else if i == 2 {  ; 'folder' icon
         layer_path.Push(lv.GetText(row, 3))
         if layer_path.Length == 1 && layer_path[-1] == "custom layouts" {
             cnt := IniRead("config.ini", "Main", "CustomLayoutWarningsCnt", 0)
@@ -61,7 +61,7 @@ LVLayerDoubleClick(lv, row, from_selected:=false) {
             }
             IniWrite(cnt + 1, "config.ini", "Main", "CustomLayoutWarningsCnt")
         }
-    } else {
+    } else {  ; just layer
         buffer_view := 0
         layer_editing := true
         if !from_selected {
@@ -74,11 +74,16 @@ LVLayerDoubleClick(lv, row, from_selected:=false) {
         selected_layer := last_selected_layer
         root_text := StrSplit(last_selected_layer, "\")[-1]
 
+        UI["DdlProcCtx"].Enabled := false
+        UI["DdlProcCtx"].Delete()
+        UI["DdlProcCtx"].Add([LayersMeta[selected_layer]["rprocesses"], "*"])
+        UI["DdlProcCtx"].Text := LayersMeta[selected_layer]["rprocesses"] || "*"
+
         ToggleVisibility(1, UI["BtnBackToRoot"])
         ToggleVisibility(0, UI.layer_move_btns, UI.layer_ctrl_btns, UI["BtnAddNewLayer"])
 
         if AllLayers.map[selected_layer] is Integer {
-            _MergeLayer(selected_layer)
+            MergeLayer(selected_layer)
         }
     }
 
@@ -86,13 +91,11 @@ LVLayerDoubleClick(lv, row, from_selected:=false) {
 }
 
 
-LVLayerCheck(lv, row) {
-    i := _GetRowIconIndex(lv, row)
-    if i > 1 {
+LVLayerCheck(lv, row, is_right_click) {
+    icon_type := GetRowIconIndex(lv, row)
+    if icon_type > 1 {  ; folder
         LVLayerDoubleClick(lv, row)
         return
-    } else if layer_editing {
-        return false
     }
 
     layer_name := ""
@@ -101,69 +104,33 @@ LVLayerCheck(lv, row) {
     }
     layer_name .= lv.GetText(row, 3)
 
-    if !i {
-        ActiveLayers.Add(layer_name)
+    if !icon_type {  ; inactive
+        is_right_click ? ActiveLayers.Add(layer_name, , 1) : ActiveLayers.Add(layer_name)
         if AllLayers.map[layer_name] is Integer {
-            _MergeLayer(layer_name)
+            MergeLayer(layer_name)
         }
-    } else {
+    } else {  ; active
         ActiveLayers.Remove(layer_name)
-        for i, name in ActiveLayers.order {
-            ActiveLayers.map[name] := i
-        }
+    }
+    for i, name in ActiveLayers.order {
+        ActiveLayers.map[name] := i
     }
 
     _WriteActiveLayersToConfig()
 }
 
 
-_GetRowIconIndex(lv, row) {
-    item := Buffer(64, 0)
-    NumPut("uint", 0x0002, item, 0)
-    NumPut("int", row - 1, item, 4)
-    NumPut("int", 0, item, 8)
-    SendMessage(0x104B, 0, item, lv)
-    offset := (A_PtrSize = 8) ? 36 : 32
-    return NumGet(item, offset, "int")
-}
-
-
-_GetColumnAtCursor(lv, with_row:=false) {
-    MouseGetPos(&mx, &my, , &ctrl_hwnd)
-
-    row := 0
-    if SubStr(ctrl_hwnd, 1, 9) == "SysHeader" {
-        row := -1
-    }
-
-    pt := Buffer(8, 0)
-    NumPut("int", mx, pt, 0)
-    NumPut("int", my, pt, 4)
-    DllCall("ScreenToClient", "ptr", lv.Hwnd, "ptr", pt)
-
-    hti := Buffer(48, 0)
-    NumPut("int", NumGet(pt, 0, "int"), hti, 0)
-    NumPut("int", NumGet(pt, 4, "int"), hti, 4)
-
-    SendMessage(0x1039, 0, hti, lv)
-
-    if with_row {
-        row := row || (NumGet(hti, 12, "int") + 1)
-        return [NumGet(hti, 16, "int") + 1, row]
-    }
-    return NumGet(hti, 16, "int") + 1
-}
-
-
-_WriteActiveLayersToConfig() {
+_WriteActiveLayersToConfig(without_upd:=false) {
     str_value := ""
     for layer in ActiveLayers.order {
         str_value .= layer . ", "
     }
 
     IniWrite(SubStr(str_value, 1, -2), "config.ini", "Main", "ActiveLayers")
-    UpdLayers()
-    ChangePath()
+    if !without_upd {
+        UpdLayers()
+        ChangePath()
+    }
 }
 
 
@@ -180,6 +147,8 @@ AddNewLayer(*) {
         }
         name := "new layer (" . i . ")"
     }
+    LayersMeta[name] := Map("version", 0.8, "rtags", "", "rdescription", "", "rprocesses", "",
+        "tags", [], "processes", Map("*", true))
     SerializeMap(Map(), name)
     AllLayers.Add(name, Map())
     UpdLayers()
@@ -192,32 +161,142 @@ ViewSelectedLayer(*) {
 }
 
 
-RenameSelectedLayer(*) {
-    inp := InputBox("",
-        "Renaming layer '" . last_selected_layer . "'", "w250 h100", last_selected_layer)
-    if inp.Result == "Cancel" {
-        return
+EditSelectedLayer(*) {
+    r_gui := Gui("-SysMenu", "Edit meta for `"" . last_selected_layer . "`"")
+    r_gui.SetFont("s9")
+
+    label_w := 70
+    edit_x := label_w + 10
+    edit_w := 320
+    row_h := 24
+    gap_y := 4
+
+    y := 16
+    r_gui.Add("Text", "+0x200 x14 y" . y . " w" . label_w . " h" . row_h, "Name")
+    name_edit := r_gui.Add("Edit", "vName h20 x" . edit_x . " yp+2 w" . edit_w)
+    name_edit.Text := last_selected_layer
+
+    y += row_h + gap_y
+    r_gui.Add("Text", "+0x200 x14 y" . y . " w" . label_w . " h" . row_h, "Description")
+    descr_edit := r_gui.Add("Edit", "vDescr h20 x" . edit_x . " yp+2 w" . edit_w)
+    descr_edit.Text := LayersMeta[last_selected_layer]["rdescription"]
+
+    y += row_h + gap_y
+    r_gui.Add("Text", "+0x200 x14 y" . y . " w" . label_w . " h" . row_h, "Tags")
+    tags_edit := r_gui.Add("Edit", "vTags h20 x" . edit_x . " yp+2 w" . edit_w)
+    tags_edit.Text := LayersMeta[last_selected_layer]["rtags"]
+
+    y += row_h + gap_y
+    r_gui.Add("Text", "+0x200 x14 y" . y . " w" . label_w . " h" . row_h, "Processes")
+    proc_edit := r_gui.Add("Edit", "vProcesses h20 x" . edit_x . " yp+2 w" . (edit_w - 24))
+    proc_edit.Text := LayersMeta[last_selected_layer]["rprocesses"]
+    r_gui.Add("Button", "x+4 yp+0 h20 w20", "?").OnEvent("Click", (*) => MsgBox(
+        "You can limit assignments from this layer to work only in specific applications"
+        . " or, conversely, exclude those applications."
+        . "`nUse process names (as in Task Manager) or the groups associated with them,"
+        . " as you define it in a special section of the settings."
+        . "`nUse a comma as a separator. Case-insensitive."
+        . "`n`nExamples`nThe layer is active only in "
+        . "certain processes: `"+firefox.exe, chrome.exe`""
+        . "`nThe layer is disabled only in specific group: `"-games`""
+        . "`nCan be combined to specifically exclude from the group: `"-browsers, +firefox.exe`""
+        . "`nLeave blank to keep the layer always active.", "Help"
+    ))
+
+    y += row_h + 8
+
+    save_btn := r_gui.Add("Button", "x260 y" . y . " w66 h20 Default", "Save")
+    cancel_btn := r_gui.Add("Button", "x+8 yp+0 w66 h20", "Cancel")
+
+    save_btn.OnEvent("Click", Save)
+    cancel_btn.OnEvent("Click", Cancel)
+    r_gui.OnEvent("Escape", Cancel)
+    r_gui.OnEvent("Close", Cancel)
+
+    r_gui.Show("AutoSize Center")
+
+    Save(*) {
+        new_filepath := "layers/" . r_gui["Name"].Text . ".json"
+        old_filepath := "layers/" . last_selected_layer . ".json"
+        if new_filepath !== old_filepath {
+            if FileExist(new_filepath) && MsgBox(
+                "File with this name already exists. Do you want to overwrite it?",
+                "Confirmation", "YesNo Icon?") == "No" {
+                return
+            }
+            FileMove("layers/" . last_selected_layer . ".json", new_filepath, true)
+        }
+
+        n_tags := r_gui["Tags"].Text
+        n_descr := r_gui["Descr"].Text
+        n_proc := r_gui["Processes"].Text
+        m := LayersMeta[last_selected_layer]
+        if n_tags == m["rtags"] && n_descr == m["rdescription"] && n_proc == m["rprocesses"] {
+            r_gui.Destroy()
+            return
+        }
+        ToggleFreeze(1)
+
+        src := FileOpen(new_filepath, "r", "UTF-8")
+        first_line := RTrim(src.ReadLine(), "`r`n")
+        src.Pos := 0
+
+        while !src.AtEOF {
+            _pos := src.Pos
+            if !RegExMatch(LTrim(src.ReadLine(), Chr(0xFEFF) . "`r`n`t "), "^\s*//") {
+                break
+            }
+        }
+        src.Close()
+
+        res := first_line . "`r`n// " . n_tags . "`r`n// " . n_descr . "`r`n// " . n_proc
+
+        tmp := new_filepath . ".tmp"
+        trg := FileOpen(tmp, "w", "UTF-8")
+        trg.Write(RTrim(res, "`r`n") . "`r`n")
+        trg.Close()
+
+        src_bin := FileOpen(new_filepath, "r")
+        trg_bin := FileOpen(tmp, "a")
+
+        src_bin.Pos := _pos
+
+        buf := Buffer(65536)
+        while (n := src_bin.RawRead(buf, buf.Size)) {
+            trg_bin.RawWrite(buf, n)
+        }
+
+        src_bin.Close()
+        trg_bin.Close()
+
+        FileMove(tmp, new_filepath, 1)
+
+        if ActiveLayers.Has(last_selected_layer) {
+            p := ActiveLayers[last_selected_layer]
+            ActiveLayers.Remove(last_selected_layer)
+            ActiveLayers.Add(r_gui["Name"].Text, , p)
+            _WriteActiveLayersToConfig(true)
+        }
+
+        r_gui.Destroy()
+
+        if UI.extra_tags.Length && UI.extra_tags[1].Text == "▴" {
+            ExpandTags()
+        }
+
+        ReadLayers()
+        FillRoots()
+        UpdLayers()
+        FillLayerTags()
+        FillLayers()
+        FillOther()
     }
 
-    new_filepath := "layers/" . inp.Value . ".json"
-    if FileExist(new_filepath) && MsgBox(
-        "File with this name already exists. Do you want to overwrite it?",
-        "Confirmation", "YesNo Icon?") == "No" {
-        RenameSelectedLayer()
-        return
+    Cancel(*) {
+        r_gui.Destroy()
     }
-    FileMove("layers/" . last_selected_layer . ".json", new_filepath, true)
-    if ActiveLayers.Has(last_selected_layer) {
-        p := ActiveLayers[last_selected_layer]
-        ActiveLayers.Add(inp.Value, , p)
-        ActiveLayers.Remove(last_selected_layer)
-		_WriteActiveLayersToConfig()
-    }
-    ReadLayers()
-    FillRoots()
-    UpdLayers()
-	_FillLayers()
 }
+
 
 
 DeleteSelectedLayer(*) {
@@ -252,7 +331,7 @@ MoveDownSelectedLayer(*) {
 }
 
 
-_MoveSelectedLayer(sign) {
+_MoveSelectedLayer(sign, to_the_end:=false, *) {
     global selected_layer_priority
 
     prior := selected_layer_priority
@@ -261,13 +340,18 @@ _MoveSelectedLayer(sign) {
         return
     }
 
-    from := ActiveLayers.order[prior]
-    to := ActiveLayers.order[prior + 1 * sign]
-    ActiveLayers.map[from] := prior + 1 * sign
-    ActiveLayers.map[to] := prior
-    ActiveLayers.order[prior] := ActiveLayers.order[prior + 1 * sign]
-    ActiveLayers.order[prior + 1 * sign] := from
-    selected_layer_priority += 1 * sign
+    fin := to_the_end ? (sign == -1 ? 1 : ActiveLayers.order.Length) : prior + 1 * sign
+    while selected_layer_priority !== fin {
+        n := prior + 1 * sign
+        from := ActiveLayers.order[prior]
+        to := ActiveLayers.order[n]
+        ActiveLayers.map[from] := n
+        ActiveLayers.map[to] := prior
+        ActiveLayers.order[prior] := ActiveLayers.order[n]
+        ActiveLayers.order[n] := from
+        selected_layer_priority := n
+        prior := selected_layer_priority
+    }
 
     _WriteActiveLayersToConfig()
     _FocusLastLayerLV()
@@ -327,19 +411,20 @@ BackToRoot(*) {
 }
 
 
-ToggleLayersTag(tag, *) {
+ToggleLayersTag(obj, *) {
+    tag := obj.Text
     if !CONF.tags.Has(tag) || ((tag == "Active" || tag == "Inactive") && !CONF.tags[tag]) {
         CONF.tags[tag] := true
-        UI["LayerTag" . tag].Opt("cGreen")
-        UI["LayerTag" . tag].Text .= ""
+        obj.Opt("cGreen")
+        obj.Text .= ""
     } else if CONF.tags[tag] {
         CONF.tags[tag] := false
-        UI["LayerTag" . tag].Opt("cRed")
-        UI["LayerTag" . tag].Text .= ""
+        obj.Opt("cRed")
+        obj.Text .= ""
     } else {
         CONF.tags.Delete(tag)
-        UI["LayerTag" . tag].Opt("cGray")
-        UI["LayerTag" . tag].Text .= ""
+        obj.Opt("cGray")
+        obj.Text .= ""
     }
 
     str_val := ""
@@ -349,7 +434,7 @@ ToggleLayersTag(tag, *) {
         }
     }
     IniWrite(SubStr(str_val, 1, -2), "config.ini", "Main", "ChosenTags")
-    _FillLayers()
+    FillLayers()
 }
 
 
@@ -360,6 +445,8 @@ ExpandTags(*) {
     UI["LV_layers"].Move(
         x, y - (extra_tags_height * expanded), w, h + (extra_tags_height * expanded)
     )
+    UI.extra_tags[1].Text := ["▴", "▾"][(expanded > 0) + 1]
     ToggleVisibility(2, UI.extra_tags)
+    ToggleVisibility(1, UI.extra_tags[1])
     expanded *= -1
 }
