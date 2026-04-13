@@ -502,10 +502,11 @@ GetLayerList() {
 FillRoots() {
     global ROOTS  ; bloody roots
 
-    ROOTS := Map(0, UnifiedNode())
+    t_roots := Map(0, UnifiedNode())
     for lang in LANGS.map {
-        ROOTS[lang] := UnifiedNode()
+        t_roots[lang] := UnifiedNode()
     }
+    ROOTS := t_roots
 
     for arr in (CONF.ignore_inactive.v
         ? [[ActiveLayers, Map()]] : [[ActiveLayers, Map()], [AllLayers, ActiveLayers]]) {

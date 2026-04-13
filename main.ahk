@@ -205,7 +205,6 @@ SendAwaiting(order, sc:=0) {
 
 ToRoot(extra_mod:=0) {
     global curr_unode, prev_unode
-
     curr_unode := ROOTS[current_layout]
     prev_unode := false
     TransferModifiers(extra_mod)
@@ -375,7 +374,7 @@ TreatChord(entries, sc) {
 
 
 TreatTapHold(entries, sc) {
-    global await_hold
+    global await_hold, await_gest
 
     await_hold := [(entries.ubase ? entries.ubase : GetDefaultSim(sc)[1]), sc, entries.uhold]
 
