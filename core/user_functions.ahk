@@ -42,7 +42,7 @@ ToggleLayers(layers*) {
     global ActiveLayers
 
     for layer in layers {
-        layer_pos := layer[1]
+        layer_pos := layer[1] || -1
         layer_name := layer[2]
         if ActiveLayers.map.Has(layer_name) {
             ActiveLayers.Remove(layer_name)

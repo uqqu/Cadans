@@ -48,6 +48,9 @@ _Move(sc, is_hold) {
         HandleKeyPress(sc)
         return
     }
+    if CheckLRMB(current_path) {
+        return
+    }
     if SYS_MODIFIERS.Has(sc) {
         if buffer_view {
             return

@@ -9,20 +9,30 @@ FillPathline() {
 
     path := buffer_view ? buffer_path : current_path
 
-    if !path.Length {
-        return
+    if path.Length {
+        for i, val in path {
+            dir_text := UI.Add("Text", "x+3 yp" . (6 * CONF.gui_scale.v),
+                (val[2] > 1 ? val[2] : "")
+                . (val[4] ? "•" : val[3] ? "▼" : ["➤", "▲"][(val[2] & 1) + 1])
+            )
+            UI.path.Push(dir_text)
+
+            UI.path.Push(UI.Add("Button", "x+3 yp-"
+                . (6 * CONF.gui_scale.v), val[3] || val[4] || _GetKeyName(val[1], true, true)))
+            UI.path[-1].OnEvent("Click", ChangePath.Bind(i))
+        }
     }
 
-    for i, val in path {
-        dir_text := UI.Add("Text", "x+3 yp" . (6 * CONF.gui_scale.v),
-            (val[2] > 1 ? val[2] : "")
-            . (val[4] ? "•" : val[3] ? "▼" : ["➤", "▲"][(val[2] & 1) + 1])
-        )
-        UI.path.Push(dir_text)
-
-        UI.path.Push(UI.Add("Button", "x+3 yp-"
-            . (6 * CONF.gui_scale.v), val[3] || val[4] || _GetKeyName(val[1], true, true)))
-        UI.path[-1].OnEvent("Click", ChangePath.Bind(i))
+    if gui_mod_val && UI.path[-1].Text != "²" {
+        txt := ""
+        for n in DecomposeMods(gui_mod_val) {
+            txt .= n . "+"
+        }
+        UI.SetFont("c808080")
+        UI.path.Push(UI.Add("Text", "x+7 yp" . (6 * CONF.gui_scale.v), RTrim(txt, "+")))
+        UI.SetFont("cD3D3D3")
+        UI.path.Push(UI.Add("Text", "xp-5 yp+13", "²"))
+        UI.SetFont("cBlack")
     }
 }
 
@@ -105,16 +115,15 @@ FillSetButtons() {
         }
     }
 
-    if current_path.Length == 1
-        && SubStr(current_path[-1][1], 2) == "Button" && current_path[-1][2] < 2
-        && _GetFirst(_GetUnholdEntries().ubase) == false {
-        ToggleEnabled(false, UI["BtnBase"], UI["BtnHold"])
+    if CheckLRMB(current_path) {
+        UI["BtnHold"].Enabled := false
     }
     UI.SetFont("Norm")
 }
 
 
 FillKeyboard() {
+    b := CheckLRMB(current_path)
     for sc, btn in UI.buttons {
         if sc == "CurrMod" {
             btn.SetFont("Italic")
@@ -127,12 +136,12 @@ FillKeyboard() {
         }
         btn.dragged_sc := sc
         try btn.dragged_sc := Integer(sc)
-        FillOneButton(sc, btn, sc)
+        FillOneButton(sc, btn, sc, b)
     }
 }
 
 
-FillOneButton(sc, btn, d_sc) {
+FillOneButton(sc, btn, d_sc, is_disabled:=false) {
     backgr := CONF.default_assigned_color.v
     btn.Enabled := true
     btn.SetFont("Norm")
@@ -219,6 +228,9 @@ FillOneButton(sc, btn, d_sc) {
 
     btn.Opt("+Background" . backgr)
     btn.Text := btxt . htxt
+    if is_disabled {
+        btn.Enabled := false
+    }
 }
 
 
@@ -354,7 +366,7 @@ FillLayers() {
         temp_all_layers[layer] := ActiveLayers[layer]
     }
     if layer_editing && !buffer_view {
-        temp_all_layers[selected_layer] := "*"
+        temp_all_layers[selected_layer] := "▶"
     }
 
     to_del := []
@@ -739,6 +751,7 @@ FillChords() {
         )
     }
     UI["LV_chords"].ModifyCol(1, "Sort")
+    UI["BtnAddNewChord"].Enabled := !CheckLRMB(current_path)
 }
 
 

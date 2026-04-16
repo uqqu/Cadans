@@ -18,6 +18,12 @@ DecomposeMods(n, str_output:=false) {
 }
 
 
+CheckLRMB(path) {
+    return path.Length == 1 && path[-1][2] < 2
+        && (path[-1][1] == "LButton" || path[-1][1] == "RButton")
+}
+
+
 ToggleEnabled(state, arrs*) {
     for arr in arrs {
         if !(arr is Array) {

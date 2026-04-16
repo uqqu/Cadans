@@ -92,6 +92,8 @@ ChordEditing(new:=true) {
 
     ToggleVisibility(2, UI.chs_back, UI.chs_front)
     UpdateKeys()
+    ToggleEnabled(0, UI["BtnBase"], UI["BtnHold"], UI["BtnBaseClear"], UI["BtnHoldClear"],
+        UI["BtnBaseClearNest"], UI["BtnHoldClearNest"])
 }
 
 

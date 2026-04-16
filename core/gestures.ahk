@@ -286,6 +286,8 @@ EndDraw(*) {
         init_drawing := false
         try form["Save"].Enabled := true
         try form["SaveWithReturn"].Enabled := true
+        try form["ShowGesture"].Enabled := true
+        try form["ShowGesture"].Text := "👀"
         try form["SetGesture"].Text := "Saved!"
         SetTimer(_ReturnButtonText, -2000)
 
@@ -581,6 +583,40 @@ DrawExisting(gesture_obj) {
             i -= 2
         }
         vec := rev
+    }
+
+    if gesture_obj.opts.pool == 5 {
+        min_x := max_x := vec[1]
+        min_y := max_y := vec[2]
+        i := 3
+        while i <= vec.Length {
+            x := vec[i]
+            y := vec[i+1]
+
+            if x < min_x {
+                min_x := x
+            } else if x > max_x {
+                max_x := x
+            }
+
+            if y < min_y {
+                min_y := y
+            } else if y > max_y {
+                max_y := y
+            }
+
+            i += 2
+        }
+
+        cx := (min_x + max_x) / 2
+        cy := (min_y + max_y) / 2
+
+        i := 1
+        while i <= vec.Length {
+            vec[i] -= cx
+            vec[i+1] -= cy
+            i += 2
+        }
     }
 
     prev_x := vec[1] * h + hx

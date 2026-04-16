@@ -275,8 +275,7 @@ SetSysModHotkeys() {
 
 _CompareGlob(mem_unode, mem_ctx, *) {
     CheckLayout()
-    return current_ctx == mem_ctx
-        && (mem_unode == ROOTS[current_layout] || curr_unode == mem_unode)
+    return current_ctx == mem_ctx && curr_unode == mem_unode
 }
 
 

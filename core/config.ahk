@@ -9,23 +9,6 @@ is_updating := false
 active_hwnd := WinActive("A")
 active_proc := WinGetProcessName("ahk_id " . active_hwnd)
 
-WinEventProc(hWinEventHook, event, hwnd, *) {
-    global active_proc, active_hwnd
-
-    fg := WinExist("A")
-    if !fg || active_hwnd == fg {
-        return
-    }
-    active_hwnd := fg
-    active_proc := WinGetProcessName("ahk_id " . fg)
-    try SetCurrentProcessContext(active_proc)
-    CheckLayout()
-    ToRoot()
-}
-
-DllCall("SetWinEventHook", "UInt", 0x0003, "UInt", 0x0003,  ; EVENT_SYSTEM_FOREGROUND
-    "Ptr", 0, "Ptr", CallbackCreate(WinEventProc), "UInt", 0, "UInt", 0, "UInt", 0, "Ptr")
-
 static_lang_names := Map(
     67699721, "qwerty en",
     68748313, "йцукен ru",
@@ -99,6 +82,33 @@ current_layout := CONF.LayoutAliases[GetCurrentLayout()]
 ReadLayers()
 FillRoots()
 UpdLayers()
+
+DllCall("SetWinEventHook", "UInt", 0x0003, "UInt", 0x0003,  ; EVENT_SYSTEM_FOREGROUND
+    "Ptr", 0, "Ptr", CallbackCreate(WinEventProc), "UInt", 0, "UInt", 0, "UInt", 0, "Ptr")
+
+WinEventProc(hWinEventHook, event, hwnd, *) {
+    global active_proc, active_hwnd
+
+    fg := WinExist("A")
+    if !fg || active_hwnd == fg {
+        return
+    }
+    active_hwnd := fg
+    active_proc := WinGetProcessName("ahk_id " . fg)
+    try SetCurrentProcessContext(active_proc)
+    CheckLayout()
+    ToRoot()
+}
+
+
+ErrorHandler(err, mode) {
+    Suspend true
+    FileAppend(
+        Format("{1}`n{2}`n`n", err.Message, err.Stack),
+        A_ScriptDir "\error_log.txt"
+    )
+    return false
+}
 
 
 class ConfValue {
@@ -217,8 +227,6 @@ CheckConfig() {
         "GUI hotkey for 'Set &tap':", "nAdd")
     CONF.gui_set_hold_sc := ConfValue("GUI", "GuiSetHoldEdit", "str", "str",
         "GUI hotkey for 'Set &hold':", "nEnter")
-    CONF.hide_mouse_warnings := ConfValue("GUI", "HideMouseWarnings", "checkbox", "int",
-        "Hide warnings about disabling drag behavior for &LMB/RMB/MMB", 0)
     CONF.hide_alias_warnings := ConfValue("GUI", "HideAliasWarnings", "checkbox", "int",
         "Hide warnings about changes in &aliased layouts", 0)
 
@@ -228,9 +236,9 @@ CheckConfig() {
         "Enable &edge gestures:", 4, , ,
         [["No", "With edges", "With corners", "With edges and corners"], false])
     CONF.edge_size := ConfValue("Gestures", "EdgeSize", "str", "int",
-        "Edge detection &width:", 128, true)
+        "Edge detection &width (px):", 128, true)
     CONF.min_gesture_len := ConfValue("Gestures", "MinGestureLen", "str", "int",
-        "Minimum gesture &length:", 150, true)
+        "Minimum gesture &length (px):", 150, true)
     CONF.min_cos_similarity := ConfValue("Gestures", "MinCosSimilarity", "str", "float",
         "Minimum gesture &similarity:", 0.90)
     CONF.overlay_opacity := ConfValue("Gestures", "OverlayOpacity", "str", "int",
@@ -283,7 +291,7 @@ CheckConfig() {
     CONF.chord_part_color := ConfValue("Colors", "ChordPart", "color", "str",
         "&Part of chord:", "BBBB22")
     CONF.selected_chord_color := ConfValue("Colors", "SelectedChord", "color", "str",
-        "Selected/editing &chord:", "CD7F32")
+        "Selected/editing &chord:", "4D47B8")
     CONF.has_gestures_color := ConfValue("Colors", "HasNestedGestures", "color", "str",
         "Has nested &gestures:", "Red")
     CONF.modifier_color := ConfValue("Colors", "Modifier", "color", "str",
@@ -466,6 +474,7 @@ ShowSettings(*) {
             c.descr, c.v, c.extra_params*
         ])
     }
+    SendMessage(0x1501, true, StrPtr("0–0.99 (0 – size-independent)"), s_gui["Scaling"].Hwnd)
 
     s_gui.Add("Text", "x85 w250 y+10 h1 0x10")
 

@@ -224,18 +224,6 @@ UpdateKeys() {
     FillGestures()
     FillChords()
 
-    if gui_mod_val && UI.path[-1].Text != "²" {
-        txt := ""
-        for n in DecomposeMods(gui_mod_val) {
-            txt .= n . "+"
-        }
-        UI.SetFont("c808080")
-        UI.path.Push(UI.Add("Text", "x+7 yp" . (6 * CONF.gui_scale.v), RTrim(txt, "+")))
-        UI.SetFont("cD3D3D3")
-        UI.path.Push(UI.Add("Text", "xp-5 yp+13", "²"))
-        UI.SetFont("cBlack")
-    }
-
     if prev_lang {
         DllCall("ActivateKeyboardLayout", "ptr", prev_lang, "uint", 0)
     }

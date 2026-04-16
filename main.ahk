@@ -1,6 +1,6 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
-OnError((*) => Suspend(true))
+OnError(ErrorHandler)
 TraySetIcon("ico\icon.ico")
 
 await_hold := false

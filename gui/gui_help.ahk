@@ -388,9 +388,6 @@ AltHelp() {
         txt := "End layout editing mode and return to assignments from all active layers."
     } else if i_sc == "BtnAddNewLayer" {
         txt := "Add a new empty layer."
-    } else if i_sc == "BtnViewSelectedLayer" {
-        txt := "Enter layer editing mode for the current selected in the list.`n"
-            . "You also can simply double click it."
     } else if i_sc == "BtnDeleteSelectedLayer" {
         txt := "Completely delete the selected layer. This action cannot be undone."
     } else if i_sc == "BtnEditSelectedLayer" {
@@ -664,11 +661,9 @@ _GetKeyInfo(sc, md, cur_entries, prev_entries,
 _GetNodeStrInfo(base, node, unode, is_gesture:=false, layer:="") {
     res := "`n`n" . base . ": " . _SwitchByActionType(node.down_type, node.down_val)
     if !layer_editing {
-        act_cnt := 1
-        inact_cnt := 0
-        if layer {
-            layers := layer
-        } else {
+        if !layer {
+            act_cnt := 1
+            inact_cnt := 0
             act_layers := ""
             inact_layers := ""
             act_cnt := 0
@@ -686,13 +681,13 @@ _GetNodeStrInfo(base, node, unode, is_gesture:=false, layer:="") {
             }
             act_layers := SubStr(act_layers, 1, -2)
             inact_layers := SubStr(inact_layers, 1, -2)
-        }
-        if !buffer_view {
-            res .= "`nAssigned on the active layer" . (act_cnt == 1 ? ": " : "s: ")
-                . act_layers
-            if inact_cnt {
-                res .= "`n… and on the inactive layer" . (inact_cnt == 1 ? ": " : "s: ")
-                    . inact_layers
+            if !buffer_view {
+                res .= "`nAssigned on the active layer" . (act_cnt == 1 ? ": " : "s: ")
+                    . act_layers
+                if inact_cnt {
+                    res .= "`n… and on the inactive layer" . (inact_cnt == 1 ? ": " : "s: ")
+                        . inact_layers
+                }
             }
         }
     }
@@ -797,9 +792,9 @@ _GetNodeExtraInfo(node, is_gesture:=false) {
             }
             loop 3 {
                 i := (A_Index - 1) * 3
-                colors := vals.Get(2+i, 0)
-                grad_len := vals.Get(3+i, 0)
-                grad_loop := vals.Get(4+i, 0)
+                colors := vals.Has(2+i) ? vals[2+i] : 0
+                grad_len := vals.Has(3+i) ? vals[3+i] : 0
+                grad_loop := vals.Has(4+i) ? vals[4+i] : 0
                 if colors || grad_len || grad_loop {
                     res .= ["`nCenter pool:", "`nEdges:", "`nCorners:"][A_Index]
                     if colors !== "" {

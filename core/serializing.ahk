@@ -98,8 +98,8 @@ ParseProcessesRule(rule_str) {
         return Map("*", true)
     }
 
-    has_plus := false
     current_sign := ""
+    first_sign := ""
 
     for part in StrSplit(rule_str, ",", " `t`r`n") {
         part := Trim(part)
@@ -110,27 +110,30 @@ ParseProcessesRule(rule_str) {
         sign := SubStr(part, 1, 1)
         if sign == "+" || sign == "-" {
             current_sign := sign
+            if !first_sign {
+                first_sign := sign
+            }
             name := NormName(SubStr(part, 2))
         } else {
             if !current_sign {
                 continue
             }
-            name := NormName(part)
             sign := current_sign
+            name := NormName(part)
         }
 
         if !name {
             continue
         }
 
-        if sign == "+" {
-            has_plus := true
-        }
-
         ops.Set(name, sign == "+")
     }
 
-    res := Map("*", !has_plus)
+    if !first_sign {
+        return Map("*", true)
+    }
+
+    res := Map("*", first_sign == "-")
     for name in ops.order {
         res[name] := ops[name]
     }

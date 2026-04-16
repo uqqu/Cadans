@@ -113,7 +113,7 @@ DrawKeys() {
                     btn.OnEvent("ContextMenu", ButtonRMB.Bind(sc))
                 } else {
                     btn.OnEvent("Click", ChangePath.Bind(-1))
-                    btn.OnEvent("ContextMenu", ChangePath.Bind(-1))
+                    btn.OnEvent("ContextMenu", (btn, *) => (btn.Enabled ? ChangePath(-1) : 0))
                 }
             }
 
@@ -140,11 +140,10 @@ DrawLayersLV() {
     for i, w in [20, 20, 110, 95, 30, 95, 30] {
         UI["LV_layers"].ModifyCol(i, Max(w * CONF.gui_scale.v, 16 * USER_DPI))
     }
-    btns_wh := "w" . (428 * CONF.gui_scale.v / 6) . " h" . (20 * CONF.gui_scale.v)
+    btns_wh := "w" . (428 * CONF.gui_scale.v / 5) . " h" . (20 * CONF.gui_scale.v)
 
     for i, arr in [
         ["vBtnAddNewLayer", "✨ New"],
-        ["vBtnViewSelectedLayer", "🔍 View"],
         ["vBtnEditSelectedLayer", "✏️ Meta"],
         ["vBtnDeleteSelectedLayer", "🗑️ Delete"],
         ["vBtnMoveUpSelectedLayer", "🔼 Move up"],
@@ -162,9 +161,7 @@ DrawLayersLV() {
     UI["BtnMoveDownSelectedLayer"].OnEvent("ContextMenu", _MoveSelectedLayer.Bind(1, true))
 
     UI.layer_move_btns := [UI["BtnMoveUpSelectedLayer"], UI["BtnMoveDownSelectedLayer"]]
-    UI.layer_ctrl_btns := [
-        UI["BtnViewSelectedLayer"], UI["BtnEditSelectedLayer"], UI["BtnDeleteSelectedLayer"]
-    ]
+    UI.layer_ctrl_btns := [UI["BtnEditSelectedLayer"], UI["BtnDeleteSelectedLayer"]]
 }
 
 
