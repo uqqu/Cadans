@@ -218,7 +218,8 @@ FillOneButton(sc, btn, d_sc, is_disabled:=false) {
 
     if temp_chord {
         if ONLY_BASE_SCS.Has(sc) || SYS_MODIFIERS.Has(sc)
-            || !h_node && m_node && m_node.down_type == TYPES.Modifier {
+            || !h_node && m_node && m_node.down_type == TYPES.Modifier
+            || !current_path.Length && (sc == "LButton" || sc == "RButton") {
             btn.Enabled := false
         }
         if temp_chord.Has(String(sc)) {
@@ -283,6 +284,8 @@ FillLayerTags() {
     global extra_tags_height:=0
     static idx:=0
 
+    is_expanded := UI.extra_tags.Length && UI.extra_tags[1].Text == "▴"
+
     ToggleVisibility(0, UI.main_tags, UI.extra_tags)
     UI.main_tags := []
     UI.extra_tags := []
@@ -329,7 +332,8 @@ FillLayerTags() {
             elem.Visible := false
             if first_line {
                 first_line := false
-                UI.extra_tags.Push(UI.Add("Text", "cGray xp+1" . Scale(, , , 20), "▾"))
+                UI.extra_tags.Push(
+                    UI.Add("Text", "cGray xp+1" . Scale(, , , 20), (is_expanded ? "▴" : "▾")))
                 UI.extra_tags[1].OnEvent("Click", ExpandTags)
             }
             elem := UI.Add("Text", (
@@ -349,7 +353,9 @@ FillLayerTags() {
     }
     elem.GetPos(, &ey)
     extra_tags_height := ey - ay
-    ToggleVisibility(0, UI.extra_tags)
+    if !is_expanded {
+        ToggleVisibility(0, UI.extra_tags)
+    }
     ToggleVisibility(1, UI.extra_tags[1])
 }
 

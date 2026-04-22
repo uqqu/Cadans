@@ -207,8 +207,8 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         SendMessage(0x1501, true, StrPtr("0–0.99 (0 – size-independent)"), form["Scaling"].Hwnd)
         form.Add("Text", "x10 y+7 w150", "Rotate:")
         form.Add("DDL", "x+0 yp-3 w150 Choose1 vRotate", 
-            ["Follow global setting", "None", "Reduce orientation noise", "Rotation invariant"])
-        form.Add("CheckBox", "x10 y+7 w300 vDirection", "Direction invariant")
+            ["Follow global setting", "None", "Reduce orientation noise", "Rotation invariance"])
+        form.Add("CheckBox", "x10 y+7 w300 vDirection", "Direction invariance")
         form.Add("CheckBox", "x10 y+7 w300 vPhase", "Any start point (for closed figures only)").Enabled := false
         if !selected_gesture {
             form["ShowGesture"].Enabled := false
@@ -456,6 +456,7 @@ ShowGesture(*) {
     rot := form["Rotate"].Value == 1 ? CONF.gest_rotate.v : (form["Rotate"].Value - 1)
     dirs := form["Direction"].Value
     phase := form["Phase"].Value
+    SetOverlayOpts("", 5)
 
     if from_prev {
         if gest_as_base {
@@ -465,7 +466,6 @@ ShowGesture(*) {
                 gui_entries.ubase.GetBaseHoldMod(selected_gesture, gui_mod_val, false, true).ubase
             )
         }
-        SetOverlayOpts("", 5)  ; TODO?
         if gest.opts.dirs = dirs && gest.opts.closed = phase {
             _gest := gest
         } else {

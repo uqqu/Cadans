@@ -90,12 +90,12 @@ GetWeather(city_name, out:="Ouptut: Tooltip", t:=false) {
     static weather_key:=RegRead("HKEY_CURRENT_USER\Environment", "OpenWeatherMapApi", 0)
 
     if !weather_key {
-        if !CONF.HasOwnProp("user_OpenWeatherMapApi") {
+        if !CONF.UserDefined.Has("OpenWeatherMapApi") {
             MsgBox("The api key was not found in the environment variables or in the config.",
                 "OpenWeatherMapApi", "IconX")
             return
         } else {
-            weather_key := CONF.user_OpenWeatherMapApi.v
+            weather_key := CONF.UserDefined["OpenWeatherMapApi"]
         }
     }
 
@@ -123,12 +123,12 @@ ExchRates(from_currency, to_currency, out:="Ouptut: Tooltip", t:=false) {
     static currency_key:=RegRead("HKEY_CURRENT_USER\Environment", "GetGeoApi", 0)
 
     if !currency_key {
-        if !CONF.HasOwnProp("user_GetGeoApi") {
+        if !CONF.UserDefined.Has("GetGeoApi") {
             MsgBox("The api key was not found in the environment variables or in the config.",
                 "GetGeoApi", "IconX")
             return
         } else {
-            currency_key := CONF.user_GetGeoApi.v
+            currency_key := CONF.UserDefined["GetGeoApi"]
         }
     }
 
@@ -326,6 +326,9 @@ _SortByLengthDesc(arr) {
 
 
 IncrDecr(n:=1, inp:="Input: Selected", out:="Output: SendText") {
+    if n == "" {
+        n := 1
+    }
     val := inps[inp]()
     start := 1
     last_pos := false

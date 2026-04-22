@@ -7,7 +7,8 @@ s_gui := false
 is_updating := false
 
 active_hwnd := WinActive("A")
-active_proc := WinGetProcessName("ahk_id " . active_hwnd)
+active_proc := ""
+try active_proc := WinGetProcessName("ahk_id " . active_hwnd)
 
 static_lang_names := Map(
     67699721, "qwerty en",
@@ -669,6 +670,7 @@ SaveConfig(*) {
 
     CancelChordEditing(0, true)
 
+    proc := CheckChanges(, Map("ProcessGroups", 0))
     b := CheckChanges(true)
     if b == -1 {
         return
@@ -718,20 +720,30 @@ SaveConfig(*) {
     s_gui := false
     if b == 2 {
         Run(A_ScriptFullPath)  ; rerun with new keys
-    } else if b {
-        CONF.T := "T" . CONF.MS_LP.v / 1000
-        A_TrayMenu.Rename("1&", "+10ms hold threshold (to " . CONF.MS_LP.v + 10 . "ms)")
-        A_TrayMenu.Rename("2&", "-10ms hold threshold (to " . CONF.MS_LP.v - 10 . "ms)")
+    } else {
         CollectUserValues()
-        try overlay.Destroy()
-        overlay := false
-        DrawLayout()
+        if proc {
+            ReadLayers()
+            FillRoots()
+            UpdLayers()
+        }
+        if b {
+            CONF.T := "T" . CONF.MS_LP.v / 1000
+            A_TrayMenu.Rename("1&", "+10ms hold threshold (to " . CONF.MS_LP.v + 10 . "ms)")
+            A_TrayMenu.Rename("2&", "-10ms hold threshold (to " . CONF.MS_LP.v - 10 . "ms)")
+            try overlay.Destroy()
+            overlay := false
+            DrawLayout()
+        }
     }
 }
 
 
-CheckChanges(strict:=false, *) {
+CheckChanges(strict:=false, selected:=false, *) {
     for name in ["Main", "GUI", "Gestures", "GestureDefaults", "Colors"] {
+        if selected && !selected.Has(name) {
+            continue
+        }
         for elem in CONF.%name% {
             val := elem.form_type == "color" || elem.form_type == "m_color"
                 || elem.form_type == "str"
@@ -744,6 +756,9 @@ CheckChanges(strict:=false, *) {
     }
 
     for name in ["UserDefined", "ProcessGroups", "LayoutAliases"] {
+        if selected && !selected.Has(name) {
+            continue
+        }
         i := A_Index
         cnt := 0
         for arr in s_gui.%name% {

@@ -140,8 +140,9 @@ DrawLayersLV() {
     for i, w in [20, 20, 110, 95, 30, 95, 30] {
         UI["LV_layers"].ModifyCol(i, Max(w * CONF.gui_scale.v, 16 * USER_DPI))
     }
-    btns_wh := "w" . (428 * CONF.gui_scale.v / 5) . " h" . (20 * CONF.gui_scale.v)
 
+    UI["LV_layers"].GetPos(, , &w)
+    btns_wh := "w" . (w / 5 + 1) . " h" . (20 * CONF.gui_scale.v)
     for i, arr in [
         ["vBtnAddNewLayer", "✨ New"],
         ["vBtnEditSelectedLayer", "✏️ Meta"],
@@ -166,8 +167,9 @@ DrawLayersLV() {
 
 
 DrawGesturesLV() {
-    p := Scale(434, CONF.ref_height.v + 29, 425, CONF.ref_height.v)
-    UI.AddListView("vLV_gestures " . p,
+    UI["LV_layers"].GetPos(&x, , &w)
+    p := Scale(, CONF.ref_height.v + 29, 425, CONF.ref_height.v)
+    UI.AddListView("vLV_gestures " . p . " x" . (x + w - 1),
         ["Gesture name", "Value", "Options", "→", "Layer", "roll it back"])
     UI["LV_gestures"].OnEvent("DoubleClick", LVGestureDoubleClick)
     UI["LV_gestures"].OnEvent("Click", LVGestureClick)
@@ -175,7 +177,8 @@ DrawGesturesLV() {
         UI["LV_gestures"].ModifyCol(i, w * CONF.gui_scale.v)
     }
 
-    btns_wh := "w" . (426 * CONF.gui_scale.v / 4) . " h" . (20 * CONF.gui_scale.v)
+    UI["LV_gestures"].GetPos(, , &w)
+    btns_wh := "w" . (w / 4 + 1) . " h" . (20 * CONF.gui_scale.v)
     UI.gest_btns := []
     UI.gest_btns.Push(
         UI.Add("Button", "vBtnAddNewGesture xp0 y+0 " . btns_wh, "✨ New"),
@@ -193,15 +196,17 @@ DrawGesturesLV() {
 
 
 DrawChordsLV() {
-    p := Scale(858.5, CONF.ref_height.v + 29, 425, CONF.ref_height.v)
-    UI.AddListView("vLV_chords " . p, ["Chord", "Value", "→", "Layer"])
+    p := Scale(, CONF.ref_height.v + 29, 425, CONF.ref_height.v)
+    UI["LV_gestures"].GetPos(&x, , &w)
+    UI.AddListView("vLV_chords " . p . " x" . (x + w - 1), ["Chord", "Value", "→", "Layer"])
     UI["LV_chords"].OnEvent("DoubleClick", LVChordDoubleClick)
     UI["LV_chords"].OnEvent("Click", LVChordClick)
     for i, w in [120, 170, 30, 100] {
         UI["LV_chords"].ModifyCol(i, w * CONF.gui_scale.v)
     }
 
-    btns_wh := "w" . (426 * CONF.gui_scale.v / 3) . " h" . (20 * CONF.gui_scale.v)
+    UI["LV_chords"].GetPos(, , &w)
+    btns_wh := "w" . (w / 3 + 1) . " h" . (20 * CONF.gui_scale.v)
     UI.Add("Button", "vBtnAddNewChord xp0 y+0 " . btns_wh, "✨ New")
     UI.Add("Button", "vBtnSaveEditedChord xp0 yp0 " . btns_wh, "✔ Save")
     UI.Add("Button", "vBtnChangeSelectedChord x+-1 yp0 " . btns_wh, "✏️ Change")
@@ -308,13 +313,13 @@ DrawOther() {
 
     UI.copy_options_menu := Menu()
     UI.copy_options_menu.Add(
-        "Copy the current view", CopyLevel.Bind(, 0)
+        "Copy current view", CopyLevel.Bind(, 0)
     )
     UI.copy_options_menu.Add(
-        "Copy the entire level (with all hidden in other mods)", CopyLevel.Bind(, 1)
+        "Copy entire level (with all hidden in other mods)", CopyLevel.Bind(, 1)
     )
     UI.copy_options_menu.Add(
-        "Copy the extended level (with hidden in adjacent hold)", CopyLevel.Bind(, 2)
+        "Copy extended level (with hidden in adjacent hold)", CopyLevel.Bind(, 2)
     )
 
     UI.paste_options_menu := Menu()

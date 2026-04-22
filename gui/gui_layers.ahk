@@ -156,11 +156,6 @@ AddNewLayer(*) {
 }
 
 
-ViewSelectedLayer(*) {
-    LVLayerDoubleClick(UI["LV_layers"], 0, true)
-}
-
-
 EditSelectedLayer(*) {
     r_gui := Gui("-SysMenu", "Edit meta for `"" . last_selected_layer . "`"")
     r_gui.SetFont("s9")
@@ -233,6 +228,15 @@ EditSelectedLayer(*) {
         m := LayersMeta[last_selected_layer]
         if n_tags == m["rtags"] && n_descr == m["rdescription"] && n_proc == m["rprocesses"] {
             r_gui.Destroy()
+            if new_filepath !== old_filepath {
+                ToggleFreeze(1)
+                ReadLayers()
+                FillRoots()
+                UpdLayers()
+                FillLayerTags()
+                FillLayers()
+                FillOther()
+            }
             return
         }
         ToggleFreeze(1)
@@ -279,10 +283,6 @@ EditSelectedLayer(*) {
         }
 
         r_gui.Destroy()
-
-        if UI.extra_tags.Length && UI.extra_tags[1].Text == "▴" {
-            ExpandTags()
-        }
 
         ReadLayers()
         FillRoots()

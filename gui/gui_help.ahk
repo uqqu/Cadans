@@ -104,7 +104,7 @@ AltHelp() {
                     . "they differ from global settings.`nHold Alt to see all options.`n"
                     . "`nPool: TopLeft, Top, TopRight, Left, Center, Right, BottomLeft, "
                     . "Bottom, BottomRight`nRotation:`n- None (strict angle)`n- Limited (snap to "
-                    . "8 directions for noise smoothing)`n- Full (rotation invariant)"
+                    . "8 directions for noise smoothing)`n- Full (rotation invariance)"
                     . "`nScale impact: from 0 (no effect) to 1 (perfect matching)"
                     . "`nBidirectional matching (on/off)"
                     . "`nStart-point invariance, only for closed figures (on/off)"
@@ -753,7 +753,7 @@ _GetNodeExtraInfo(node, is_gesture:=false) {
                     res .= "`nWarning: corner gestures are disabled in the global settings."
                 }
             }
-            rot := ["disabled", "noise reduction", "fully rotation-invariant"]
+            rot := ["disabled", "noise reduction", "fully rotation-invariance"]
             if vals[2] = 0 {
                 res .= "`n`nRotation: " . rot[CONF.gest_rotate.v] . " (by global conf)"
             } else {

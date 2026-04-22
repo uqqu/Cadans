@@ -482,6 +482,7 @@ UpdLayers() {
     global curr_unode, version
 
     ToggleFreeze(1)
+
     FinalizeProcessRules()
     SetCurrentProcessContext(active_proc)
     version += 1
