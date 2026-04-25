@@ -1,356 +1,834 @@
 [🇬🇧 English](README.md) • [🇷🇺 Русский](README.ru.md)
 
-# Cadans
+<p align="center">
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/demo.gif">
+</p>
 
-Welcome to **Cadans** — a global remapper of any input events. Set dozens and hundreds of assignments for any, up to the most exotic events for any keys, mouse buttons or its movement – gestures. Create chains of assignments with your own unique actions, from typing template text to accessing external api. Without firmware, drivers or special hardware – works with any device.
+##
 
+Welcome to **Cadans** – an input customization tool that lets you assign actions to keys, combinations, and gestures.  
+Simple taps, holds, chords, modifiers, and multi-zone mouse gestures can all be combined and used in the way that suits your workflow.  
 
-## 🚀 Key Features & Interactions
+Any event can trigger actions – from inserting text or symbols to controlling the system or running custom logic.  
+Each event also comes with its own fine-tuning options and can be chained together to form sequences with intermediate and final actions.  
 
-> All animations and their individual frames are slowed down for readability.
+Cadans works with any keyboard and mouse, treating them as a unified input system – no firmware or special hardware required.  
+Assignments can be defined per application and per keyboard layout, organized for different workflows, and switched on the fly.  
 
-### **> Tap-Hold**  
-Basic events of any key, branching of which opens the first level of variability. Add two assignments to a key – one for a quick press and one for a short hold.  
+Only what you assign is affected – everything else stays unchanged, and input remains native unless explicitly overridden.  
 
-<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/1.gif" width="400">
-  
-  
-Here and hereafter: no functionality overrides native behavior in general. If there is no assignment, as here for holding a particular key, there will be the expected system result.  
+You can use just one part of it – for example, gestures only, or a single key for custom functions in a specific app.  
+Or go deeper and build more complex logic – it’s entirely up to you.  
+<br>
 
-<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/2.gif" width="400">
-  
-  
-### **> Sequences of events**  
-Each event doesn't just perform the assigned action, but is a chain element for unique nested assignments. With support for tap and hold branching, of course.  
-With each new triggered event, you move on to the next assignment until you reach the end of the chain, performing the final action, and return to the beginning. If an event at the first level has no child assignments, it is also a chain, just of one element, and the action is performed immediately.  
+# 🚀 Events
 
-<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/3.gif" width="400">
-  
-  
-The chain can also be interrupted by performing an action of the current element before reaching the final one. In the most basic case, this is a timer interrupt. If the next event has not occurred, we perform the action of the current one.
-There are no depth limitations for chains – Morse code, autocorrect for words, whatever you can think of. Each press is potentially a new level and a new field for assignments.  
+> All animations and their frames are slowed down for clarity
 
-<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/4.gif" width="400">
-  
-  
-You can use chains only for final actions, where intermediate events are ignored, or you can specify additional actions, at any level. As in the following example – the most common input is performed, but it's actually a progression through the chain with an additional final action. It's a bit of a joke, but it works.  
+### > Taps and holds
 
-<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/5.gif" width="400">
-  
-  
-### **> Custom modifier keys**  
-Also any key/button on hold can be assigned as a modifier for other events with more and more fields for assignments. Modifier combinations also have their own “fields”. Pressing a modifier is not a separate transition in the chain, but it modifies the others on its own level.  
+Basic events: one key – two actions.  
 
-<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/6.gif" width="400">
-  
-  
-### **> Chords/combo**  
-Add an assignment to an entire combination of keys at once, which will trigger when they are pressed together. This too can be a chain element, up to and including a chain of just chords.  
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/taphold.gif" width="400">
 
-<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/7.gif" width="400">
 
-> Each level of each sequence is assigned independently of the others, and a single key can be both a modifier and part of a chord, and have its own events and transitions. Each new level is a new, clean field for assignments.  
-`\[mod]+e, \ (tap), \ (hold), chord(\+z+x) 🡒 ƒ Turn on Pomodoro-timer`
+The hold trigger timing can be configured globally or set individually for each key.  
 
-### **> Gestures**
-And at the same time, each assignment (except for chords) can also be a trigger for new events – gestures. If one or more child gestures are added to an assignment, mouse movements will leave a trace while holding down the assigned key, and releasing it will execute the action of the gesture if a match is found. Gestures are complete elements of chains, and in the same way can be continued by any further events, including assignments with all new gestures. Having gestures under an assignment does not override other child assignments, but complements them, and you can continue the chain with a gesture or any other event. Whichever event is triggered, we'll move on to that one.  
+Tap/hold handling does not delay input. Events trigger on timer, on key release, or on subsequent input:  
+- the base input is sent immediately on key release (0.04–0.08s – typical keydown–keyup timing during typing);  
+- hold actions trigger as soon as the timer expires (as configured; typically 0.1–0.15s), regardless of how long the key continues to be held.  
 
-![](https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/8.gif)  
-  
-  
-Each gesture can also be given its own recognition options, such as: independence from the figure rotation, from the drawing direction, the scale influence, and for closed figures the option of independence from the first point of drawing is also available, when the figure is important, not the drawing order. All options can be combined in a single gesture and in different gestures at the same level, as desired. Assignments where gestures start also have their own settings for them, but already graphical – line colors, position and visibility of the live recognition text.  
+> This only applies if a hold action is defined.  
+> Otherwise, no extra checks are performed and the key behaves according to its tap assignment or just natively:
 
-![](https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/9.gif)  
-  
-  
-On top of all this, gestures are divided into 9 independent pools – 4 edge pools, 4 corner pools, one center pool, depending on where the gesture was started drawing from. This not only logically separates the categories of assignments and increases their possible number, but also allows you to set more precise assignments in combinations with native behavior, because the start of drawing and recognition is triggered only when the assigned event does not just have child gestures, but when they are in the pool at the current cursor position. This means you can set assignments for part of the pools without changing the behavior outside of them, as in the example below, where there are assignments for all but the central pool under the RMB. Again, no overriding actions if they don't lead to anything.  
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/unassigned.gif" width="400">
 
-![](https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/rmb%20gestures%20demo.gif)  
+##
 
-The last example is not artificial, but one of the preset layers in action, which you can try as is, and adjust to your needs if you wish.  
+### > Chords / combos
 
-### **> Final actions and fine-tuning assignment options**  
-As final and intermediate actions you can set... anything? Character, text, simulation of other keys, native behavior, execution of any function. And the last ones don't necessarily have to be related to input.  
+The next event type is chords. Simple: press the assigned combination – the event triggers.  
 
-<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/10.gif" width="600">
-  
-And to configure any desired behavior, assignments can also be used to specify parameters for triggering related events by overriding global ones – hold threshold, child event waiting time (if there is any), behavior at child events without assignments, instant/intermediate execution, saving at this level of transitions, additional action when releasing a key, as well as suggestive text in the GUI and color settings when drawing child gestures.
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/chords.gif" width="400">
 
-### **> Other**
+Each key can participate in any number of chords.  
+To resolve overlaps (`1+2` and `1+2+3`) and to prevent accidental triggers, an optional chord confirmation can be enabled, as in the example above.  
 
-### Layers
-All assignments are saved in their own files – layers – which can be separately customized, grouping assignments by logical categories and usage scenarios, and toggling work specific to the moment. Each layer is managed separately, and current assignments are collected from all active layers. Switching layers or sets of layers can be part of your assignments – add enabling a layer as an assignment action.  
-`\+1 🡒 Toggle navigation layer activity`  
-`\+2 🡒 Turn off all layers except *n*`  
-`\+3 🡒 Enable layer set *abc*`
+It follows the same hold logic: the chord is only accepted after a short hold.  
+If the combination breaks during that time, it won’t trigger.  
+If no confirmation time is set, the chord triggers immediately when the combination is matched.
 
-#### Individual assignments for language layouts
-In addition to global assignments, you can also link assignments to specific language layouts.  
-[en] `o (hold) 🡒 “`, `. (hold) 🡒 ”`  
-[de] `o (hold) 🡒 „`, `. (hold) 🡒 “`  
-[ru] `o (hold) 🡒 «`, `. (hold) 🡒 »`  
-[no] `a, e 🡒 æ`
+##
 
-### **> Any keys and buttons**  
-All keyboard keys are supported, including an additional row of multimedia/office keys, virtually assigned f13-24 and all mouse events up to horizontal scrolling and gestures.  
+### > Gestures
 
-> The additional multimedia-office row and mouse scroll do not support hold events, and system modifier keys are prohibited from assigning press events for security reasons. They also cannot be used for chords. Everything else is completely available.
+Any key can act as a trigger for another type of event – gestures.  
+If gestures are assigned to a key, it automatically becomes a trigger without restricting other assignments.  
 
-### **> Dividing into layers**  
-Organize assignment groups into different layers: basic assignments, extended characters, navigation, media control, etc.  
-Each layer is managed separately, and current assignments are collected from all active layers.
+When held, it enters drawing mode: mouse movement leaves a trail, and upon release, the drawn shape is matched with the assigned gestures.  
+If a match is found, the gesture event is triggered.  
 
-Switching layers or groups of layers can be part of your assignments – add layer activation as an action for an event.  
+If no movement occurs, the key behaves as if no gestures were assigned at all – as a tap, with hold branching, as part of a chord, as a modifier, or according to its default system behavior.  
+The same applies if no gesture is recognized.  
 
-You can set assignments for different layouts on each layer.
+Gestures are divided into 9 zones – 4 along the screen edges, 4 corner zones, and one central zone – based on where the drawing starts.  
+This zoning can be adjusted or completely disabled in the settings.
 
-### **> GUI**
+Gestures for each zone are defined independently. When determining whether to activate gesture drawing, only gestures from the current zone (based on cursor position) are considered.  
+If no gestures are defined for that zone, gesture drawing does not activate, and the key behaves according to its other assignments or system defaults.
 
-All of the above is assigned and configured via the GUI.
+The example below demonstrates zone-specific assignments – gestures are assigned to RMB in all zones except the center.  
+As a result, behavior in the center remains system-default, while outside of it, 8 independent gesture groups become available:
 
-![](https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/1i.png)
+<p align="center">
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/rmb_gestures_demo.gif">
+</p>
 
-Go through any sequence of events, add assignments, link them to existing layers, or create new ones.  
-All assignments, with additional indicators, the number of child transitions, and the display of cross-assignments from different layers—everything is right in front of your eyes. For example:
+> This example is part of the default preset, which you can use as-is or customize  
 
-![](https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/2i.png)
-> A modified layout is not a reassignment, it is simply a [different layout](https://github.com/uqqu/qPhyx_layout)
+##
 
-All added assignments become available for use immediately. Change functionality on the fly.
+Also, each gesture has its own recognition options:
+- rotation invariance;
+- direction invariance (including reverse);
+- sensitivity to the original gesture size;
+- for closed shapes: starting-point independence along the path.
 
+These options can be combined within a single gesture or across multiple gestures.  
 
-## 🎮 Usage
+Trigger keys also include visual settings for gestures: line color, gradient length and cycling, hint text position and its visibility during drawing.  
 
-0. **Clone** this repo
-    - *(optional)* Install AutoHotkey v2
-1. **Run** `main.exe` or `main.ahk`
-   - When you first launch the app, cycle through all your installed layouts and configure the display and behavior of the GUI via 🔧 in the lower right corner
-2. **Try** some of predefined layers
-3. **Define** your own assignments
-4. **Use** new assignments immediately, without restarts
+<p align="center">
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/gesture_options.gif">
+</p>
 
-### 🔧 Prerequisites
-
-- Windows 10+
-- *(optional)* AutoHotkey v2
+##
 
+### > Custom modifiers
 
-## 🖥️ Detailed description of the GUI  *;TODO*
+The last type of assignment is a modifier. It allows you to define new actions for **all** other events when they are used together with it.  
+`q (hold) → ~`  
+`[mod_1] + q → °`  
+`[mod_1] + q (hold) → ¬`  
 
-> Alternative description in article format [on Habr](https://habr.com/ru/articles/900000/) (in Russian)
+A modifier is a unique type of hold assignment and does not affect the tap behavior or assigned gestures of the same key.  
+It applies instantly, without waiting for the hold threshold. The threshold only determines whether the key is treated as a tap:  
+if the key is released quickly – it is treated as a tap; if held – the tap action is ignored (an attempt to use it as a modifier).  
+If the modifier is used in at least one event, the key’s tap action will no longer trigger – regardless of the hold threshold.  
 
-### 🗺️ Visual Cues & Navigation
+> This is the only assignment type that can be applied to system modifier keys.  
+> This ensures full compatibility with standard system shortcuts. The program only intercepts combinations that you explicitly assign.  
 
-#### **Keyboard/mouse buttons**
-The text on the button — assignments on tap (above) and hold (below), if any. Each assignment can have a name added to it, which will be displayed in the GUI instead of the value itself.
+For example, if you define `Alt[mod_1]+F4 → (some_action)`, it will override the system behavior and execute your custom action, while other combinations without explicit assignments will continue to work as usual – `Alt+Tab`, `Alt+Esc`, ….  
 
-Colored frame — indicates a special type of hold: yellow indicates chord components; blue indicates user modifiers; black indicates currently active in the GUI modifiers that are taken into account for displaying current assignments.
+Modifiers can be combined with each other to create new assignments – `Alt[mod_1] + q → §`, `RMB[mod_2] + Alt[mod_1] + q → ∑`, in any combination you define.
 
-Additional colored indicators display the fine-tuned settings for each assignment: at the top of the button for the base assignment; at the bottom for the hold assignment. In the right corner, a red counter or simply an indicator (changeable in settings) displays the number/availability of child transitions (also works for modifiers, including combined ones). On the left side are indicators of changed click settings. In order of display:  
-- The silver indicator shows that the name for the GUI of the assignment has been changed (to avoid confusion)
-- Gray – a non-returnable assignment has been set
-- Teal – independent activation
-- Blue – additional action on release
-- Purple – modified hold activation time
-- Pink – modified waiting time for the next press for child transitions (only for the next level)
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/modifiers.gif" width="400">
 
-In the upper right corner, there is a non-clickable information button that displays the current value of active GUI modifiers or their combinations.
-Mouse buttons are located around the numpad. The display of additional rows of keys can be enabled in the settings, if necessary.
+##
 
-#### **Transitions**
-Pressing and holding physical keys on the keyboard/mouse will take you to the corresponding level of the assignment chain. Alternatively, use the mouse – left click to move with a tap event, right click to hold event. After moving, new items will open for editing or clearing values along the current path.
+### > Event sources
 
-#### **Path**
-Above the layout template is a menu showing the path to the current level of the chain (the current destination node).
+In addition to the keyboard (including extra key rows), **mouse** events are supported on the same terms and with the same capabilities.  
+They can also be part of chords, act as modifiers, have their own actions, holds, gestures, and transitions. They are not treated as a separate subsystem and can be used in the same way as keyboard events.  
 
-The arrows indicate the type of transition: ➤ for a tap, ▲ for a hold, and ▼ for a chord. If the arrow is accompanied by a number (such as `2➤`), it means that this transition was performed with the corresponding modifier value (this can be either a single modifier or a combination of modifiers – based on the sum of their values).  
-To return to any of the previous levels, click on the corresponding label. The transition modifier value for that level will be saved. Clicking on the current level label (the last one in the path) will reset all active modifiers.
+There are only 3 exceptions:
+- mouse scroll events and additional key rows do not support hold actions by their nature, so hold assignments cannot be defined for them;
+- for safety reasons, basic mouse button presses cannot be assigned at the **root** level **without** modifiers (gestures are still allowed);
+- for the same reason, system modifier keys can only be assigned as hold-based modifiers, without a tap action, in all cases.
 
-### ⌨ Layouts
-You can create assignments for a single keyboard layout or global, for all of them at once.
+Everything else is available without restrictions, in any combination, and with no hardware requirements.  
+<br>
 
-Near the settings button, there is a drop-down list with your layouts (as well as global assignments – `Global`). Layouts found in your layers will also be added to this list, even if these layers are inactive (configurable).
-> In the GUI, for greater control, you can see global assignments and assignments for each layout separately. But during the execution of the main script, these assignments are mixed — **global assignments are added to each layout**, with priority given to specific layouts in case of cross-assignments. For example, when assigning [Global] `o (hold) 🡒 "`, `. (hold) 🡒 "` and [en] `o (hold) 🡒 “`, `. (hold) 🡒 ”`, the assignment “” will work when the en layout is active, and "" on all others.
+# 🗂️ Grouping and scope of assignments
 
-### 🌫️ Layers
-The list on the left displays all layers found in `layers\` `*.json`. Set the layer activity by changing the checkbox. To interact with layers, use the buttons below the list – change its relative priority (this affects cross-assignments), edit the name, delete and add new ones.
+### > Layers
 
-Double-clicking on any layer will take you to a separate viewing and editing mode for that layer, without being tied to the currently active layers.
+All assignments are stored in separate files – layers, which can be configured independently and used to group assignments by categories and usage scenarios.  
 
-Also, the list of layers at the root level displays the total number of assignments on different layouts, and – at specific transition levels, – it displays assignments and the number of transitions from it from different layers *along the current path*. You always know what is happening on this node on all layers. By default, values from inactive layers are not collected or displayed for better performance, but you can temporarily change this behavior in the settings.
+Each layer’s active state can be toggled at any time, either through the interface or via assignments.  
 
-### 📌 Predefined layers
-Several layers are placed directly in the repository so that you can familiarize yourself with the usage and capabilities before assigning your own or adapting existing ones to suit your needs:
-- **Default**: 83 additional extended punctuation characters in the alphabetic part with only one modifier.<details><summary></summary>
-  ![](https://github.com/user-attachments/assets/b764bb7c-b1ee-4490-9306-9f9a07638aa2)
-  ![](https://github.com/user-attachments/assets/d957a3eb-41cb-4100-b6b4-bde7911fa9d7)</details>
-- **Controlling Keys**: a new perspective on the familiar positioning of control keys. It also features additional media keys, hjkl navigation, and several everyday functions, such as increasing/decreasing the number under the cursor, CAPS on one word, delayed start/stop of music, and other small features.<details><summary></summary>
-  ![](https://github.com/user-attachments/assets/0420b99f-03ad-43e0-a772-c200ff4d605d)
-  ![](https://github.com/user-attachments/assets/13ff030d-20a1-4634-bc5d-0f8751ce6b78)</details>
-- **Leader**: a dozen functions under a single button. As a template for your customization.<details><summary></summary>
-  ![](https://github.com/user-attachments/assets/c48be9bd-3297-4bd7-a2dc-18baa88507a2)
-  ![](https://github.com/user-attachments/assets/c005c286-41a2-4f42-bdb6-391e1c800a9c)</details>
-- **Mouse**: 38 ~parrots~ assignments for quick access using all mouse events via side modifier buttons and their combinations. From navigation and media control to random password generation and link shortening functions.<details><summary></summary>
-  ![](https://github.com/user-attachments/assets/74f43968-ecfa-4ced-b3c2-8fd56b7b948b)
-  ![](https://github.com/user-attachments/assets/362e57fc-2c6a-41eb-bae3-418de6875e34)
-  ![](https://github.com/user-attachments/assets/f374cbf5-0dfb-4f74-a5b6-be025f2b54ed)</details>
-- **Emoji**: and how many of them are there?..<details><summary></summary>
-  ![](https://github.com/user-attachments/assets/ce50189f-6fd5-432b-a56f-460906bb042b)</details>
-- **Extra langs**: yoü use å separate łayout for a couple of ñew letters? There are 12 for each script, and a whole row of global diacritics. Write in any language ø. *(layout đependent)*<details><summary></summary>
-  ![](https://github.com/user-attachments/assets/bd888770-de73-40ac-aeea-2b5bb59c0ad5)
-  ![](https://github.com/user-attachments/assets/1adcef14-dbb8-40bf-a1be-a0ac55fea6f9)
-  ![](https://github.com/user-attachments/assets/5e8fb2de-a09a-4188-9dbb-4e541022165a)</details>
-- **Morse**: you’ve only seen it on TV? You can try it for yourself.<details><summary></summary>
-  ![](https://github.com/user-attachments/assets/8f5be4a9-0595-4c68-b852-47c6b2e3e13a)
-  ![](https://github.com/user-attachments/assets/92505abe-7c6d-4e6f-a932-511e5ee107b8)</details>
-- **Angry**: one of the variants of using the `Instant` option. Don’t swear.<details><summary></summary>
-  ![](https://github.com/user-attachments/assets/50c1a660-40d2-4b7e-8684-5aead1b2988f)</details>
-- **NumLock** and **One word caps**: auxiliary layers toggled from other layers via the custom `ToggleLayers` function.
-- **…and a lot more of your own?**
+Each active layer has its own priority, which is used to resolve conflicts between overlapping assignments for the same events.  
 
-### 🎨 Defining first assignments
-To add or change an assignment, press the corresponding key on your keyboard/mouse or click on it in the interface. After pressing, the `Base` and `Hold` panels will appear in the upper right corner. `Base` is responsible for the assignment on tap, and `Hold`, respectively, when held down. Clicking on them will open a form for changing/adding an assignment.
+Switching layers or sets of layers can be part of your regular workflow:  
+`\+1 → Toggle navigation layer`  
+`\+2 → Disable all layers except *n*`  
+`\+3 → Enable layer set *abc*`
 
-#### Types of actions
-There are several types of actions that you can select for assignment in the corresponding list:
-- **Plain text** – any string you would like to enter. Some unique symbol, your duty email, a cherry pie recipe, whatever you want.
-- **Key simulation** – commands in AHK-syntax, like `{SC010}`, `+^{Left}`, `{End}{Shift down}{Home}{Shift up}{Backspace}`, to simulate certain keystrokes. You can read the syntax in detail on the [AHK website](https://www.autohotkey.com/docs/v2/KeyList.htm).
-- **Modifier** – when creating an assignment for hold action, the modifier type is available. When assigning this type, specify its numerical value (usually just an ordinal number), which will be used for assignments from it. Combined modifiers are obtained from the sum of the values of **different** assigned modifiers.
-- **Disabled** and **Default** – are basic types that may be needed when configuring auxiliary keys in a transition chain.
-- **Function call** – any of the existing ones, or your own AHK function, such as `SendCurrentDate` or `ExchRates(USD, RUB)`.
-  - String values are specified *without* quotation marks, and `,` and `[` in strings should be escaped with `\`; if the function does not accept parameters, you can omit the parentheses, leaving only the function name.
-  - To simplify assignments, main user functions can be assigned via a submenu that appears when the corresponding menu item is selected.  
-![](https://github.com/user-attachments/assets/24b91c96-e602-483c-805e-1e627c90c506)
+##
 
-#### Additional parameters
-In addition to selecting the action type and the action value itself, you can also set additional parameters such as:
-- Instant activation – makes the assignment independent of child transitions, performing the assigned action immediately when the event is triggered. The chain of transitions is not lost and you can continue diving.
-- Irrevocable press – prevents returning to the root from the current press. Normally, the return occurs when the leaf (the last element of the assignment chain) is reached, or when the timer for waiting for the next press (if any) expires. With this option this does not happen, and you remain at the current level if there are no child assignments, or in an unlimited wait for the next press. By default, irrevocable option is offered for all assignments from under modifiers, to allow multiple value entry.
-- Modified hold timeout – the value in ms that will be used to distinguish tap/hold, instead of the globally specified value. ⚠ This applies specifically to base assignments. In other words, you specify when the base event will turn into a hold event.
-- Modified child press wait time – like the previous one, in ms, replaces global. Works only for one level under the given assignment.
-- Additional release action – calls another action of the specified type and value when the key of the catched assignment is released. The action will be recorded at the moment of catching the whole assignment, and will not be broken by any transitions.
-- GUI shortname – purely for visually enhancing your layers in the GUI. Useful for almost all assignments except single character texts.
+### > Layouts
 
-If you’re in edit mode for a specific layer, or if you have only one active layer, the assignment will be automatically linked to it. Otherwise, an additional list is displayed to select the layer to which the assignment will be linked.
+Assignments you add to a layer are global by default – they work as long as the layer is active, without additional conditions.  
+However, you can extend this behavior by adding assignments for specific keyboard layouts – they only apply to those layouts.  
+On each layer, you can define assignments for different layouts, and they always take priority over that layer’s global assignments.
 
-> System modifier keys can only be assigned a user modifier action, without other settings.
+For example, you can define a global assignment `Alt+o → ø`, and on the same layer add a layout-specific one – `Alt+o → ö`.  
+This way, the event in the specified layout will have its own action, while all others will use the global one.  
 
-### ✨ How it works
+You can also omit the global assignment entirely – in that case, the event will not be handled by the program on other layouts, and the default system behavior will remain.  
 
-When you press a key, the script checks if there is in the current transition table both base and hold assignments.
-- If there is only the base, it goes into the next check. No unnecessary branching delays if they are not needed.
-- If there is a hold assignment, the program checks if the key will be held for the specified number of ms.
-- Releasing the checked key before the timer is considered as a basic tap.
-- Holding for the specified time will send the hold assignment to the next check, without being tied to the subsequent release of the key.
+The number of layouts and assignments is not limited.  
 
-#### Transition
-After determining the assignment (tap or hold) it checks its own nested transition table. If it is not empty, the link to the current transition table/node is changed, and the script waits for the next event based on the global (or specified for this assignment) timer value, without performing the current assignment action. If the `Instant` option is added to the assignment, the action will be performed immediately, and the link to the table will also move to the next node, waiting for a new key.
-- If there are no new events for the given timer, the last action will be executed (hereinafter – if not already executed by `Instant`) and the transition table returns to the root table, if the `Irrevocable` option is not specified.
-- If there is no assignment for the next event in the current transition table, the previous, unsent assignment is executed, and the new event is processed from the root transition table.
-- If the event from the next press is present in the transition table, it starts from the first point of this paragraph (from checking the base and hold assignments for the pressed key/button, …).
+[ru] `o (hold) → «`, `. (hold) → »`  
+[en] `o (hold) → “`, `. (hold) → ”`  
+[de] `o (hold) → „`, `. (hold) → “`  
 
-#### Return to root
-Every time you reach the last event in the chain (leaf), or if the chain is interrupted by a timer, the table returns to the root state, except in cases of `Irrevocable`.
+> You can redirect assignments from one layout to another in the settings (`User` → `Layout aliases`).  
+> This is useful if you use a non-standard keyboard layout, such as Colemak, but want to always use assignments created for qwerty, since assignments are bound to physical keys (scancodes), not to the characters they produce.
 
-#### Timer delay
-Special hold types such as `modifier` and `chord part` delay the timer, and while the corresponding keys are held down, table reset and action executing do not occur.
+##
 
-#### No-return event
-By default no return occurs when entering via `modifier`. As long as the modifier is held down, you can perform any number of keystrokes for the current table, and the return will only occur when the modifier is released.
-- But this does not prevent from moving to deeper levels of nesting. The transition, even with a modifier, returns us to the second point of the block (from checking the nested table).
-- Also, with each transition, the value of the mismatched modifiers is reset, and the timer delay no longer works.
+### > Processes
 
-#### Return transition
-Every time you reach the last assignment in the chain, you return to the initial table. But not in the case of modifiers – pressing them by default keeps you at the current node, allowing you to access any number of assignments along that path. Even pressing non-assigned keys at this node will not reset you. The return will occur when you release all modifiers. But you can still go deeper if the local assignment have a non-empty transition table, in which case the previously active modifier will no longer serve as protection against reset.
+You can also set a process rule for each layer. A layer’s assignments can be excluded from certain applications, or limited to a specific process or group of processes.
 
-#### Modifiers in the GUI
-Assigned modifiers are displayed with a blue border, while currently active (held down) modifiers change their border to black. The total value of active modifiers is displayed on the auxiliary button in the upper right corner of the keyboard layout.  
-The values of the modifiers themselves are displayed at the bottom of the button, as are other hold values (if no custom name is specified).  
-To toggle modifier activity in the GUI, right-click on it or hold down the corresponding physical key (except Alt and LBM-RBM).  
+This allows you to fine-tune the behavior of each event depending on the active process and layout – without having to think about it during use.  
 
-> Pressing modifiers does not affect the transition; they only change a single value within a current node, which will be taken into account for other assignments.
+Layers without process rules apply everywhere.  
+To exclude a process or group, use `-app.exe`. There is no need to explicitly specify that the layer should be active for all other processes.  
+To restrict a layer to specific processes, use `+app.exe, app_2.exe`.  
 
-### 🎶 Chords
-The right list shows chords valid at your current path. Click `New` to enter chord‑selection mode, press or click your desired combination, then assign it just like usual tap/hold value.
+For convenience, processes can be grouped in the settings – `browsers=firefox.exe, chrome.exe, edge.exe, …`.  
+These group names can be used in rules, including with additional refinements – `-browsers, +firefox.exe`.  
+Updating a group in the settings automatically affects all layers where it is used.  
 
-> If two chords share a common key combo, both will fire when pressed.
+##
 
-#### Chord nesting
-Chords themselves can nest further. You can add assignment under chord, chord under chord, whatever you like. Double-click on a chord line to jump to the nested table.
+### > Assignment tree
 
-#### ModChords
-Chords work with modifiers, and although mechanically it is one large chord, modifiers are not considered to be keys within it. When you add or edit a chord, the currently assigned modifiers are not selectable. Also, mouse buttons and additional multimedia-office row keys are not available for chords.
+All assignments are combined into a single tree based on the logic described above.  
+For each active layer, layout, and process context, the final assignments are resolved with all priorities taken into account.
 
-#### Overrides
-A `chord part` is a separate hold type, so when adding/modifying a chord, existing hold values of other types in the keys involved **will be overwritten**.
+During runtime, the system simply moves through this prebuilt tree, where all of this logic is already resolved...  
+
+### _“What tree”? Oh, right:_  
+<br>
+
+# 🔗 Event chains / sequences
+
+Each assignment is not just an action – it also contains a nested table of assignments: keys, chords, and gestures. This table is structured the same way as the root level, but with its own assignment possibilities.
+
+If no children are defined and the nested table remains empty, the assignment is considered final, and the behavior reduces to a simple `event = action`, without additional logic.  
+
+If children are present, triggering the event transitions into its assignment table and continues along the chain until a final node is reached or the chain is interrupted.
+
+An interruption occurs in two cases:
+- if no new events happen within the waiting time (300 ms by default);
+- if a new event cannot continue or complete the chain.
+
+On interruption, the current assignment’s action is executed, and the system returns to the root level.  
+If the interruption was caused by a new event with no matching assignment, it will be processed from the root after returning.
+
+> This is the default behavior – but importantly, **all** of it can be customized to fit **any** use case.  
+
+All chain logic and transitions are handled by the system – you don’t need to explicitly control when a chain resets, which action is final, or which one should start a new chain.  
+You simply continue your input, and all transitions and interruptions are handled automatically according to the assignments you defined.
+
+<details><summary>Detailed: how chain interruption works</summary>
+
+This slowed-down example demonstrates two simple chains – `a, e → æ` and `n, ~ → ñ`, with no additional assignments.
+
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/chain_interruptions_detailed.gif" width="400">
+
+Take a look at the sequence `a, n, ~`:
+- `a` starts a chain – the system begins waiting for the next event;
+- `n` interrupts it, since there is no assignment for `a, n`;
+- …due to the interruption, the action of `a` is executed, and after returning to root, the system **immediately** starts a new chain from `n`;
+- the final `~` completes the chain from `n`, triggering `ñ`, and the system returns to root again.  
+
+No explicit reset actions were performed.  
+No special handling was defined to execute the base `a`.  
+No manual transition to a new chain was needed, even though `n` occurred during the previous one.  
+
+We simply typed three characters, leaving all chain logic and transitions to the system.</details>
+
+##
+
+And of course, chains can use all types of events – from taps and holds to chords and gestures from different zones.  
+The example below shows simple hold-based branching with control actions: two keys, two levels, one branch – up to 16 possible actions.
+
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/chains.gif" width="400">
+
+
+There are no depth limits for chains – from something like Morse code to full word autocorrection, anything you can come up with.  
+
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/morse.gif" width="400">
+
+Chains can consist of any event types, including chains made up entirely of chords or gestures.
+
+<p align="center">
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/nested_gesture.gif">
+</p>
+
+> The only type that does not have its own transition is the modifier.  
+> It plays the same logical role – opening new assignment fields – but within the current level.  
+> And those assignments can introduce further transitions.
+
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/chain_with_chords.gif" width="400">
+
+##
+
+Even in this basic form, chains can already be considered an _advanced feature_.  
+In practice, the vast majority of your assignments will likely be simple and standalone, without complex logic.  
+But when needed – anything is possible.  
+
+Each element in a chain can be configured in detail:
+- waiting time for the next event;
+- return-to-root behavior;
+- 5 child-event behavior modes;
+- intermediate action execution without breaking the chain.
+
+Any behavior can be implemented.  
+The example below shows a simple tap-based chain where all intermediate elements are executed (native behavior), along with an additional final action.  
+A slightly playful example – but fully functional:  
+
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/chain_instant.gif" width="400">
+
+
+> Each level of each chain is defined independently, and the same key can act differently at different levels – as a modifier, part of a chord, a simple tap, a gesture trigger, or a node with further transitions.  
+> Each new level is a new, clean assignment space.  
+>  
+> `\[modifier]+e, \[tap], \[hold], chord[\+z+x], \+[gesture] → ƒ Start pomodoro timer`
+
+##
+
+Technical notes:
+
+- Pressing `modifiers` and `chord keys` at non-root levels already pauses the interruption timer, even if the combination is not yet complete. In this case, the interruption will occur on key release.
+- At runtime, when transitioning with a held `modifier`, if that key also has an assignment of the same type on the next level (even with a different value), its value is updated accordingly without requiring it to be released and pressed again:  
+  - for example, `Alt[mod_1]+q, Alt[mod_2]+w → (some_action)` – if `Alt` is held through the transition, it acts as `1` on the first level and automatically becomes `2` on the next;
+  - if no modifier assignment exists for the held key after the transition, it is reset and will not trigger any action on release;
+- When building the structure for UI and runtime, child elements of identical assignments across layers are merged.  
+For different assignments, the higher-priority one is selected, and only its children are used.
+<br>
+
+# 🧠 Assignments and actions
+
+When creating assignments for events, a number of fields and options are available:  
+
+
+### > Action
+
+Defines what will be executed when this assignment is reached.  
+If the assignment is an intermediate element in a chain, the action is executed on interruption or when explicitly specified.  
+
+Actions can include:
+- inserting a single character or full text (from a work email to a cherry pie recipe);
+- simulating key presses;
+- calling a function;
+- for hold events, a special type `modifier` is also available.  
+
+> There are also `disabled` and `default` types.
+> These are useful in chains when you don’t need a custom action on interruption, but instead want either the key’s default behavior or no action at all.  
+> When creating a new chain, intermediate elements without explicit assignments are automatically set to `default` for tap events, and `disabled` for holds.
+
+##
+
+The `key simulation` type accepts a string in [AHK format](https://www.autohotkey.com/docs/v2/KeyList.htm), for example:  
+`{SC010}`, `+^{Left}`, `{End}{Shift down}{Home}{Shift up}{Backspace}`.  
+
+##
+
+When selecting the `function` type, an additional window opens with a set of predefined functions that can be used as-is – from simple everyday actions like “increment number under cursor”, “insert current date in format …”, “start auto-scroll”, or “stop music after a timer”, to external API calls such as “explain selected term from Wikipedia” or “weather forecast for city N”.  
+
+There are also several functions for managing layers directly through assignments.  
+
+You can define your own functions and call them directly as `function(parameters)` – no need to add them to the predefined list.
+
+> String values for functions should be written *without* quotes, for example: `ExchRates(USD, RUB)`.  
+> Characters like `,` and `[` in string values must be escaped with `\`.  
+> For functions without parameters (or when using default function behavior), parentheses can be omitted, leaving just the function name – for example: `AutoScrollStart`.  
+
+##
+
+For the `modifier` type, you need to specify a number from `1` to `60`.  
+The same modifier value can be assigned to different keys – they will all map to the same set of assignments.  
+
+##
+
+The `chord part` type cannot be set or removed manually.  
+It is assigned automatically to hold events (**and may override an existing assignment**) for all involved keys when creating chords, and is removed automatically when chords are deleted.  
+
+##
+
+“Gesture trigger” is not a separate type – it can work together with any other assignment, or without one at all.  
+
+##
+
+### > Action on release
+
+Located in a separate section. This action is triggered when the key is released.  
+
+It can be used as an additional action or as part of more advanced logic.  
+In terms of types and values, it works the same way as the main action.  
+
+Like all assignment parameters, it belongs to the specific event it is defined for:  
+**Release after a tap and release after a hold are two different cases** – only one of them will be triggered.  
+
+##
+
+### > Time before hold activation
+
+A field where you can specify a custom delay before the hold event is triggered.  
+If not set, the global value from settings is used.  
+
+It is defined in the **tap** assignment and determines when it expires. It can also be specified in the hold assignment, but it will still be saved for the “base” event.  
+
+If there is no corresponding hold assignment, this setting has no effect.  
+
+> Special case for chords:  
+> If a hold threshold is specified, it is used as a confirmation time to prevent accidental triggers and resolve overlapping chords.  
+> If not set, the chord event is triggered immediately when the keys match.
+
+##
+
+<details><summary>Chain settings (advanced)</summary>
+
+### > In-chain behavior
+
+For assignments used as part of a chain, two additional options are available:
+
+- `instant` – the assignment’s action is executed immediately when the event is accepted, rather than on interruption.  
+  The chain itself is not broken and can continue normally.  
+
+  This option is used in the “playful” example from the chains section, where typing `d, a, m, n` triggers the final action on release (shows tooltip) while still producing all intermediate characters.  
+
+  This option is configured per assignment.  
+
+- `irrevocable` – prevents returning to the root level from this assignment, whether due to interruption or after reaching it as a final element.  
+  Returning is still possible via other events (unless they are also marked as `irrevocable`).   
+
+  This allows you to enter a deeper level once, perform multiple actions there, and only then return.  
+
+  **Be careful not to lock yourself into a level.**  
+
+##
+
+### > Child assignment behavior
+
+The most basic parameter – the _waiting time for a child event_.  
+If no child event occurs within this time, the chain is interrupted.  
+
+The result of the interruption (executing the action and returning to root) depends on the options described above.  
+As with the hold threshold, if not specified explicitly, the global value from settings is used (300 ms by default).
+
+
+The _“behavior for unassigned child events”_ option allows you to control what happens when a chain is interrupted by an event that has no assignment.  
+
+By default, this is: _“execute the current action and return to root”_, after which the triggering event is processed from the root level.  
+
+Alternative behaviors include:
+- returning to the previous level instead of the root (search for assignment at the previous level);
+- the same options without executing the current action;
+- ignoring unassigned events entirely.  
+
+> Ignoring events can be useful to filter out accidental inputs in longer chains.  
+> However, when combined with `irrevocable`, it can completely lock you into a level.  
+> Be careful with this combination, and **always** ensure there is a way to return to the root.  
+> The interface will also request confirmation if you try to add an assignment with a similar combination.</details>
+
+##
+
+### > Gesture overlay settings
+
+A cosmetic section, used when a key acts as a gesture trigger.  
+Here you can configure the position of the hint text and separately customize three types of zones – corner, edge, and center/general zone.  
+
+Each type of zone can have its own line color or color sequence, or a special value `random(n)`, which will pick a random color for each new gesture.  
+
+If multiple colors are specified, or `random` with `n > 1` is used, you can also define the `gradient length` and whether it should be `cyclic`.  
+
+##
+
+### > Name in GUI
+
+And the simplest option – how this assignment appears in the interface.  
+
+If left empty, the action text will be shown.  
+There are no hidden behaviors here – this is simply a way to improve readability, especially for more complex actions such as functions.  
+
+For gestures, this field cannot be empty. If not specified, the action text will be used automatically.
 
 ---
 
-## 🗂️ JSON Layer Format
+<details><summary>GIF overview: adding assignments for all events and their special features (4 minutes ._.)</summary>
+<p align="center">
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/assignments_demo.gif">
+</p>
+</details>
+<br>
 
-Layers live in `layers/` as JSON files. Each file is a Map where:
+# 🖥️ GUI
+
+> All GUI elements have tooltips that appear when hovering while holding `Alt`.  
+> If any tooltip feels unclear or incomplete, please [report it](https://github.com/uqqu/Cadans/issues).
+
+
+GUI view with almost all built-in layers enabled:
+
+<p align="center">
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/gui_enabled_layers.png">
+</p>
+
+> The modified layout shown in the screenshot is not remapping – it is simply a [different keyboard layout](https://github.com/uqqu/qPhyx_layout).
+
+##
+
+### > Keyboard view
+
+The main part of the interface is a keyboard view, with additional mouse buttons placed around the numpad, and a helper key showing the current modifier(-s) state.  
+
+Each key displays all active assignments for tap events (top part of the key) and hold events (bottom part, if assigned), based on the current chain path.  
+
+The outline color of a key indicates the assignment type.  
+Additional markers show locally overridden settings, and counters in the corners indicate the number of child assignments (top for tap events, bottom for hold).  
+All colors can be configured in the settings.  
+
+If an event has multiple overlapping assignments across layers, only the highest-priority one is shown – exactly as it will be used at runtime.  
+
+> Note: the interface shows global and layout-specific assignments separately, while runtime behavior is based on their merged result (with layout-specific assignments taking priority).
+
+`LMB` and `RMB` on keys navigate through tap and hold events respectively.  
+Basic navigation is also available using physical keyboard taps/holds.  
+
+For modifiers, which do not have their own transition by design, `RMB`/hold toggles the modifier state itself, immediately affecting other assignments.  
+
+Due to system limitations, keys without hold events cannot be navigated via hold; and system modifiers do not have a press transition – their modifier assignment form opens immediately instead.  
+
+The special `Mod` key acts as an indicator of the current active modifier set, based on the internal representation `sum(modifier_value²)`.  
+Pressing it resets all active modifiers.  
+Active modifier values are shown individually in the top path bar and are also indicated by distinct outline colors on the corresponding modifier keys.  
+
+Additional key rows (F13-24 keys and multimedia/office keys) can be enabled in the settings.
+
+##
+
+### > Transition path and adding assignments
+
+<p align="center">
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/gui_path.png">
+</p>
+
+At the top, the current chain / transition path is displayed.  
+All levels are clickable – you can return to any of them (preserving the modifier state of that transition).
+
+The transition event and modifier value (if present) are shown between levels:  
+`➤` for taps, `▲` for holds, `▼` for chords, and `•` for gestures.
+
+Assignments are added to the event at the current path.  
+So, to add an assignment for `q` (more precisely, `sc016`), navigate to that event and use the buttons in the top-right corner to open the assignment creation/edit form.
+
+The text next to the assignment buttons indicates the current action type with a single letter.  
+The buttons themselves include indicators and counters, just like on the central view.  
+Next to them are buttons for resetting the current assignment and all of its children.
+
+> Transitions via taps and holds always display assignment buttons for both “base” events, so for simple assignments it does not matter which event was used to enter the level.
+> However, all child assignments are shown and added strictly according to the current path.
+
+Clicking an assignment button opens a form with all parameters from the previous section.
+
+If the assignment is edited outside of a single-layer view, a dropdown appears at the top of the form to select the layer the assignment will be added to.
+
+##
+
+### > Layouts
+
+Below the keyboard view, on the right side next to the settings button, there is a dropdown for switching layouts.  
+
+In the interface, global and layout-specific assignments are shown **separately**, while at runtime they are merged – with layout-specific ones taking priority.  
+
+All navigation and assignment creation happen for the layout currently selected in the list.  
+
+Holding `Alt` on this dropdown list shows which layouts have child assignments at the current path.  
+
+> If a layer appears empty where assignments are expected, check other layouts.
+
+The layout list always includes global assignments, layouts installed in your system, and (if the corresponding option is enabled) layouts not present in the system but used in layers.  
+
+##
+
+### > Processes
+
+The left dropdown, under the “arrows”, is used to select the process context.  
+
+If process rules are set on active layers, the list will include, in addition to the general context `*`, separate contexts derived from those rules.
+
+A context is a runtime grouping of processes that end up using the same execution branches. It does not always directly correspond to process rules (this is expected).  
+
+Selecting an item in this menu shows which assignments are applied for that context at runtime.  
+
+In single-layer view/edit mode, this menu is disabled and simply displays the layer’s process rule in its raw form.  
+
+When a non-global context is selected, holding `Alt` shows which layers contributed to this context and all processes included in it, without grouping.
+
+##
+
+### > Additional interface details (optional)
+
+The list panels are fairly self-explanatory, so feel free to explore them directly.  
+> tldr: Double-clicking on an item navigates to it; pressing `Alt` still displays tooltips. More detailed descriptions are included below if needed.
+
+<details><summary>Bottom lists (chords, gestures, layers)</summary>
+
+### > Chords
+
+The bottom-right list shows chords assigned at the current path. Clicking any of them will also highlight the corresponding keys on the keyboard view.  
+
+Along with the key/button combination and assigned action, the list also shows the number of child assignments (if any), as well as the layers the chord is defined on.  
+
+To add a new chord, click the corresponding button, select the desired combination in the interface or on your keyboard/mouse, and press `Save` to proceed to assignment setup.  
+
+For chords, the hold time parameter defines the “confirmation” delay before the event is accepted.
+
+To navigate into a chord and view or add child assignments, double-click it in the list.  
+
+##
+
+### > Gestures
+
+The bottom-center list shows gestures assigned at the current path. The last event in the current path acts as the “trigger”.  
+Gestures cannot be added at the root level, under chords, or directly under other gestures – in these cases, there is no trigger.  
+
+> Gestures are tied to the `tap` event, as drawing mode starts immediately on key press.  
+> When navigating via `hold`, gestures are still shown in the list and can be modified, but this is simply the same list as for the `tap` transition.  
+> The same applies to the `hold threshold` and `gesture overlay` settings if the forms – they belong to the `tap` assignment, but are also accessible via `hold`.
+
+At levels where gestures cannot be added, the list shows trigger keys (if any), along with their modifiers and the number of gestures assigned to them.  
+
+At other levels, only the gestures themselves are shown, along with:
+- a short zone label;
+- custom recognition options;
+- number of child assignments;
+- the layer the gesture is defined on.  
+
+Holding `Alt` allows you to inspect all gesture parameters (non-default ones are marked with `>`), including inherited color from the parent.  
+
+##
+
+The buttons below the list allow you to preview the “reference” gesture or modify the assignment. Redrawing the gesture is not required when editing.  
+
+When previewing, the gesture is displayed in the zone it was assigned to. The parent color is also applied.  
+
+For gestures with the `bidirectional` and/or `any start point` options, the preview reflects these behaviors by choosing a random direction or position.  
+If `scale impact` is non-zero, the gesture is shown at its original size; otherwise, it is displayed in a normalized (scaled-down) form.  
+
+When editing an assignment, additional recognition options can be configured.  
+
+The `any start point` option is only available for closed gestures (distance between the first and last points < 10% of total length).  
+When enabled, the gesture is automatically smoothed to a unified start and end point.  
+
+##
+
+### > Layers
+
+<p align="center">
+<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/gui_layers.png" width="600">
+</p>
+
+The bottom-left list shows all layers. Technically, these are files and subfolders inside the `layers` directory, preserving the same structure.  
+
+The checkbox toggles layer activity (`RMB` – enable with highest priority). Active layers display their relative priority.  
+The `increase/decrease priority` buttons also support `RMB` – the layer is moved directly to the top or bottom.  
+
+At the root level, the number of assignments for the current and other layouts is also shown for each layer (treating “global” individually).  
+At other levels, assignments at the current path and the number of child assignments for base events are displayed – separately for each layer.  
+
+Folders always show the number of nested layers.  
+
+##
+
+Above the list is a tag menu that lets you filter layers by their assigned tags.  
+This is purely a visual feature – it does not affect layer activity.  
+Selected tags are preserved between sessions.  
+
+##
+
+The `Meta` button allows you to edit the layer name (and path), its description (with `Alt`), tags, and most importantly – the layer’s process rule.  
+
+The rule applies to the entire layer:
+- to enable the layer only in specific processes – `+app.exe`;
+- to enable it everywhere except specified ones – `-app.exe, app2.exe`.  
+
+You can use group names from settings (changes to a group do not require updating layer rules that reference it), and extend them directly in the rule – `-browsers, +firefox.exe`.  
+Rules take effect immediately after saving.  
+
+##
+
+Double-clicking a layer switches to a separate view/edit mode.  
+
+In this mode, assignments shown on the layout are taken only from the current layer – regardless of other layers’ activity.  
+When adding or editing assignments, the form does not include a layer selection – the current layer is implied.  
+The `root` level in the path is replaced with the layer name.  
+
+You can return to the full active-layer view using the corresponding button below the list.  
+
+##
+
+The program includes several predefined layers that you can enable and test immediately  
+(in another window – the interface intercepts events for transitions and other purposes).  
+
+From typographic and language-specific symbols to gestures, an emoji keyboard, temporary keyboard layouts, control actions, and functions. There are also a couple of playful ones.  
+
+If something catches your interest – use it as a starting point and adapt it to your needs.  
+Or maybe you’ll create your own useful layer and want to share it?  
+
+##
+
+<details><summary>JSON Layer Format</summary>
+<br>
+
+> You don’t need to edit JSON directly – everything is available through the GUI.  
+> This section is here for reference, if you’re curious how things work under the hood.
+
+Each file represents a single layer and contains assignments grouped by layouts.
+
+File structure:
+
+> Values in square brackets indicate defaults.
 
 ```jsonc
+// meta information: version, tags, description, process rule
 {
-  "<LAYOUTID>": [  // "0" for global assignments
-    "gesture_options",  // string (color options for gestures from this node)
-    {  // scancodes map
+  "<LAYOUT_ID>": [  // "0" – global assignments
+    "gesture_options",  // string (color settings for child gestures)
+    {  // scancode table
       "<scancode>": {
         "<modifier>": [
-          "action_type",              // int (1-7)
-          "value",                    // string
-          "up_action_type",           // int (1-7)
-          "up_value",                 // string
-          "is_instant",               // bool
-          "is_irrevocable",           // bool
-          "custom_long_press_time",   // int (0 as default)
-          "custom_next_key_time",     // int (0 as default)
-          "unassigned_child_behavior" // int (1-5)
-          "gui_shortname",            // string
-          "<nested>"  // -> [gesture_opts, scancodes{}, chords{}, gestures{}]
+          "action_type",               // int (1-7)
+          "value",                     // string
+          "up_action_type",            // int (1-7) [1 – disabled]
+          "up_value",                  // string [""]
+          "is_instant",                // bool [false]
+          "is_irrevocable",            // bool [false]
+          "custom_long_press_time",    // int [0]
+          "custom_next_key_time",      // int [0]
+          "unassigned_child_behavior", // int (1-5) [4]
+          "gui_shortname",             // string [""]
+          "<nested>"  // gesture_options, scancodes{}, chords{}, gestures{}
         ],
-        //...
+        "<modifier + 1>": [  // assignment for hold event
+          // ...
+        ],
       },
-      //...
     },
-    {  // chords map
+    {  // chord table
       "<chord_scancodes>": {
         "<modifier>": [
-          "action_type",
-          // …and all the same structure
-          "<nested>"
+          // …same structure
         ],
-        //...
       },
-      //...
     },
-    {  // gestures map
+    {  // gesture table
       "<pool+vectors>": {
         "<modifier>": [
-          "action_type",
-          // …and all the same structure
-          "<nested>"  // (gesture_opts here contains the own recognition options)
+          // …same structure
+          // gesture_options here contains recognition settings
         ],
-        //...
       },
-      //...
     }
   ],
-  //...
 }
 ```
+##
+</details>
+</details>
+
+Assignment swapping is optional and not required for getting started – you can come back to it later.
+
+<details><summary>Moving assignments</summary>
+
+### > Assignment swapping
+
+The first button to the right of the process selector switches the interface into swap mode `🔀`. In this mode, navigation and modifier toggling are disabled.  
+
+You can swap assignments by dragging with the mouse or by pressing two physical keys sequentially. The swap includes all child events.  
+
+> Only assignments inside the program are affected – the system layout remains unchanged.  
+> Therefore, if you swap two keys with the `{Default}` action type, their visible “action” will not change. The swap still occurs – both keys simply continue to display their base value according to the layout.  
+
+After making changes, you can save them.  
+By default, only the swaps visible in the current view are saved – without applying them to other layouts or assignments hidden under modifiers.  
+
+If you need a more global swap, open the dropdown next to the `Save` button and choose the appropriate option.  
+
+Swaps are applied to all active layers.  
+In single-layer view/edit mode, they apply only to that layer.  
+
+##
+
+While dragging an assignment button, all incompatible swap targets, according to constraints, are disabled.  
+
+For example:
+- a key with a tap or hold assignment, except a modifier, cannot be swapped with system modifier keys;
+- a key with a hold assignment cannot be swapped with keys that do not support that event.
+
+##
+
+### > Copying and pasting assignments
+
+The three buttons next to swap mode control the assignment clipboard. It is available only in layer edit mode.  
+
+In the copy menu (`⧉`) three options are available:
+- copy current view – only the currently visible assignments – **child assignments for the current path and modifier**;
+- copy entire level – the current **tap** assignment and all its child assignments across **all modifiers** at the current path;
+- copy extended level – everything from the previous option **+ the same for hold**.  
+
+At the root level, the third option is unavailable (there is no “paired” event), and copying the entire level ignores the tap assignment (as it does not exist there).  
+
+##
+
+The copied view or level is placed into the clipboard, which can be opened via `👁`.  
+
+In clipboard view mode, assignments cannot be added or edited, but they can be **swapped**.  
+
+If an “extended level” was copied, switching between base events in the view is done via a dedicated button next to their assignments.  
+
+##
+
+If the clipboard contains assignments, the paste menu `📋` becomes available in layer edit mode.  
+
+Three paste options are available:
+- append – add only assignments from the clipboard that are not present in the current view;
+- merge – paste all assignments from the clipboard, replacing conflicting;
+- replace – completely clear the current view and insert all assignments from the clipboard, even if there are no conflicts.  
+
+In all cases, the clipboard is preserved and updated:
+- append – the clipboard retains only assignments that were not inserted (if all are inserted, it becomes empty);
+- merge – all replaced assignments are moved into the clipboard;
+- replace – the entire removed view is moved into the clipboard.  
+
+
+> Paste ignores active modifiers in the current view – assignments are applied only to the current path.  ; TODO
+
+</details>
+
+##
+
+### > Settings
+
+Finally, you can configure global behavior and interface preferences in the settings `🔧`.
+
+Here you can adjust everything from tap/hold timing and child-event timeouts to gesture colors and visual appearance.  
+
+Also check what the indicator and outline colors represent, and change them if needed (the `Colors` tab).  
+
+Before creating your first assignments, it is recommended to set the correct keyboard format (two-level Enter – `ISO`, otherwise – `ANSI`) and adjust the visual settings for comfort (the `GUI` tab: gui scale, reference height, font scale and name).  
 
 ---
 
-## 🤝 Contribute
+**That’s it – everything else comes down to how you set things up.**
+<br>
 
-All contributions welcome! Please open issues or PRs for new features or improvements.
+# 🤝 Support
 
-The easiest ways to contribute:
-- **Layers** – suggest your own unusual, useful, or just amusing uses for the project. It’s always interesting.
-- **Functions** – an endless field of suggestions, it can be really anything. But if it’s useful to you, it might be useful to someone else.
-- **GUI** – lots of valuable little things to fix.
-- …and of course you can just spread the word and share the link with your friends, acquaintances, and, maybe, subscribers 👾
+Any kind of contribution is welcome!
 
-> 🚧 The project is under active development and may contain bugs.
-> Please report all problems and suggestions in the Issues section.
+- Suggest ideas for new features and improvements  
+- Contribute useful layers and custom functions  
+- Share the project with friends, colleagues, or your subscribers  
+- If you create videos – Cadans really shines in motion, and this kind of overview is still missing
+- Support development directly: [$](https://ko-fi.com/uqqu_) / [₿](https://nowpayments.io/donation/uqqu)
+<br>
+
+> 🚧 The project is under active development – if you run into any issues, please [report them](https://github.com/uqqu/Cadans/issues).
