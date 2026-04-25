@@ -221,8 +221,28 @@ StartDraw(gestures:=false, *) {
     PresentOverlay()
     gest_overlay.Show("NA")
     MouseGetPos(&prev_x, &prev_y)
+    g_opts := ""
+
+    if init_drawing {
+        if !current_path[-1][4] {
+            try g_opts := _GetFirst(_GetUnholdEntries().ubase).gesture_opts
+        } else {
+            ubase := ROOTS[gui_lang]
+            for arr in current_path {
+                if A_Index == current_path.Length {
+                    break
+                } else if (A_Index - 1) == current_path.Length {
+                    ubase := ubase.GetBaseHoldMod(arr[1], arr[2] & ~1, arr[3], arr[4]).ubase
+                } else {
+                    ubase := ubase.GetBaseHoldMod(arr*).ubase
+                }
+            }
+            try g_opts := _GetFirst(ubase).gesture_opts
+        }
+    }
+
     SetOverlayOpts(
-        (await_gest ? _GetFin(await_gest[1]).gesture_opts : ""),
+        (g_opts || (await_gest ? _GetFin(await_gest[1]).gesture_opts : "")),
         GetPool(prev_x, prev_y)
     )
     SetTimer(TrackMouse, track_period)

@@ -599,7 +599,7 @@ FillGestures() {
 
     path := buffer_view ? buffer_path : current_path
 
-    if !path.Length || path[-1][4] || path[-1][3] || path[-1][2] & 1 {
+    if !path.Length || path[-1][4] || path[-1][3] {
         ToggleEnabled(0, UI["BtnAddNewGesture"], UI.gest_toggles)
         for i, val in [["Has nested gestures", 220], ["→", 190], ["", 0], ["", 0], ["", 0]] {
             UI["LV_gestures"].ModifyCol(i, val[2] * CONF.gui_scale.v, val[1])
@@ -640,10 +640,12 @@ FillGestures() {
         ["→", 30], ["Layer", 65], ["roll it back", 0]] {
         UI["LV_gestures"].ModifyCol(i, val[2] * CONF.gui_scale.v, val[1])
     }
+    entries := _GetUnholdEntries()
+
     ToggleEnabled(1, UI["BtnAddNewGesture"])
     checked_layers := layer_editing ? [selected_layer] : ActiveLayers.order
-    for vec_str, mods in gui_entries.ubase.gestures {
-        ubase := gui_entries.ubase.GetBaseHoldMod(vec_str, gui_mod_val, false, true).ubase
+    for vec_str, mods in entries.ubase.gestures {
+        ubase := entries.ubase.GetBaseHoldMod(vec_str, gui_mod_val, false, true).ubase
         child_node := _GetFirst(ubase)
         if !child_node {
             continue
@@ -677,7 +679,7 @@ FillGestures() {
             vec_str
         )
     }
-    ToggleEnabled(gui_entries && gui_entries.ubase && gui_entries.ubase !== ROOTS[gui_lang],
+    ToggleEnabled(entries && entries.ubase && entries.ubase !== ROOTS[gui_lang],
         UI["BtnAddNewGesture"])
     UI["LV_gestures"].ModifyCol(1, "Sort")
 }

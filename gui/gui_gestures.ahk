@@ -32,6 +32,7 @@ LVGestureDoubleClick(lv, row, from_selected:=false) {
             HandleKeyPress(t[1])
         }
     } else {
+        ResetHold()
         OneNodeDeeper(lv.GetText(row, 6), gui_mod_val, false, lv.GetText(row, 1))
     }
 }
@@ -47,9 +48,10 @@ AddNewGesture(*) {
 
 
 ShowSelectedGesture(*) {
-    parent_opts := _GetFirst(gui_entries.ubase).gesture_opts
+    entries := _GetUnholdEntries()
+    parent_opts := _GetFirst(entries.ubase).gesture_opts
     gest := _GetFirst(
-        gui_entries.ubase.GetBaseHoldMod(selected_gesture, gui_mod_val, false, true
+        entries.ubase.GetBaseHoldMod(selected_gesture, gui_mod_val, false, true
     ).ubase)
     SetOverlayOpts(parent_opts, gest.opts.pool)
     DrawExisting(gest)
@@ -74,7 +76,8 @@ DeleteSelectedGesture(*) {
 
     gest_layer := ""
     checked_layers := layer_editing ? [selected_layer] : ActiveLayers.order
-    ubase := gui_entries.ubase.GetBaseHoldMod(selected_gesture, gui_mod_val, false, true).ubase
+    ubase := _GetUnholdEntries().ubase
+        .GetBaseHoldMod(selected_gesture, gui_mod_val, false, true).ubase
     child_node := _GetFirst(ubase)
     for layer in checked_layers {
         if EqualNodes(child_node, _GetFirst(ubase, layer)) {
@@ -84,7 +87,18 @@ DeleteSelectedGesture(*) {
     }
 
     json_root := DeserializeMap(gest_layer)
-    res := current_path.Length ? _WalkJson(json_root[gui_lang], current_path) : json_root[gui_lang]
+    if !current_path.Length {
+        res := json_root[gui_lang]
+    } else if current_path[-1][2] & 1 {
+        path := current_path.Clone()
+        path.Length -= 1
+        path.Push(
+            current_path[-1][1], current_path[-1][2] & ~1, current_path[-1][3], current_path[-1][4]
+        )
+        res := _WalkJson(json_root[gui_lang], path)
+    } else {
+        res := _WalkJson(json_root[gui_lang], current_path)
+    }
     json_gestures := res[-1]
     if json_gestures[selected_gesture].Count !== 1 {
         json_gestures[selected_gesture].Delete(gui_mod_val)

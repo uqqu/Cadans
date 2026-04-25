@@ -10,19 +10,28 @@ child_behavior_opts := [
 
 OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
     ; 0 – base value, 1 – hold value, 2 – chord, 3 – gesture
-    global form, from_prev, gest_as_base
+    global form, func_form, from_prev, gest_as_base
 
     if _path is Array {
         _current_path := _path
         _gui_mod_val := _mod_val
         _gui_entries := _entries
     } else {  ; use global
-        _current_path := current_path
+        _current_path := current_path.Clone()
         _gui_mod_val := gui_mod_val
-        _gui_entries := gui_entries
+        _gui_entries := gui_entries.Clone()
+    }
+
+    if save_type == 3 && _current_path.Length && _current_path[-1][2] & 1 {
+        _gui_entries := _GetUnholdEntries()
+        p := _current_path[-1]
+        _current_path.Length -= 1
+        _current_path.Push([p[1], p[2] & ~1, p[3], p[4]])
     }
 
     try form.Destroy()
+    try func_form.Destroy()
+    func_form := false
 
     form := Gui("-SysMenu", "Set assignment")
     form.OnEvent("Close", CloseForm)
@@ -30,6 +39,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
 
     chord_as_base := false
     gest_as_base := false
+    paired := false
     ; check and correct if it "base" from chord/gesture
     if !save_type && _current_path.Length && (_current_path[-1][3] || _current_path[-1][4]) {
         entries := {ubase: ROOTS[gui_lang], uhold: false, umod: false}
@@ -56,6 +66,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
                 ? _gui_entries.ubase.GetBaseHoldMod(selected_gesture, _gui_mod_val, false, true)
                     .ubase
                 : _gui_entries.ubase
+        paired := save_type == 1 ? _gui_entries.ubase : false
     }
 
     layers := layer_editing ? [selected_layer] : GetLayerList()
@@ -74,7 +85,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         form.Add("Text", "x10 y+10 w60", "Layer:")
         form.Add("DropDownList", "x+5 yp-2 w235 vLayersDDL Choose1", layers)
         form["LayersDDL"].OnEvent("Change",
-            ChangeFormPlaceholder.Bind(unode, layers, save_type, 0, 1, 0)
+            ChangeFormPlaceholder.Bind(unode, paired, layers, save_type, 0, 1, 0)
         )
         try form["LayersDDL"].Text := prior_layer
     }
@@ -107,7 +118,8 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
                 form.Add("CheckBox", "x10 y+5 w300 vGradCycle" . name, "Gradient cycling"),
             )
             SendMessage(0x1501, true, StrPtr(CONF.gest_colors[i].v), form["ColorInp" . name].Hwnd)
-            SendMessage(0x1501, true, StrPtr("" . CONF.grad_len[i].v), form["GradLenInp" . name].Hwnd)
+            SendMessage(0x1501, true,
+                StrPtr("" . CONF.grad_len[i].v), form["GradLenInp" . name].Hwnd)
             form["Color" . name . "Pick"].OnEvent(
                 "Click", PasteColorFromPick.Bind(form.Hwnd, form["ColorInp" . name], true)
             )
@@ -135,10 +147,11 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         form.Add("CheckBox", "x-1000 y-1000 w0 h0 vCBIrrevocable")
 
         form["Cancel"].OnEvent("Click", CloseForm)
-        form["Save"].OnEvent("Click", WriteValue.Bind(save_type, false))
-        form["SaveWithReturn"].OnEvent("Click", (*) => (WriteValue(save_type, false), ChangePath(current_path.Length - 1)))
+        form["Save"].OnEvent("Click", WriteValue.Bind(save_type, false, false))
+        form["SaveWithReturn"].OnEvent("Click",
+            (*) => (WriteValue(save_type, false, false), ChangePath(current_path.Length - 1)))
         form.Show("w320")
-        ChangeFormPlaceholder(unode, layers, 1, , , 1)
+        ChangeFormPlaceholder(unode, paired, layers, 1, , , 1)
         return
     }
 
@@ -157,15 +170,15 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         form.Add("Text", "x10 y+10 w300 Center",
             "System modifiers can only be assigned`nas custom modifiers on hold")
         form["Cancel"].OnEvent("Click", CloseForm)
-        form["Save"].OnEvent("Click", WriteValue.Bind(save_type, _current_path))
+        form["Save"].OnEvent("Click", WriteValue.Bind(save_type, _current_path, false))
         form["Clear"].OnEvent("Click",
-            (*) => (form["ValInp"].Text := "0", WriteValue(save_type, _current_path)))
+            (*) => (form["ValInp"].Text := "0", WriteValue(save_type, _current_path, false)))
 
         SendMessage(0x1501, true, StrPtr("Modifier number (1-60)"), form["ValInp"].Hwnd)
         SendMessage(0x1501, true, StrPtr("GUI shortname"), form["Shortname"].Hwnd)
 
         form.Show("w320")
-        ChangeFormPlaceholder(unode, layers, 1, , , 1)
+        ChangeFormPlaceholder(unode, false, layers, 1, , , 1)
         form["ValInp"].Focus()
         return
     }
@@ -185,9 +198,9 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
     form.color_buttons := []
     form.colors := [[]]
 
-    if save_type == 0 {
+    if save_type < 2 {
         form.Add("Text", "x10 y+10 w150", "Tap🡒hold threshold (ms):")
-        form.Add("Edit", "yp-3 x+0 w150 vCustomLP Number +Center")
+        form.Add("Edit", "x+0 yp-3 w150 vCustomLP Number +Center")
         SendMessage(0x1501, true, StrPtr("Empty – follow global"), form["CustomLP"].Hwnd)
     } else if save_type == 2 {
         form.Add("Text", "x10 y+10 w150", "Hold confirmation (ms):")
@@ -200,7 +213,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         form.Add("Button", "x10 y+10 w280 vSetGesture", "Set gesture pattern")
             .OnEvent("Click", SetGesture)
         form.Add("Button", "x+0 yp+0 w20 vShowGesture", "🙈")
-            .OnEvent("Click", ShowGesture)
+            .OnEvent("Click", ShowGesture.Bind(_gui_entries))
 
         form.Add("Text", "x10 y+7 w150", "Scale impact:")
         form.Add("Edit", "x+0 yp-3 w150 vScaling +Center")
@@ -209,7 +222,8 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         form.Add("DDL", "x+0 yp-3 w150 Choose1 vRotate", 
             ["Follow global setting", "None", "Reduce orientation noise", "Rotation invariance"])
         form.Add("CheckBox", "x10 y+7 w300 vDirection", "Direction invariance")
-        form.Add("CheckBox", "x10 y+7 w300 vPhase", "Any start point (for closed figures only)").Enabled := false
+        form.Add("CheckBox", "x10 y+7 w300 vPhase",
+            "Any start point (for closed figures only)").Enabled := false
         if !selected_gesture {
             form["ShowGesture"].Enabled := false
         } else {
@@ -223,19 +237,12 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         _AddChainOptions(y)
 
     } else {
-        if save_type == 0 {
-            form.Add("Button", "x10 y+10 w100 vInChainToggle", "In-chain behavior")
-                .OnEvent("Click", ShowHideButtons)
-            form.Add("Button", "x+0 yp0 w100 vUpToggle", "Add. key-up action")
-                .OnEvent("Click", ShowHideButtons)
-            form.Add("Button", "x+0 yp0 w100 vColorToggle", "Gesture overlay")
-                .OnEvent("Click", ShowHideButtons)
-        } else {
-            form.Add("Button", "x10 y+10 w150 vInChainToggle", "In-chain behavior")
-                .OnEvent("Click", ShowHideButtons)
-            form.Add("Button", "x+0 yp0 w150 vUpToggle", "Add. key-up action")
-                .OnEvent("Click", ShowHideButtons)
-        }
+        form.Add("Button", "x10 y+10 w100 vInChainToggle", "In-chain behavior")
+            .OnEvent("Click", ShowHideButtons)
+        form.Add("Button", "x+0 yp0 w100 vUpToggle", "Add. key-up action")
+            .OnEvent("Click", ShowHideButtons)
+        form.Add("Button", "x+0 yp0 w100 vColorToggle", "Gesture overlay")
+            .OnEvent("Click", ShowHideButtons)
         form["InChainToggle"].GetPos(, &y, , &h)
         _AddChainOptions(y+h)
         form.chain_options.RemoveAt(1)
@@ -277,7 +284,8 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
                 form.Add("CheckBox", "x10 y+5 w300 vGradCycle" . name, "Gradient cycling"),
             )
             SendMessage(0x1501, true, StrPtr(CONF.gest_colors[i].v), form["ColorInp" . name].Hwnd)
-            SendMessage(0x1501, true, StrPtr("" . CONF.grad_len[i].v), form["GradLenInp" . name].Hwnd)
+            SendMessage(0x1501, true,
+                StrPtr("" . CONF.grad_len[i].v), form["GradLenInp" . name].Hwnd)
             form["Color" . name . "Pick"].OnEvent(
                 "Click", PasteColorFromPick.Bind(form.Hwnd, form["ColorInp" . name], true)
             )
@@ -285,7 +293,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         }
 
         form["UpTypeDDL"]
-            .OnEvent("Change", ChangeFormPlaceholder.Bind(unode, layers, save_type, 1, 0, 0))
+            .OnEvent("Change", ChangeFormPlaceholder.Bind(unode, false, layers, save_type, 1, 0, 0))
         form["UpTypeDDL"].Text := curr_val ? TYPES_R[curr_val.up_type] : "Disabled"
     }
     form.bottom := []
@@ -298,8 +306,8 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
     ; control
     fn := (save_type == 2
             ? (chord_as_base ? WriteChord.Bind(_current_path[-1][1]) : WriteChord.Bind(0))
-            : save_type == 3 ? (gest_as_base ? WriteGesture.Bind(_current_path[-1][1])
-                : WriteGesture.Bind(0)) : WriteValue.Bind(save_type, false))
+            : save_type == 3 ? (gest_as_base ? WriteGesture.Bind(_current_path[-1][1], _gui_entries, _current_path)
+                : WriteGesture.Bind(0, _gui_entries, _current_path)) : WriteValue.Bind(save_type, false, paired))
     form.Add("Button", "x10 y" . (8 + y + h) . " w100 h20 vCancel", "❌ Cancel").OnEvent("Click", CloseForm)
     form.Add("Button", "x+0 yp+0 w100 h20 Default vSave", "💾 Save").OnEvent("Click", fn)
     form.Add("Button", "x+0 yp+0 w100 h20 Default vSaveWithReturn", "↩ Save and back")
@@ -313,11 +321,12 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         }
     }
 
-    form["TypeDDL"].OnEvent("Change", ChangeFormPlaceholder.Bind(unode, layers, save_type, 0, 0, 0))
+    form["TypeDDL"].OnEvent("Change",
+        ChangeFormPlaceholder.Bind(unode, false, layers, save_type, 0, 0, 0))
     form["TypeDDL"].Text := curr_val ? TYPES_R[curr_val.down_type] : "Text"
     form["Save"].GetPos(, &y, , &h)
     form.Show("w320 h" . y+h+10)
-    ChangeFormPlaceholder(unode, layers, save_type, , , 1)
+    ChangeFormPlaceholder(unode, paired, layers, save_type, , , 1)
     if curr_val {
         if curr_val.custom_nk_time || curr_val.child_behavior !== 4
             || curr_val.is_instant || curr_val.is_irrevocable {
@@ -447,7 +456,7 @@ SetGesture(*) {
 }
 
 
-ShowGesture(*) {
+ShowGesture(entries, *) {
     try {
         scal := form["Scaling"].Text == "" ? CONF.scale_impact.v : Float(form["Scaling"].Text)
     } catch {
@@ -456,16 +465,31 @@ ShowGesture(*) {
     rot := form["Rotate"].Value == 1 ? CONF.gest_rotate.v : (form["Rotate"].Value - 1)
     dirs := form["Direction"].Value
     phase := form["Phase"].Value
-    SetOverlayOpts("", 5)
+
+    par := false
+    if current_path[-1][-1] {
+        par := {ubase: ROOTS[gui_lang]}
+        for arr in current_path {
+            if A_Index == current_path.Length {
+                break
+            } else if (A_Index - 1) == current_path.Length {
+                par := par.ubase.GetBaseHoldMod(arr[1], arr[2] & ~1, arr[3], arr[4])
+            } else {
+                par := par.ubase.GetBaseHoldMod(arr*)
+            }
+        }
+    }
 
     if from_prev {
         if gest_as_base {
-            gest := _GetFirst(gui_entries.ubase)
+            gest := _GetFirst(entries.ubase)
         } else {
             gest := _GetFirst(
-                gui_entries.ubase.GetBaseHoldMod(selected_gesture, gui_mod_val, false, true).ubase
+                entries.ubase.GetBaseHoldMod(selected_gesture, gui_mod_val, false, true).ubase
             )
         }
+        SetOverlayOpts(_GetFirst(par ? par.ubase : entries.ubase).gesture_opts, gest.opts.pool)
+
         if gest.opts.dirs = dirs && gest.opts.closed = phase {
             _gest := gest
         } else {
@@ -498,6 +522,8 @@ ShowGesture(*) {
             node_obj.opts.%name% := default_opts.%name%
         }
     }
+
+    SetOverlayOpts(_GetFirst(par ? par.ubase : entries.ubase).gesture_opts, node_obj.opts.pool)
     vals := StrSplit(gest_str[1], " ")
     node_obj.vec := []
     for v in vals {
@@ -512,7 +538,7 @@ ShowGesture(*) {
 }
 
 
-ChangeFormPlaceholder(unode, layers, save_type:=0, is_up:=0, is_layer_editing:=0, fresh:=0, *) {
+ChangeFormPlaceholder(unode, paired, layers, save_type:=0, is_up:=0, is_layer_editing:=0, fresh:=0, *) {
     static placeholders:=[
         "Disabled",
         "Default key value",
@@ -603,6 +629,26 @@ ChangeFormPlaceholder(unode, layers, save_type:=0, is_up:=0, is_layer_editing:=0
             }
         }
         title := "Existing" . name . "for layer '" . layer . "'"
+    }
+
+    if !is_up && paired && paired.layers.Length
+        && paired.layers.Has(layer) && paired.layers[layer][0] {
+        p := paired.layers[layer][0]
+        try form["CustomLP"].Text := p.custom_lp_time || ""
+        opts := StrSplit(p.gesture_opts, ";")
+        for i, name in [
+            "LiveHint", "ColorInp", "GradLenInp", "GradCycle",
+            "ColorInpEdges", "GradLenInpEdges", "GradCycleEdges",
+            "ColorInpCorners", "GradLenInpCorners", "GradCycleCorners",
+        ] {
+            if i > opts.Length {
+                break
+            }
+            if !opts[i] {
+                continue
+            }
+            form[name].Value := opts[i]
+        }
     }
 
     if !is_up && prev_layer !== layer {
@@ -862,7 +908,7 @@ FuncFormClose(*) {
 }
 
 
-WriteValue(is_hold, custom_path:=false, *) {
+WriteValue(is_hold, custom_path:=false, paired:=false, *) {
     vals := Map()
     for name in [
         "LayersDDL", "TypeDDL", "ValInp", "UpTypeDDL", "UpValInp", "CustomLP", "CustomNK",
@@ -921,17 +967,48 @@ WriteValue(is_hold, custom_path:=false, *) {
 
     CloseForm()
 
-    SaveValue(
-        is_hold,
-        (layer_editing ? selected_layer : (layers.Length == 1 ? layers[1] : vals["LayersDDL"])),
-        TYPES.%vals["TypeDDL"]%, vals["ValInp"],
-        TYPES.%vals["UpTypeDDL"] || "Disabled"%, vals["UpValInp"],
-        vals["CBInstant"], vals["CBIrrevocable"],
-        (vals["CustomLP"] != CONF.MS_LP.v ? vals["CustomLP"] : false),
-        (vals["CustomNK"] != CONF.MS_NK.v ? vals["CustomNK"] : false),
-        vals["ChildBehaviorDDL"], vals["Shortname"],
-        RTrim(gest_opts, ";"), custom_path
-    )
+    layer := layer_editing ? selected_layer : (layers.Length == 1 ? layers[1] : vals["LayersDDL"])
+    new_lp := vals["CustomLP"] != CONF.MS_LP.v ? vals["CustomLP"] : false
+    new_gest_opts := RTrim(gest_opts, ";")
+
+    if paired {
+        p := GetDefaultNode(current_path[-1][1], current_path[-1][2] & ~1)
+        try p := paired.layers[layer][0]
+        if p.custom_lp_time != new_lp || p.gesture_opts != new_gest_opts {
+            SaveValue(
+                0, layer,
+                p.down_type, p.down_val,
+                p.up_type, p.up_val,
+                p.is_instant, p.is_irrevocable,
+                new_lp,
+                p.custom_nk_time,
+                p.child_behavior, p.gui_shortname,
+                new_gest_opts, custom_path
+            )
+        }
+
+        SaveValue(
+            1, layer,
+            TYPES.%vals["TypeDDL"]%, vals["ValInp"],
+            TYPES.%vals["UpTypeDDL"] || "Disabled"%, vals["UpValInp"],
+            vals["CBInstant"], vals["CBIrrevocable"],
+            0,
+            (vals["CustomNK"] != CONF.MS_NK.v ? vals["CustomNK"] : false),
+            vals["ChildBehaviorDDL"], vals["Shortname"],
+            "", custom_path
+        )
+    } else {
+        SaveValue(
+            is_hold, layer,
+            TYPES.%vals["TypeDDL"]%, vals["ValInp"],
+            TYPES.%vals["UpTypeDDL"] || "Disabled"%, vals["UpValInp"],
+            vals["CBInstant"], vals["CBIrrevocable"],
+            new_lp,
+            (vals["CustomNK"] != CONF.MS_NK.v ? vals["CustomNK"] : false),
+            vals["ChildBehaviorDDL"], vals["Shortname"],
+            new_gest_opts, custom_path
+        )
+    }
 }
 
 
@@ -1054,7 +1131,7 @@ WriteChord(chord:=false, *) {
 }
 
 
-WriteGesture(as_base:=false, *) {
+WriteGesture(as_base, entries, path, *) {
     global form
 
     try {
@@ -1071,10 +1148,10 @@ WriteGesture(as_base:=false, *) {
         gest_str := GestureToStr(points, rot, scal, dirs, phase)
     } else {
         if as_base {
-            gest := _GetFirst(gui_entries.ubase)
+            gest := _GetFirst(entries.ubase)
         } else {
             gest := _GetFirst(
-                gui_entries.ubase.GetBaseHoldMod(selected_gesture, gui_mod_val, false, true).ubase
+                entries.ubase.GetBaseHoldMod(selected_gesture, gui_mod_val, false, true).ubase
             )
         }
         vals := StrSplit(gest.gesture_opts, ";")
@@ -1099,12 +1176,12 @@ WriteGesture(as_base:=false, *) {
         json_root[gui_lang] := ["", Map(), Map(), Map()]
     }
     if as_base {
-        path := current_path.Clone()
-        path.Length -= 1
-        res := current_path.Length > 1 ? _WalkJson(json_root[gui_lang], path)
+        _path := path.Clone()
+        _path.Length -= 1
+        res := path.Length > 1 ? _WalkJson(json_root[gui_lang], _path)
             : json_root[gui_lang]
     } else {
-        res := current_path.Length ? _WalkJson(json_root[gui_lang], current_path)
+        res := path.Length ? _WalkJson(json_root[gui_lang], path)
             : json_root[gui_lang]
     }
     json_gestures := res[-1]

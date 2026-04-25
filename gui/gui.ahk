@@ -342,7 +342,7 @@ _GetUnholdEntries() {
             }
         }
     } else {
-        _gui_entries := gui_entries
+        _gui_entries := gui_entries.Clone()
     }
     return _gui_entries
 }

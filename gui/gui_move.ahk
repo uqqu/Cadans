@@ -122,6 +122,17 @@ ChangePath(len:=-1, discard_md:=true, *) {
     UpdateKeys()
 }
 
+ResetHold() {
+    global current_path, gui_entries
+
+    if current_path && current_path[-1][2] & 1 {
+        gui_entries := _GetUnholdEntries()
+        p := current_path[-1]
+        current_path.Length -= 1
+        current_path.Push([p[1], p[2] & ~1, p[3], p[4]])
+    }
+}
+
 
 _TransferModifiers() {
     global gui_mod_val, gui_sysmods

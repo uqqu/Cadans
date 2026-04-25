@@ -92,6 +92,10 @@ LVLayerDoubleClick(lv, row, from_selected:=false) {
 
 
 LVLayerCheck(lv, row, is_right_click) {
+    if !row {
+        return
+    }
+
     icon_type := GetRowIconIndex(lv, row)
     if icon_type > 1 {  ; folder
         LVLayerDoubleClick(lv, row)
@@ -157,7 +161,11 @@ AddNewLayer(*) {
 
 
 EditSelectedLayer(*) {
+    static prev := false
+
+    try prev.Destroy()
     r_gui := Gui("-SysMenu", "Edit meta for `"" . last_selected_layer . "`"")
+    prev := r_gui
     r_gui.SetFont("s9")
 
     label_w := 70
