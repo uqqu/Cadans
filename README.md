@@ -80,9 +80,7 @@ If no gestures are defined for that zone, gesture drawing does not activate, and
 The example below demonstrates zone-specific assignments – gestures are assigned to RMB in all zones except the center.  
 As a result, behavior in the center remains system-default, while outside of it, 8 independent gesture groups become available:
 
-<p align="center">
-<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/rmb_gestures_demo.gif">
-</p>
+https://github.com/user-attachments/assets/1d3c148d-8408-46f2-87c9-88a7a4533e1c
 
 > This example is part of the default preset, which you can use as-is or customize  
 
@@ -98,9 +96,7 @@ These options can be combined within a single gesture or across multiple gesture
 
 Trigger keys also include visual settings for gestures: line color, gradient length and cycling, hint text position and its visibility during drawing.  
 
-<p align="center">
-<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/gesture_options.gif">
-</p>
+https://github.com/user-attachments/assets/1559d7d0-45ea-4503-865a-50629ccd3015
 
 ##
 
@@ -257,9 +253,7 @@ There are no depth limits for chains – from something like Morse code to full 
 
 Chains can consist of any event types, including chains made up entirely of chords or gestures.
 
-<p align="center">
-<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/nested_gesture.gif">
-</p>
+https://github.com/user-attachments/assets/c8595311-d7a6-46d7-a846-d1d9c4055fa7
 
 > The only type that does not have its own transition is the modifier.  
 > It plays the same logical role – opening new assignment fields – but within the current level.  
@@ -452,11 +446,8 @@ For gestures, this field cannot be empty. If not specified, the action text will
 
 ---
 
-<details><summary>GIF overview: adding assignments for all events and their special features (4 minutes ._.)</summary>
-<p align="center">
-<img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/assignments_demo.gif">
-</p>
-</details>
+https://github.com/user-attachments/assets/d0ebd374-b51b-4404-94bf-0b4216ec0f7c
+
 <br>
 
 # 🖥️ GUI
@@ -567,7 +558,8 @@ When a non-global context is selected, holding `Alt` shows which layers contribu
 ### > Additional interface details (optional)
 
 The list panels are fairly self-explanatory, so feel free to explore them directly.  
-> tldr: Double-clicking on an item navigates to it; pressing `Alt` still displays tooltips. More detailed descriptions are included below if needed.
+> tldr: Double-clicking on an item navigates to it; pressing `Alt` still displays tooltips.  
+More detailed descriptions are included below if needed.
 
 <details><summary>Bottom lists (chords, gestures, layers)</summary>
 
