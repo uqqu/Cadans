@@ -51,15 +51,6 @@ _Move(sc, is_hold) {
     if CheckLRMB(current_path) {
         return
     }
-    if SYS_MODIFIERS.Has(sc) {
-        if buffer_view {
-            return
-        }
-        path := current_path.Clone()
-        path.Push([sc, 0, 0, 0])
-        OpenForm(1, path, 0, gui_entries.ubase.GetBaseHoldMod(sc, 0, 0, 0))
-        return
-    }
     OneNodeDeeper(sc, gui_mod_val + is_hold)
 }
 

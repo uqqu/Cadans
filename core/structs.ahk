@@ -490,7 +490,6 @@ UpdLayers() {
         root.BuildActives(ActiveLayers.order)
     }
     curr_unode := ROOTS[gui_lang ?? 0]
-    SetSysModHotkeys()
     ToggleFreeze(0)
 }
 

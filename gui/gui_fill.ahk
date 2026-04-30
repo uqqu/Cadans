@@ -184,6 +184,7 @@ FillOneButton(sc, btn, d_sc, is_disabled:=false) {
     }
 
     htxt := ""
+    sep := SubStr(sc, 1, 2) == "vk" ? " / " : "`n"
     if m_node {
         v := 1 << m_node.down_val
         if gui_mod_val && gui_mod_val & v == v {
@@ -192,23 +193,23 @@ FillOneButton(sc, btn, d_sc, is_disabled:=false) {
             _AddIndicators(res.umod, btn, true)
             backgr := CONF.modifier_color.v
         }
-        htxt := "`n" . (m_node.gui_shortname ? m_node.gui_shortname : m_node.down_val)
+        htxt := sep . (m_node.gui_shortname ? m_node.gui_shortname : m_node.down_val)
     } else if h_node {
         _AddIndicators(res.uhold, btn, true)
         switch h_node.down_type {
             case TYPES.Default:
-                htxt := "`n" . _GetKeyName(sc)
+                htxt := sep . _GetKeyName(sc)
             case TYPES.Text:
-                htxt := "`n" . CheckDiacr(h_node.down_val)
+                htxt := sep . CheckDiacr(h_node.down_val)
             case TYPES.KeySimulation:
-                htxt := "`n" . _GetKeyName(d_sc, false, false, h_node.down_val)
+                htxt := sep . _GetKeyName(d_sc, false, false, h_node.down_val)
             case TYPES.Function:
-                htxt := "`n" . h_node.down_val
+                htxt := sep . h_node.down_val
             case TYPES.Chord:
                 backgr := CONF.chord_part_color.v
         }
         if h_node.gui_shortname {
-            htxt := "`n" . h_node.gui_shortname
+            htxt := sep . h_node.gui_shortname
         }
     }
 
@@ -217,7 +218,7 @@ FillOneButton(sc, btn, d_sc, is_disabled:=false) {
     }
 
     if temp_chord {
-        if ONLY_BASE_SCS.Has(sc) || SYS_MODIFIERS.Has(sc)
+        if ONLY_BASE_SCS.Has(sc)
             || !h_node && m_node && m_node.down_type == TYPES.Modifier
             || !current_path.Length && (sc == "LButton" || sc == "RButton") {
             btn.Enabled := false

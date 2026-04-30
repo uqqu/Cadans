@@ -274,7 +274,8 @@ HandleKeyPress(sc) {
         ButtonLMB(sc)
     } else {
         bnode := _GetFirst(gui_entries.ubase.GetBaseHoldMod(sc, gui_mod_val).ubase)
-        is_hold := KeyWait(SC_STR[sc],
+        str := NUM_VK.Has(sc) ? NUM_VK[sc][GetKeyState("NumLock", "T") || 2] : SC_STR[sc]
+        is_hold := KeyWait(str,
             (bnode && bnode.custom_lp_time ? "T" . bnode.custom_lp_time / 1000 : CONF.T))
         if active_hwnd == UI.Hwnd {  ; with postcheck
             is_hold ? ButtonLMB(sc) : ButtonRMB(sc)

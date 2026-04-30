@@ -86,9 +86,40 @@ DrawKeys() {
 
             if data.Length > 1 {
                 sc := data[2]
+
+                if CONF.dual_numpad.v && NUM_VK.Has(sc) {
+                    pair := NUM_VK[sc]
+
+                    h1 := Floor(h / 2)
+                    h2 := h - h1
+
+                    btn1 := UI.Add("Button", "v" . pair[1] . " x" . x * CONF.gui_scale.v
+                        . " y" . y . " w" . w . " h" . h1 . " +0x8000")
+
+                    btn2 := UI.Add("Button", "v" . pair[2] . " x" . x * CONF.gui_scale.v
+                        . " y" . (y + h1) . " w" . w . " h" . h2 . " +0x8000")
+
+                    btn1.indicators := []
+                    btn2.indicators := []
+
+                    UI.buttons[pair[1]] := btn1
+                    UI.buttons[pair[2]] := btn2
+
+                    ALL_SCANCODES.Push(pair[1], pair[2])
+
+                    btn1.OnEvent("Click", ButtonLMB.Bind(pair[1]))
+                    btn1.OnEvent("ContextMenu", ButtonRMB.Bind(pair[1]))
+                    btn2.OnEvent("Click", ButtonLMB.Bind(pair[2]))
+                    btn2.OnEvent("ContextMenu", ButtonRMB.Bind(pair[2]))
+
+                    x += logical_w + spacing
+                    continue
+                }
+
                 if sc !== "CurrMod" {
                     ALL_SCANCODES.Push(sc)
                 }
+
                 if sc == 0x11D {
                     UI[CONF.layout_format.v == "ISO" ? "54" : "310"].GetPos(&shx, , &shw)
                     w := shx + shw - x * CONF.gui_scale.v + 1
@@ -98,6 +129,7 @@ DrawKeys() {
                     sc == 0x11C || sc == 0x4E || sc == 0x1C && CONF.layout_format.v == "ISO"
                     ? height + spacing : 0
                 )
+
                 if row_idx == 1 && CONF.extra_k_row.v {
                     h /= 1.5
                 }
@@ -346,15 +378,15 @@ _BuildLayout(layout) {
     res := []
     if CONF.extra_k_row.v {
         res.Push(R(
-            [85], [w, GetKeySC("Volume_Mute")], [w, GetKeySC("Volume_Down")],
-            [w, GetKeySC("Volume_Up")], [w, GetKeySC("Media_Next")], [w, GetKeySC("Media_Prev")],
-            [w, GetKeySC("Media_Stop")], [w, GetKeySC("Media_Play_Pause")],
-            [25], [w, GetKeySC("Browser_Back")], [w, GetKeySC("Browser_Forward")],
-            [w, GetKeySC("Browser_Refresh")], [w, GetKeySC("Browser_Stop")],
-            [w, GetKeySC("Browser_Search")], [w, GetKeySC("Browser_Favorites")],
-            [w, GetKeySC("Browser_Home")],
-            [24], [w, GetKeySC("Launch_Mail")], [w, GetKeySC("Launch_Media")],
-            [w, GetKeySC("Launch_App1")], [w, GetKeySC("Launch_App2")]
+            [85], [w, "Volume_Mute"], [w, "Volume_Down"],
+            [w, "Volume_Up"], [w, "Media_Next"], [w, "Media_Prev"],
+            [w, "Media_Stop"], [w, "Media_Play_Pause"],
+            [25], [w, "Browser_Back"], [w, "Browser_Forward"],
+            [w, "Browser_Refresh"], [w, "Browser_Stop"],
+            [w, "Browser_Search"], [w, "Browser_Favorites"],
+            [w, "Browser_Home"],
+            [24], [w, "Launch_Mail"], [w, "Launch_Media"],
+            [w, "Launch_App1"], [w, "Launch_App2"]
         ))
     }
     if CONF.extra_f_row.v {  ; f13-f24

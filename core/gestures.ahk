@@ -544,6 +544,15 @@ LiveHint(pts, gestures) {
         DllCall("gdiplus\GdipSetCompositingMode", "ptr", g, "int", 0)  ; SourceOver
     }
 
+    if !g || !brush_bg || bw <= 0 || bh <= 0 {
+        FileAppend(
+            "Bad FillRectangle args: g=" . g . " brush_bg=" . brush_bg
+            . " bx=" . bx . " by=" . by . " bw=" . bw . " bh=" . bh,
+            A_ScriptDir . "\error_log.txt"
+        )
+        return
+    }
+
     DllCall("gdiplus\GdipFillRectangle", "ptr", g, "ptr", brush_bg,
         "float", bx, "float", by, "float", bw, "float", bh)  ; NTT
 

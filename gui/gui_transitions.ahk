@@ -264,23 +264,9 @@ StartDragButtons(obj) {
 
 
 HideInappropriate(sc) {
-    if SYS_MODIFIERS.Has(sc) {
+    if ONLY_BASE_SCS.Has(sc) {
         for name, btn in UI.buttons {
-            if name == "CurrMod" || ONLY_BASE_SCS.Has(name) {
-                btn.Enabled := false
-            } else if SYS_MODIFIERS.Has(name) {
-                btn.Enabled := true
-            } else {
-                res := gui_entries.ubase.GetBaseHoldMod(name, gui_mod_val, 0, 0, 0, 0)
-                b_node := _GetFirst(res.ubase)
-                h_node := _GetFirst(res.uhold)
-                m_node := _GetFirst(res.umod)
-                btn.Enabled := !b_node && (!h_node || m_node)
-            }
-        }
-    } else if ONLY_BASE_SCS.Has(sc) {
-        for name, btn in UI.buttons {
-            if name == "CurrMod" || SYS_MODIFIERS.Has(name) {
+            if name == "CurrMod" {
                 btn.Enabled := false
             } else if ONLY_BASE_SCS.Has(name) {
                 btn.Enabled := true
@@ -297,14 +283,10 @@ HideInappropriate(sc) {
         m_node := _GetFirst(res.umod)
 
         b := b_node && !h_node
-        h := !b_node && (!h_node || m_node)
         for name in ONLY_BASE_SCS {
             try UI[String(name)].Enabled := b
         }
         b := b_node || (h_node && !m_node)
-        for name in SYS_MODIFIERS {
-            try UI[String(name)].Enabled := h
-        }
     }
 }
 

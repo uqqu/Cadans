@@ -155,34 +155,6 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         return
     }
 
-    ; sysmod
-    if _current_path.Length && SYS_MODIFIERS.Has(_current_path[-1][1]) {
-        form.Title := "Set modifier value"
-        form.Add("Text", "x10 y+10 w60", "Mod value:")
-        form.Add("Edit", "x+5 yp-2 w235 Number vValInp")
-        form.Add("Text", "x10 y+10 w60", "Shortname:")
-        form.Add("Edit", "x+5 yp-2 w235 vShortname")
-        form.Add("Button", "x10 y+10 w100 h20 vCancel", "❌ Cancel")
-        form.Add("Button", "x+0 yp+0 w100 h20 Default vSave", "💾 Save")
-        form.Add("Button", "x+0 yp+0 w100 h20 vClear", "🧹 Clear")
-
-        form.SetFont("Italic cGray")
-        form.Add("Text", "x10 y+10 w300 Center",
-            "System modifiers can only be assigned`nas custom modifiers on hold")
-        form["Cancel"].OnEvent("Click", CloseForm)
-        form["Save"].OnEvent("Click", WriteValue.Bind(save_type, _current_path, false))
-        form["Clear"].OnEvent("Click",
-            (*) => (form["ValInp"].Text := "0", WriteValue(save_type, _current_path, false)))
-
-        SendMessage(0x1501, true, StrPtr("Modifier number (1-60)"), form["ValInp"].Hwnd)
-        SendMessage(0x1501, true, StrPtr("GUI shortname"), form["Shortname"].Hwnd)
-
-        form.Show("w320")
-        ChangeFormPlaceholder(unode, false, layers, 1, , , 1)
-        form["ValInp"].Focus()
-        return
-    }
-
     ; action types for different events
     type_list := [
         ["Disabled", "Default", "Text", "KeySimulation", "Function"],  ; base / hold under mods

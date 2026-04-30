@@ -7,8 +7,7 @@ await_hold := false
 await_nest := false
 await_gest := false
 await_mod := false
-await_chord_part := false
-await_chord_full := false
+await_chord := false
 
 prev_unode := false
 child_behavior := false
@@ -17,6 +16,7 @@ catched_gui_func := false
 is_key_processing := false
 current_ctx := 1
 current_mod := 0
+taphold_fn := false
 
 current_presses := Map()
 chord_presses := OrderedMap()
@@ -35,17 +35,33 @@ stack := []  ; queue of overlapping presses
 #Include "gui\gui.ahk"
 #Include "core\keys.ahk"
 
-SetSysModHotkeys()
+sysmod_state := Map()
+for sc in SYS_MODIFIERS {
+    sysmod_state[sc] := 0
+}
 
 ;Logger.Start()
 ;Logger.level := 3
 
 
 PreCheck(sc, *) {
-    global catched_entries
+    global catched_entries, await_hold, await_mod
 
-    if current_presses.Has(sc) || current_mod || is_key_processing
-        || await_hold || await_nest || await_gest || chord_presses.Length
+    for msc, state in sysmod_state {
+        if state == 2 {
+            if SYS_MODIFIERS.Has(sc) {
+                sysmod_state[sc] := 2
+            }
+            return false
+        }
+    }
+
+    if SYS_MODIFIERS.Has(sc) {
+        sysmod_state[sc] := 2
+    }
+
+    if current_presses.Has(sc) || is_key_processing
+        || await_hold || await_gest || await_nest || chord_presses.Length
         || is_drawing || GuiCheck(sc) {
         return true
     }
@@ -53,9 +69,14 @@ PreCheck(sc, *) {
     CheckLayout()
 
     catched_entries := GetEntries(sc)
-    if !catched_entries && curr_unode !== ROOTS[CONF.LayoutAliases[current_layout]] {
-        ToRoot()
-        catched_entries := GetEntries(sc)
+    if !catched_entries {
+        if curr_unode !== ROOTS[CONF.LayoutAliases[current_layout]] {
+            ToRoot()
+            catched_entries := GetEntries(sc)
+        }
+        ResetTHTimer()
+        await_hold := false
+        await_mod := false
     }
     return catched_entries
 }
@@ -127,40 +148,41 @@ TimerSendCurrent() {
 
 
 SendAwaiting(order, sc:=0) {
-    global await_hold, await_nest, await_gest, await_mod, await_chord_part
+    global await_hold, await_nest, await_gest, await_mod
 
     b := false
 
     for symb in StrSplit(order) {
         if symb == "h" && await_hold {
-            fin := _GetFin(await_hold[1])
             t := await_hold
             if !sc || t[2] == sc {
                 await_hold := false
+                ResetTHTimer()
                 if !b {
-                    TransitionProcessing(t[1], t[2])
+                    TransitionProcessing(t[1], t[2], t[4])
                     b := true
                 }
             }
         }
         if symb == "p" && await_hold {
-            fin := _GetFin(await_hold[3])
             t := await_hold
             if !sc || t[2] == sc {
                 await_hold := false
+                ResetTHTimer()
                 if !b {
-                    TransitionProcessing(t[3], t[2])
+                    TransitionProcessing(t[3], t[2], t[4])
                     b := true
                 }
             }
         }
         if symb == "n" && await_nest {
             fin := _GetFin(await_nest[1])
-            t := [await_nest[1], await_nest[2]]
+            t := [await_nest[1], await_nest[2], await_nest[3]]
             await_nest := false
             if !b {
                 if t[2] !== -1 && fin {
-                    SendKbd(fin.down_type, fin.down_val)
+                    SendKbd(fin.down_type, t[3] && fin.down_type == TYPES.Default
+                        ? t[3] : fin.down_val)
                     if up_actions.Has(t[2]) {
                         SendKbd(up_actions[t[2]].up_type, up_actions[t[2]].up_val)
                         up_actions.Delete(t[2])
@@ -168,20 +190,21 @@ SendAwaiting(order, sc:=0) {
                 }
             }
         }
-        if symb == "g" && await_gest {
-            fin := _GetFin(await_gest[1])
+        if symb == "g" && is_drawing {
             t := await_gest
-            if !sc || t[2] == sc {
+            if !sc || t && t[2] == sc {
                 await_gest := false
                 if !b {
                     res := EndDraw()
                     if res !== -1 {
-                        if res == false || res[1] < CONF.min_cos_similarity.v || res[2] == "" {
-                            if !chord_presses.Has(t[2]) && (!current_mod || sc == t[2]) {
-                                TransitionProcessing(t*)
+                        if res == false || res[2] == "" || res[1] < CONF.min_cos_similarity.v {
+                            if t && t[4] && !chord_presses.Has(t[2]) && (!current_mod || sc == t[2]) {
+                                TransitionProcessing(t[1], t[2], t[3])
                             }
                         } else {
-                            TimerResetChord(t[2])
+                            if t {
+                                TimerResetChord(t[2])
+                            }
                             TransitionProcessing(res[2])
                         }
                     }
@@ -191,7 +214,6 @@ SendAwaiting(order, sc:=0) {
             }
         }
         if symb == "m" && await_mod {
-            fin := _GetFin(await_mod[1])
             t := await_mod
             await_mod := false
             if !b && t[2] == sc {
@@ -203,29 +225,29 @@ SendAwaiting(order, sc:=0) {
 }
 
 
-ToRoot(extra_mod:=0) {
+ToRoot() {
     global curr_unode, prev_unode
     curr_unode := ROOTS[current_layout]
     prev_unode := false
-    TransferModifiers(extra_mod)
+    TransferModifiers()
 }
 
 
-StepBack(extra_mod:=0) {
+StepBack() {
     global curr_unode, prev_unode
 
     if prev_unode {
         curr_unode := prev_unode
         prev_unode := false
-        TransferModifiers(extra_mod)
+        TransferModifiers()
     } else {
-        ToRoot(extra_mod)
+        ToRoot()
     }
 }
 
 
 TreatMod(entries, sc) {
-    global current_mod, child_behavior, await_mod, await_gest
+    global current_mod, child_behavior, await_mod
 
     if !entries.umod {
         return false
@@ -254,11 +276,14 @@ TimerResetMod() {
     try up_actions.Delete(await_mod[2])
     await_mod := false
     prev_unode := false
+    if await_gest {
+        await_gest[4] := false
+    }
 }
 
 
 TimerResetChord(sc) {
-    global prev_node, await_chord_part
+    global prev_unode
 
     if chord_presses.Has(sc) {
         try up_actions.Delete(sc)
@@ -268,8 +293,8 @@ TimerResetChord(sc) {
 }
 
 
-TransitionProcessing(checked_unode, sc:=0) {
-    global curr_unode, prev_unode, current_presses, up_actions, await_nest, await_gest
+TransitionProcessing(checked_unode, sc:=0, snapshot:=false) {
+    global curr_unode, prev_unode, await_nest
 
     if is_drawing {
         return
@@ -286,7 +311,7 @@ TransitionProcessing(checked_unode, sc:=0) {
     TreatUpAction(checked_unode, sc)
 
     if !scs.Count && !chs.Count {
-        SendKbd(fin.down_type, fin.down_val)
+        SendKbd(fin.down_type, snapshot && fin.down_type == TYPES.Default ? snapshot : fin.down_val)
         if !fin.is_irrevocable && curr_unode !== ROOTS[current_layout] && !chord_presses.Length {
             ToRoot()
         } else if sc && !chord_presses.Has(sc) {
@@ -296,10 +321,10 @@ TransitionProcessing(checked_unode, sc:=0) {
     }
 
     if fin.is_instant {
-        SendKbd(fin.down_type, fin.down_val)
-        await_nest := [checked_unode, -1]
+        SendKbd(fin.down_type, snapshot && fin.down_type == TYPES.Default ? snapshot : fin.down_val)
+        await_nest := [checked_unode, -1, snapshot]
     } else {
-        await_nest := [checked_unode, sc]
+        await_nest := [checked_unode, sc, snapshot]
     }
 
     if !fin.is_irrevocable {
@@ -314,15 +339,14 @@ TransitionProcessing(checked_unode, sc:=0) {
 }
 
 
-TransferModifiers(extra_mod:=0) {
+TransferModifiers() {
     global current_mod
 
     if !current_mod {
-        current_mod := extra_mod
         return
     }
 
-    current_mod := extra_mod
+    current_mod := 0
     for sc in current_presses {
         res_md := curr_unode.GetModFin(sc, true)
         if res_md {
@@ -339,7 +363,7 @@ TreatGest(entries, sc) {
     if entries.ubase && gests.Count {
         CollectPool(gests)
         if pool_gestures.Length {
-            await_gest := [entries.ubase, sc]
+            await_gest := [entries.ubase, sc, false, true]
             StartDraw()
         }
     }
@@ -347,21 +371,21 @@ TreatGest(entries, sc) {
 
 
 TreatChord(entries, sc) {
-    global await_chord_full, await_chord_part, chord_presses
+    global await_chord
 
     SetTimer(SendChord, 0)
     if !chord_presses.Has(sc) {
-        chord_presses.Set(sc, true)
+        chord_presses.Set(sc, !SYS_MODIFIERS.Has(sc))
     }
 
     res := curr_unode.GetNode(ChordToStr(chord_presses.map), current_mod, true, false, true)
     if res {
         fin := _GetFin(res)
         if fin && fin.custom_lp_time {
-            await_chord_full := res
+            await_chord := res
             SetTimer(SendChord, -fin.custom_lp_time)
         } else {
-            await_chord_full := false
+            await_chord := false
             for ch_sc in chord_presses.map {
                 TimerResetChord(ch_sc)
             }
@@ -374,27 +398,83 @@ TreatChord(entries, sc) {
 
 
 TreatTapHold(entries, sc) {
-    global await_hold, await_gest
+    global await_hold, taphold_fn
 
-    await_hold := [(entries.ubase ? entries.ubase : GetDefaultSim(sc)[1]), sc, entries.uhold]
+    snapshot := GetModifierSnapshot()
+    if snapshot {
+        snapshot .= sc is Number ? SC_STR_BR[sc] : ("{" . sc . "}")
+    }
+
+    await_hold := [(entries.ubase ? entries.ubase
+        : GetDefaultSim(sc, false)[1]), sc, entries.uhold, snapshot]
 
     fin := _GetFin(await_hold[1])
-    is_hold := KeyWait(
-        SC_STR[sc],
-        ((fin && fin.custom_lp_time) ? ("T" . fin.custom_lp_time / 1000) : CONF.T)
-    )
+    str := NUM_VK.Has(sc) ? NUM_VK[sc][GetKeyState("NumLock", "T") || 2] : SC_STR[sc]
+
+    if manual_hold.Has(sc) {
+        taphold_fn := _TapHoldHandler.Bind(sc, 0, snapshot, str)
+        SetTimer(taphold_fn, -((fin && fin.custom_lp_time) ? fin.custom_lp_time : CONF.MS_LP.v))
+    } else {
+        is_hold := KeyWait(
+            str,
+            ((fin && fin.custom_lp_time) ? ("T" . fin.custom_lp_time / 1000) : CONF.T)
+        )
+        _TapHoldHandler(sc, is_hold, snapshot)
+    }
+}
+
+
+_TapHoldHandler(sc, is_hold, snapshot, manual:=false) {
+    global await_hold, await_gest
+
+    ResetTHTimer()
+
+    if manual {
+        is_hold := GetKeyState(manual)
+    }
 
     if is_hold && await_hold {
         SendAwaiting("h", sc)
     } else if !is_hold && await_hold {
-        TreatUpAction(catched_entries.uhold, sc)
+        TreatUpAction(await_hold[3], sc)
         if is_drawing {
-            await_gest := [catched_entries.uhold, sc]
+            await_gest := [await_hold[3], sc, snapshot, true]
         } else {
-            TransitionProcessing(catched_entries.uhold)
+            TransitionProcessing(await_hold[3], 0, snapshot)
         }
     }
     await_hold := false
+}
+
+
+ResetTHTimer() {
+    global taphold_fn
+
+    if taphold_fn {
+        SetTimer(taphold_fn, 0)
+        taphold_fn := false
+    }
+}
+
+
+GetModifierSnapshot() {
+    static mds:=Map(
+        0x02A, "+", 0x036, "+", 0x136, "+",
+        0x01D, "^", 0x11D, "^",
+        0x038, "!", 0x138, "!",
+        0x15B, "#", 0x15C, "#")
+
+    seen := Map()
+    str := ""
+    for sc, state in sysmod_state {
+        char := mds[sc]
+        if state && !seen.Has(char) {
+            str .= char
+            seen[char] := true
+        }
+    }
+
+    return str
 }
 
 
@@ -407,8 +487,8 @@ TreatUpAction(unode, sc) {
 }
 
 
-OnKeyDown(sc, extra_mod:=0, rec:=false, forced:=false) {
-    global catched_entries, catched_gui_func, is_key_processing, current_mod, await_nest
+OnKeyDown(sc, rec:=false, forced:=false, *) {
+    global catched_entries, catched_gui_func, is_key_processing, await_nest, await_hold, await_mod
 
     if init_drawing && sc == "RButton" {
         StartDraw()
@@ -423,10 +503,27 @@ OnKeyDown(sc, extra_mod:=0, rec:=false, forced:=false) {
             if !wh {
                 current_presses[sc] := true
             }
-            stack.Push([sc, extra_mod])
-            if await_hold && CONF.interruption_behavior.v > 1 {
-                SendAwaiting(CONF.interruption_behavior.v == 3 ? "gp" : "gh")
-                OnKeyDownRec()
+            stack.Push(sc)
+            b := true
+            for msc, state in sysmod_state {
+                if state == 1 {
+                    b := false
+                    break
+                }
+            }
+
+            if !b {
+                await_mod := false
+            }
+            if await_hold {
+                if !b {
+                    ResetTHTimer()
+                    await_hold := false
+                    OnKeyDownRec()
+                } else if CONF.interruption_behavior.v > 1 {
+                    SendAwaiting(CONF.interruption_behavior.v == 3 ? "gp" : "gh")
+                    OnKeyDownRec()
+                }
             }
         }
         return
@@ -448,7 +545,6 @@ OnKeyDown(sc, extra_mod:=0, rec:=false, forced:=false) {
         return
     }
 
-    current_mod |= extra_mod
     if !catched_entries {
         CheckLayout()
         SendAwaiting("g")
@@ -467,9 +563,9 @@ OnKeyDown(sc, extra_mod:=0, rec:=false, forced:=false) {
                 SendAwaiting("n")
             }
             if ch_bh < 3 && prev_unode {
-                StepBack(extra_mod)
+                StepBack()
             } else {
-                ToRoot(extra_mod)
+                ToRoot()
             }
             catched_entries := GetEntries(sc)
         }
@@ -493,6 +589,8 @@ OnKeyDown(sc, extra_mod:=0, rec:=false, forced:=false) {
     }
 
     if !catched_entries {
+        ResetTHTimer()
+        await_hold := false
         if current_mod && ch_bh == 5 {
             OnKeyDownRec()
             return
@@ -500,16 +598,20 @@ OnKeyDown(sc, extra_mod:=0, rec:=false, forced:=false) {
         if chord_presses.Length {
             is_key_processing := false
             catched_entries := false
-            InterruptChord(extra_mod)
+            InterruptChord()
         }
         sim := GetDefaultNode(sc, current_mod)
         if !rec {
-            stack.Push([sc, extra_mod])
+            stack.Push(sc)
         } else {
             SendKbd(sim.down_type, sim.down_val)
         }
         OnKeyDownRec()
         return
+    }
+
+    if SYS_MODIFIERS.Has(sc) {
+        sysmod_state[sc] := 1
     }
 
     if !wh {
@@ -520,14 +622,14 @@ OnKeyDown(sc, extra_mod:=0, rec:=false, forced:=false) {
     uhold_scs := _GetScancodes(catched_entries.uhold)
     uhold_chs := _GetChords(catched_entries.uhold)
 
-    if catched_entries.uhold && uhold_fin && uhold_fin.down_type == TYPES.Chord {
+    if catched_entries.uhold && uhold_fin && uhold_fin.down_type == TYPES.Chord {  ; chords
         TreatChord(catched_entries, sc)
         TreatGest(catched_entries, sc)
-    } else if chord_presses.Length && chord_presses.Any() {
+    } else if chord_presses.Length && chord_presses.Any() {  ; chord interruption; re
         is_key_processing := false
         catched_entries := false
-        InterruptChord(extra_mod)
-        stack.Push([sc, extra_mod])
+        InterruptChord()
+        stack.Push(sc)
     } else {
         TreatGest(catched_entries, sc)
         if catched_entries.umod {
@@ -539,7 +641,14 @@ OnKeyDown(sc, extra_mod:=0, rec:=false, forced:=false) {
             && !uhold_scs.Count
             && !uhold_chs.Count
         ) {
-            TransitionProcessing(catched_entries.ubase, sc)
+            if SYS_MODIFIERS.Has(sc) {  ; fake mod
+                await_mod := catched_entries.ubase
+                    ? [catched_entries.ubase, sc] : GetDefaultSim(sc, true)
+                mfin := _GetFin(await_mod[1])
+                SetTimer(TimerResetMod, -((mfin && mfin.custom_lp_time) || CONF.MS_LP.v))
+            } else {
+                TransitionProcessing(catched_entries.ubase, sc)
+            }
         } else {
             TreatTapHold(catched_entries, sc)
         }
@@ -555,19 +664,19 @@ OnKeyDownRec() {
     is_key_processing := false
     if stack.Length {
         t := stack.RemoveAt(1)
-        OnKeyDown(t[1], t[2], true)
+        OnKeyDown(t, true)
     }
 }
 
 
-InterruptChord(extra_mod, up_sc:=0) {
-    global await_chord_full, chord_presses
+InterruptChord(up_sc:=0) {
+    global await_chord
 
     b := false
     for sc in chord_presses.order {
         if chord_presses[sc] {
             b := true
-            OnKeyDown(sc, extra_mod, true, true)
+            OnKeyDown(sc, true, true)
             chord_presses.Set(sc, false)
             if sc == up_sc && up_actions.Has(sc) {
                 SendKbd(up_actions[sc].up_type, up_actions[sc].up_val)
@@ -577,26 +686,26 @@ InterruptChord(extra_mod, up_sc:=0) {
     }
     if b {
         SetTimer(SendChord, 0)
-        await_chord_full := false
+        await_chord := false
     }
 }
 
 
 SendChord() {
-    global await_chord_full, chord_presses
+    global await_chord
 
-    if !await_chord_full {
+    if !await_chord {
         return
     }
     res := curr_unode.GetNode(ChordToStr(chord_presses.map), current_mod, true, false, true)
-    if res == await_chord_full {
+    if res == await_chord {
         for sc in chord_presses.map {
             TimerResetChord(sc)
         }
         ;chord_presses := OrderedMap()
         TransitionProcessing(res)
     }
-    await_chord_full := false
+    await_chord := false
 }
 
 
@@ -618,16 +727,16 @@ GetDefaultSim(sc, extended:=false) {
 }
 
 
-OnKeyUp(sc, extra_mod:=0) {
+OnKeyUp(sc, *) {
     global current_mod, child_behavior
 
-    if extra_mod {  ; separately count modifiers from hotkeys with system keys
-        current_mod &= ~extra_mod
+    if SYS_MODIFIERS.Has(sc) {
+        sysmod_state[sc] := 0
     }
 
     if chord_presses.Length && chord_presses.Any() {
         SendAwaiting("g", sc)
-        InterruptChord(extra_mod, sc)
+        InterruptChord(sc)
     } else {
         SendAwaiting("gmh", sc)
     }

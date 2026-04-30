@@ -170,6 +170,9 @@ _GetKeyName(sc, with_keytype:=false, to_short:=false, from_sc_str:=false) {
     }
 
     res := sc
+    if SubStr(sc, 1, 2) == "vk" {
+        res := GetKeyName(sc)
+    }
     if from_sc_str {
         res := GetKeyName(SubStr(from_sc_str, 2, -1))
         if !res {

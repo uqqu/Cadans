@@ -43,13 +43,34 @@ SYS_MODIFIERS := Map(
     0x15C, ">#"
 )
 
+NUM_VK := Map(
+    0x047, ["vk67", "vk24"],  ; 7 / Home
+    0x048, ["vk68", "vk26"],  ; 8 / Up
+    0x049, ["vk69", "vk21"],  ; 9 / PgUp
+    0x04B, ["vk64", "vk25"],  ; 4 / Left
+    0x04C, ["vk65", "vk0C"],  ; 5 / Clear
+    0x04D, ["vk66", "vk27"],  ; 6 / Right
+    0x04F, ["vk61", "vk23"],  ; 1 / End
+    0x050, ["vk62", "vk28"],  ; 2 / Down
+    0x051, ["vk63", "vk22"],  ; 3 / PgDn
+    0x052, ["vk60", "vk2D"],  ; 0 / Insert
+    0x053, ["vk6E", "vk2E"]   ; . / Delete
+)
+
 ONLY_BASE_SCS := Map()
+SC_STR := Map()
+unstable_sc := Map()
+manual_hold := Map()
+
 for name in ["Volume_Mute", "Volume_Down", "Volume_Up", "Media_Next", "Media_Prev", "Media_Stop",
     "Media_Play_Pause", "Browser_Back", "Browser_Forward", "Browser_Refresh", "Browser_Stop",
     "Browser_Search", "Browser_Favorites", "Browser_Home", "Launch_Mail", "Launch_Media",
     "Launch_App1", "Launch_App2"] {
-    ONLY_BASE_SCS[GetKeySC(name)] := true
+    SC_STR[name] := name
+    unstable_sc[GetKeySC(name)] := true
+    manual_hold[name] := true
 }
+
 for name in ["WheelLeft", "WheelDown", "WheelUp", "WheelRight"] {
     ONLY_BASE_SCS[name] := true
 }
@@ -60,9 +81,18 @@ for i, v in TYPES_R {
     TYPES.%v% := i
 }
 
-SC_STR := Map()
+for vk in [
+    "vk24", "vk67", "vk26", "vk68", "vk21", "vk69", "vk25", "vk64", "vk0C", "vk65", "vk27",
+    "vk66", "vk23", "vk61", "vk28", "vk62", "vk22", "vk63", "vk2D", "vk60", "vk2E", "vk6E"] {
+    SC_STR[vk] := vk
+}
+
+
 SC_STR_BR := []
 loop 511 {
+    if unstable_sc.Has(A_Index) {
+        continue
+    }
     curr := Format("SC{:03X}", A_Index)
     SC_STR[A_Index] := curr
     SC_STR_BR.Push("{" . curr . "}")
@@ -73,6 +103,7 @@ for key in [
     "WheelUp", "WheelDown", "WheelLeft", "WheelRight"
 ] {
     SC_STR[key] := key
+    unstable_sc[GetKeySC(key)] := true
 }
 
 LANGS := OrderedMap()
@@ -106,7 +137,7 @@ ErrorHandler(err, mode) {
     Suspend true
     FileAppend(
         Format("{1}`n{2}`n`n", err.Message, err.Stack),
-        A_ScriptDir "\error_log.txt"
+        A_ScriptDir . "\error_log.txt"
     )
     return false
 }
@@ -181,6 +212,8 @@ CheckConfig() {
     CONF.interruption_behavior := ConfValue("Main", "InterruptionBehavior", "ddl", "int",
         "Tap/hold &interruption behavior:", 1, , ,
         [["Ordered / await result", "Send tap", "Send hold"], false])
+    CONF.dual_numpad := ConfValue("Main", "DualNumpad", "checkbox", "int",
+        "Split Num&Pad keys", 0)
     CONF.extra_f_row := ConfValue("Main", "ExtraFRow", "checkbox", "int",
         "Use extra &f-row (F13-F24)", 0)
     CONF.extra_k_row := ConfValue("Main", "ExtraKRow", "checkbox", "int",
@@ -675,7 +708,8 @@ SaveConfig(*) {
     if b == -1 {
         return
     } else if b {
-        if s_gui["ExtraFRow"].Value != CONF.extra_f_row.v
+        if s_gui["DualNumpad"].Value != CONF.dual_numpad.v
+            || s_gui["ExtraFRow"].Value != CONF.extra_f_row.v
             || s_gui["ExtraKRow"].Value != CONF.extra_k_row.v
             || s_gui["UseSendTextOutput"].Value != CONF.sendtext_output.v {
             b := 2

@@ -538,7 +538,10 @@ AltHelp() {
 _GetKeyInfo(sc, md, cur_entries, prev_entries,
     only_base:=false, only_hold:=false, is_chord:=false, is_gesture:=false, layer:="") {
     if !is_chord && !is_gesture {
-        txt := "Key '" . _GetKeyName(sc, , true) . "' (sc " . sc . ")"
+        txt := "Key '" . _GetKeyName(sc, , true) . "'"
+        if sc is Number {
+            txt .= " (sc " . sc . ")"
+        }
     } else if is_chord {
         txt := "Chord '" . sc . "'"
     } else if is_gesture {

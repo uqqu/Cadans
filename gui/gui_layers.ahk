@@ -161,7 +161,7 @@ AddNewLayer(*) {
 
 
 EditSelectedLayer(*) {
-    static prev := false
+    static prev:=false
 
     try prev.Destroy()
     r_gui := Gui("-SysMenu", "Edit meta for `"" . last_selected_layer . "`"")
