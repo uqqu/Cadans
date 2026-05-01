@@ -66,7 +66,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
                 ? _gui_entries.ubase.GetBaseHoldMod(selected_gesture, _gui_mod_val, false, true)
                     .ubase
                 : _gui_entries.ubase
-        paired := save_type == 1 ? _gui_entries.ubase : false
+        paired := save_type == 1 ? _gui_entries.ubase : save_type == 0 ? _gui_entries.uhold : false
     }
 
     layers := layer_editing ? [selected_layer] : GetLayerList()
@@ -209,12 +209,19 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         _AddChainOptions(y)
 
     } else {
-        form.Add("Button", "x10 y+10 w100 vInChainToggle", "In-chain behavior")
-            .OnEvent("Click", ShowHideButtons)
-        form.Add("Button", "x+0 yp0 w100 vUpToggle", "Add. key-up action")
-            .OnEvent("Click", ShowHideButtons)
-        form.Add("Button", "x+0 yp0 w100 vColorToggle", "Gesture overlay")
-            .OnEvent("Click", ShowHideButtons)
+        if AWMods.Has(_current_path[-1][1]) {
+            form.Add("Button", "x10 y+10 w150 vInChainToggle", "In-chain behavior")
+                .OnEvent("Click", ShowHideButtons)
+            form.Add("Button", "x+0 yp0 w150 vUpToggle", "Add. key-up action")
+                .OnEvent("Click", ShowHideButtons)
+        } else {
+            form.Add("Button", "x10 y+10 w100 vInChainToggle", "In-chain behavior")
+                .OnEvent("Click", ShowHideButtons)
+            form.Add("Button", "x+0 yp0 w100 vUpToggle", "Add. key-up action")
+                .OnEvent("Click", ShowHideButtons)
+            form.Add("Button", "x+0 yp0 w100 vColorToggle", "Gesture overlay")
+                .OnEvent("Click", ShowHideButtons)
+        }
         form["InChainToggle"].GetPos(, &y, , &h)
         _AddChainOptions(y+h)
         form.chain_options.RemoveAt(1)
@@ -944,11 +951,16 @@ WriteValue(is_hold, custom_path:=false, paired:=false, *) {
     new_gest_opts := RTrim(gest_opts, ";")
 
     if paired {
-        p := GetDefaultNode(current_path[-1][1], current_path[-1][2] & ~1)
-        try p := paired.layers[layer][0]
-        if p.custom_lp_time != new_lp || p.gesture_opts != new_gest_opts {
+        p := false
+        if paired.layers && paired.layers.Has(layer) && paired.layers[layer][0] {
+            p := paired.layers[layer][0]
+        } else if new_gest_opts {
+            p := GetDefaultNode(current_path[-1][1], current_path[-1][2] & ~1)
+        }
+        if p && (p.custom_lp_time && p.custom_lp_time != new_lp
+            || is_hold && new_gest_opts && new_gest_opts != p.gesture_opts) {
             SaveValue(
-                0, layer,
+                !is_hold, layer,
                 p.down_type, p.down_val,
                 p.up_type, p.up_val,
                 p.is_instant, p.is_irrevocable,
@@ -960,14 +972,14 @@ WriteValue(is_hold, custom_path:=false, paired:=false, *) {
         }
 
         SaveValue(
-            1, layer,
+            is_hold, layer,
             TYPES.%vals["TypeDDL"]%, vals["ValInp"],
             TYPES.%vals["UpTypeDDL"] || "Disabled"%, vals["UpValInp"],
             vals["CBInstant"], vals["CBIrrevocable"],
-            0,
+            new_lp,
             (vals["CustomNK"] != CONF.MS_NK.v ? vals["CustomNK"] : false),
             vals["ChildBehaviorDDL"], vals["Shortname"],
-            "", custom_path
+            is_hold ? "" : new_gest_opts, custom_path
         )
     } else {
         SaveValue(

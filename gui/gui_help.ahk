@@ -414,6 +414,10 @@ AltHelp() {
     } else if i_sc == "BtnBaseClear" {
         t := path[-1][3] ? "chord" : path[-1][4] ? "gesture" : "tap"
         txt := "Delete this " . t . " assignment"
+        if obj.Enabled == false && UI["TextBase"].Text !== "Base" {
+            txt .= "`n`nThis is an automatically generated value for the working of the chains."
+                . "`nIt cannot be deleted as long as there are child assignments."
+        }
     } else if i_sc == "BtnBaseClearNest" {
         t := path[-1][3] ? "chord" : path[-1][4] ? "gesture" : "tap"
         txt := "Delete nested assignments under this " . t . " assignment"
@@ -441,6 +445,10 @@ AltHelp() {
             return
         }
         txt := "Delete this hold assignment"
+        if obj.Enabled == false && UI["TextHold"].Text !== "Hold" {
+            txt .= "`n`nThis is an automatically generated value for the working of the chains."
+                . "`nIt cannot be deleted as long as there are child assignments."
+        }
     } else if i_sc == "BtnHoldClearNest" {
         if path[-1][3] || path[-1][4] {
             prev_hwnd := 0

@@ -273,10 +273,12 @@ HandleKeyPress(sc) {
     } else if SubStr(sc, 1, 5) == "Wheel" {
         ButtonLMB(sc)
     } else {
-        bnode := _GetFirst(gui_entries.ubase.GetBaseHoldMod(sc, gui_mod_val).ubase)
+        node := gui_entries.ubase.GetBaseHoldMod(sc, gui_mod_val)
+        bnode := _GetFirst(node.ubase)
+        hnode := _GetFirst(node.uhold)
         str := NUM_VK.Has(sc) ? NUM_VK[sc][GetKeyState("NumLock", "T") || 2] : SC_STR[sc]
-        is_hold := KeyWait(str,
-            (bnode && bnode.custom_lp_time ? "T" . bnode.custom_lp_time / 1000 : CONF.T))
+        t := bnode && bnode.custom_lp_time || hnode && hnode.custom_lp_time
+        is_hold := KeyWait(str, t ? ("T" . t / 1000) : CONF.T)
         if active_hwnd == UI.Hwnd {  ; with postcheck
             is_hold ? ButtonLMB(sc) : ButtonRMB(sc)
         }

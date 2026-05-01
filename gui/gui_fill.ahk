@@ -60,10 +60,12 @@ FillSetButtons() {
         path := buffer_path
     } else {
         ToggleVisibility(1, UI.current_values)
-        ToggleEnabled(1, UI["BtnBase"], UI["BtnBaseClear"])
-        ToggleEnabled(current_path[-1][3] == false && current_path[-1][4] == false,
-            UI["BtnHold"], UI["BtnHoldClear"])
+        ToggleEnabled(1, UI["BtnBase"], UI["BtnBaseClear"], UI["BtnHold"], UI["BtnHoldClear"])
         path := current_path
+    }
+
+    if CheckLRMB(path) || (path.Length && (path[-1][3] || path[-1][4])) {
+        ToggleVisibility(0, UI["TextHold"], UI["BtnHold"], UI["BtnHoldClear"], UI["BtnHoldClearNest"])
     }
 
     entries := _GetUnholdEntries()
@@ -81,12 +83,17 @@ FillSetButtons() {
                     0, UI["Btn" . txt], UI["Btn" . txt . "Clear"], UI["Btn" . txt . "ClearNest"])
                 continue
             }
+            md := (path[-1][2] & ~1) + A_Index - 1
             if !curr_node {
                 ToggleEnabled(false, UI["Btn" . txt . "Clear"], UI["Btn" . txt . "ClearNest"])
                 continue
             } else if !curr_node.down_type {
                 ToggleVisibility(false, [UI["Text" . txt], UI["Btn" . txt]])
                 continue
+            } else if curr_node.down_type == (md ? 1 : 2) && curr_node.up_type == 1
+                && !curr_node.custom_lp_time && !curr_node.custom_nk_time && !curr_node.is_instant
+                && !curr_node.is_irrevocable && curr_node.child_behavior == 4 {
+                ToggleEnabled(false, UI["Btn" . txt . "Clear"], UI["Btn" . txt . "ClearNest"])
             }
             _AddIndicators(arr[2], UI["Btn" . txt], false, ignore_hold_count)
 
@@ -115,15 +122,16 @@ FillSetButtons() {
         }
     }
 
-    if CheckLRMB(current_path) {
-        UI["BtnHold"].Enabled := false
+    if path.Length && AWMods.Has(path[-1][1]) {
+        UI["BtnBase"].Enabled := false
     }
     UI.SetFont("Norm")
 }
 
 
 FillKeyboard() {
-    b := CheckLRMB(current_path)
+    b := CheckLRMB(current_path) || current_path.Length
+        && !(current_path[-1][2] & 1) && AWMods.Has(current_path[-1][1])
     for sc, btn in UI.buttons {
         if sc == "CurrMod" {
             btn.SetFont("Italic")
@@ -164,7 +172,6 @@ FillOneButton(sc, btn, d_sc, is_disabled:=false) {
             try backgr := Format("{:#06x}", Integer("0x" . opts[5]))
             try backgr := Format("{:#06x}", Integer("0x" . opts[2]))
         }
-        UI["BtnBaseClear"].Enabled := true
         _AddIndicators(res.ubase, btn)
         switch b_node.down_type {
             case TYPES.Default:
@@ -600,7 +607,8 @@ FillGestures() {
 
     path := buffer_view ? buffer_path : current_path
 
-    if !path.Length || path[-1][4] || path[-1][3] {
+    if !path.Length || path[-1][4] || path[-1][3]
+        || SubStr(path[-1][1], 1, 2) == "Wh" && path[-1][1] !== "WhClick" || AWMods.Has(path[-1][1]) {
         ToggleEnabled(0, UI["BtnAddNewGesture"], UI.gest_toggles)
         for i, val in [["Has nested gestures", 220], ["→", 190], ["", 0], ["", 0], ["", 0]] {
             UI["LV_gestures"].ModifyCol(i, val[2] * CONF.gui_scale.v, val[1])

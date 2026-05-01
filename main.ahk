@@ -47,15 +47,6 @@ for sc in SYS_MODIFIERS {
 PreCheck(sc, *) {
     global catched_entries, await_hold, await_mod
 
-    for msc, state in sysmod_state {
-        if state == 2 {
-            if SYS_MODIFIERS.Has(sc) {
-                sysmod_state[sc] := 2
-            }
-            return false
-        }
-    }
-
     if SYS_MODIFIERS.Has(sc) {
         sysmod_state[sc] := 2
     }
@@ -98,6 +89,16 @@ CheckLayout() {
 GetEntries(sc) {
     static cache:=Map(), mem_version:=0
 
+    chord_state := false
+    for msc, state in sysmod_state {
+        if sc !== msc && state == 2 {
+            return false
+        }
+        if state == 3 {
+            chord_state := true
+        }
+    }
+
     if version !== mem_version {
         cache := Map()
         mem_version := version
@@ -112,6 +113,9 @@ GetEntries(sc) {
     }
 
     if !entries.ubase && !entries.uhold && !entries.umod {
+        return false
+    } else if chord_state &&
+        (!entries.uhold || !(h := _GetFin(entries.uhold)) || h.down_type !== TYPES.Chord) {
         return false
     } else if entries.umod || entries.uhold || entries.ubase && (
         (fin := _GetFin(entries.ubase)) && (
@@ -258,6 +262,10 @@ TreatMod(entries, sc) {
         return false
     }
 
+    if SYS_MODIFIERS.Has(sc) {
+        sysmod_state[sc] := 1
+    }
+
     val := fin.down_val
     child_behavior := fin.child_behavior
 
@@ -265,7 +273,7 @@ TreatMod(entries, sc) {
     current_mod |= 1 << val
 
     mfin := _GetFin(await_mod[1])
-    SetTimer(TimerResetMod, -((mfin && mfin.custom_lp_time) || CONF.MS_LP.v))
+    SetTimer(TimerResetMod, -((fin && fin.custom_lp_time) || (mfin && mfin.custom_lp_time) || CONF.MS_LP.v))
     return true
 }
 
@@ -311,7 +319,10 @@ TransitionProcessing(checked_unode, sc:=0, snapshot:=false) {
     TreatUpAction(checked_unode, sc)
 
     if !scs.Count && !chs.Count {
-        SendKbd(fin.down_type, snapshot && fin.down_type == TYPES.Default ? snapshot : fin.down_val)
+        if !SYS_MODIFIERS.Has(sc) || fin.down_type !== TYPES.Default {
+            SendKbd(fin.down_type,
+                snapshot && fin.down_type == TYPES.Default ? snapshot : fin.down_val)
+        }
         if !fin.is_irrevocable && curr_unode !== ROOTS[current_layout] && !chord_presses.Length {
             ToRoot()
         } else if sc && !chord_presses.Has(sc) {
@@ -321,7 +332,10 @@ TransitionProcessing(checked_unode, sc:=0, snapshot:=false) {
     }
 
     if fin.is_instant {
-        SendKbd(fin.down_type, snapshot && fin.down_type == TYPES.Default ? snapshot : fin.down_val)
+        if !SYS_MODIFIERS.Has(sc) || fin.down_type !== TYPES.Default {
+            SendKbd(fin.down_type,
+                snapshot && fin.down_type == TYPES.Default ? snapshot : fin.down_val)
+        }
         await_nest := [checked_unode, -1, snapshot]
     } else {
         await_nest := [checked_unode, sc, snapshot]
@@ -342,15 +356,14 @@ TransitionProcessing(checked_unode, sc:=0, snapshot:=false) {
 TransferModifiers() {
     global current_mod
 
-    if !current_mod {
-        return
-    }
-
     current_mod := 0
     for sc in current_presses {
         res_md := curr_unode.GetModFin(sc, true)
         if res_md {
             current_mod |= 1 << res_md.down_val
+            if sysmod_state.Get(sc, false) {
+                sysmod_state[sc] := 1
+            }
         }
     }
 }
@@ -375,7 +388,11 @@ TreatChord(entries, sc) {
 
     SetTimer(SendChord, 0)
     if !chord_presses.Has(sc) {
-        chord_presses.Set(sc, !SYS_MODIFIERS.Has(sc))
+        chord_presses.Set(sc, true)
+    }
+
+    if SYS_MODIFIERS.Has(sc) {
+        sysmod_state[sc] := 3
     }
 
     res := curr_unode.GetNode(ChordToStr(chord_presses.map), current_mod, true, false, true)
@@ -409,16 +426,15 @@ TreatTapHold(entries, sc) {
         : GetDefaultSim(sc, false)[1]), sc, entries.uhold, snapshot]
 
     fin := _GetFin(await_hold[1])
+    hfin := _GetFin(entries.uhold)
     str := NUM_VK.Has(sc) ? NUM_VK[sc][GetKeyState("NumLock", "T") || 2] : SC_STR[sc]
+    t := (hfin && hfin.custom_lp_time) || (fin && fin.custom_lp_time)
 
     if manual_hold.Has(sc) {
         taphold_fn := _TapHoldHandler.Bind(sc, 0, snapshot, str)
-        SetTimer(taphold_fn, -((fin && fin.custom_lp_time) ? fin.custom_lp_time : CONF.MS_LP.v))
+        SetTimer(taphold_fn, -(t || CONF.MS_LP.v))
     } else {
-        is_hold := KeyWait(
-            str,
-            ((fin && fin.custom_lp_time) ? ("T" . fin.custom_lp_time / 1000) : CONF.T)
-        )
+        is_hold := KeyWait(str, (t ? ("T" . t / 1000) : CONF.T))
         _TapHoldHandler(sc, is_hold, snapshot)
     }
 }
@@ -506,7 +522,7 @@ OnKeyDown(sc, rec:=false, forced:=false, *) {
             stack.Push(sc)
             b := true
             for msc, state in sysmod_state {
-                if state == 1 {
+                if state {
                     b := false
                     break
                 }
@@ -514,11 +530,15 @@ OnKeyDown(sc, rec:=false, forced:=false, *) {
 
             if !b {
                 await_mod := false
+                if await_gest {
+                    await_gest[4] := false
+                }
             }
             if await_hold {
                 if !b {
                     ResetTHTimer()
                     await_hold := false
+                    current_presses.Delete(sc)
                     OnKeyDownRec()
                 } else if CONF.interruption_behavior.v > 1 {
                     SendAwaiting(CONF.interruption_behavior.v == 3 ? "gp" : "gh")
@@ -547,6 +567,9 @@ OnKeyDown(sc, rec:=false, forced:=false, *) {
 
     if !catched_entries {
         CheckLayout()
+        if await_gest && SYS_MODIFIERS.Has(await_gest[2]) {
+            await_gest[4] := false
+        }
         SendAwaiting("g")
         catched_entries := GetEntries(sc)
     }
@@ -610,10 +633,6 @@ OnKeyDown(sc, rec:=false, forced:=false, *) {
         return
     }
 
-    if SYS_MODIFIERS.Has(sc) {
-        sysmod_state[sc] := 1
-    }
-
     if !wh {
         current_presses[sc] := true
     }
@@ -675,6 +694,10 @@ InterruptChord(up_sc:=0) {
     b := false
     for sc in chord_presses.order {
         if chord_presses[sc] {
+            if SYS_MODIFIERS.Has(sc) && (!up_sc || sc !== up_sc) {
+                chord_presses.Set(sc, false)
+                continue
+            }
             b := true
             OnKeyDown(sc, true, true)
             chord_presses.Set(sc, false)
@@ -759,7 +782,7 @@ OnKeyUp(sc, *) {
             b := true
         }
     }
-    if b {
+    if b || SYS_MODIFIERS.Has(sc) && !await_nest {
         ToRoot()
     }
 }

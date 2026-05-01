@@ -47,6 +47,9 @@ GuiCheck(sc, *) {
 
     ; if the focus is on the our GUI – process separately
     if active_hwnd == UI.Hwnd {
+        if sc == 15 && GetKeyState("Alt") {
+            return false
+        }
         catched_gui_func := true  ; memorize for main func; cannot be performed now due to keywait
         return true
     } else if s_gui && s_gui.Hwnd && active_hwnd == s_gui.Hwnd && PasteSCToInput(sc) {

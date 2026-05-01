@@ -43,6 +43,8 @@ SYS_MODIFIERS := Map(
     0x15C, ">#"
 )
 
+AWMods := Map(56, 0, 312, 0, 347, 0, 348, 0)
+
 NUM_VK := Map(
     0x047, ["vk67", "vk24"],  ; 7 / Home
     0x048, ["vk68", "vk26"],  ; 8 / Up
@@ -173,7 +175,7 @@ CheckConfig() {
     if !FileExist("config.ini") {
         FileAppend(
             "[Main]`r`n"
-            . "ActiveLayers=`r`n"
+            . "ActiveLayers=Personal`r`n"
             . "UserLayouts=`r`n"
             . "ChosenTags=Active, Inactive`r`n"
             . "`r`n[GUI]`r`n"

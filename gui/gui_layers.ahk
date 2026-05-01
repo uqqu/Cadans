@@ -325,7 +325,12 @@ DeleteSelectedLayer(*) {
         AddNewLayer()
     }
     last_selected_layer := ""
-    UpdateKeys()
+    ReadLayers()
+    FillRoots()
+    UpdLayers()
+    FillLayerTags()
+    FillLayers()
+    FillOther()
 }
 
 
