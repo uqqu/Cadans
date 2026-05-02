@@ -22,7 +22,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         _gui_entries := gui_entries.Clone()
     }
 
-    if save_type == 3 && _current_path.Length && _current_path[-1][2] & 1 {
+    if _current_path.Length && _current_path[-1][2] & 1 {
         _gui_entries := _GetUnholdEntries()
         p := _current_path[-1]
         _current_path.Length -= 1
@@ -147,9 +147,9 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         form.Add("CheckBox", "x-1000 y-1000 w0 h0 vCBIrrevocable")
 
         form["Cancel"].OnEvent("Click", CloseForm)
-        form["Save"].OnEvent("Click", WriteValue.Bind(save_type, false, false))
+        form["Save"].OnEvent("Click", WriteValue.Bind(save_type, _current_path, false))
         form["SaveWithReturn"].OnEvent("Click",
-            (*) => (WriteValue(save_type, false, false), ChangePath(current_path.Length - 1)))
+            (*) => (WriteValue(save_type, _current_path, false), ChangePath(current_path.Length - 1)))
         form.Show("w320")
         ChangeFormPlaceholder(unode, paired, layers, 1, , , 1)
         return
@@ -286,7 +286,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
     fn := (save_type == 2
             ? (chord_as_base ? WriteChord.Bind(_current_path[-1][1]) : WriteChord.Bind(0))
             : save_type == 3 ? (gest_as_base ? WriteGesture.Bind(_current_path[-1][1], _gui_entries, _current_path)
-                : WriteGesture.Bind(0, _gui_entries, _current_path)) : WriteValue.Bind(save_type, false, paired))
+                : WriteGesture.Bind(0, _gui_entries, _current_path)) : WriteValue.Bind(save_type, _current_path, paired))
     form.Add("Button", "x10 y" . (8 + y + h) . " w100 h20 vCancel", "❌ Cancel").OnEvent("Click", CloseForm)
     form.Add("Button", "x+0 yp+0 w100 h20 Default vSave", "💾 Save").OnEvent("Click", fn)
     form.Add("Button", "x+0 yp+0 w100 h20 Default vSaveWithReturn", "↩ Save and back")

@@ -672,6 +672,11 @@ OnKeyDown(sc, rec:=false, forced:=false, *) {
             TreatTapHold(catched_entries, sc)
         }
     }
+
+    if await_nest && AWMods.Has(sc) && (f := _GetFin(await_nest[1])) && (!f.is_instant || f.down_type < 3) {
+        SendInput("{vkE8}")
+    }
+
     OnKeyDownRec()
 }
 

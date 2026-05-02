@@ -574,17 +574,16 @@ _GetKeyInfo(sc, md, cur_entries, prev_entries,
             txt .= _GetNodeStrInfo(is_chord || is_gesture ? "Action" : "Tap",
                 b_node, cur_entries.ubase, is_gesture, layer)
         }
-        if m_node || h_node && h_node.down_type == TYPES.Modifier {
-            node := m_node ? m_node : h_node
-            cnt := _CountChild("", 0, 1 << node.down_val,
+        if h_node && h_node.down_type == TYPES.Modifier {
+            cnt := _CountChild("", 0, 1 << h_node.down_val,
                 prev_entries.ubase.scancodes,
                 prev_entries.ubase.chords,
                 prev_entries.ubase.gestures)
-            cnt_combined := _CountChild("", 0, 1 << node.down_val,
+            cnt_combined := _CountChild("", 0, 1 << h_node.down_val,
                 prev_entries.ubase.scancodes,
                 prev_entries.ubase.chords,
                 prev_entries.ubase.gestures, true)
-            txt .= "`n`nHold: modifier " . node.down_val
+            txt .= "`n`nHold: modifier " . h_node.down_val
                 . " with " . cnt . " assignments under it"
             if cnt_combined > cnt {
                 txt .= " (+" . cnt_combined - cnt . " from combined modifiers)"
@@ -598,10 +597,10 @@ _GetKeyInfo(sc, md, cur_entries, prev_entries,
                     act_layers := ""
                     inact_layers := ""
                     act_cnt := 0
-                    t_unode := m_node ? cur_entries.umod : cur_entries.uhold
+                    t_unode := cur_entries.uhold
                     for l in t_unode.layers.order {
                         t_node := _GetFirst(t_unode, l)
-                        if t_node.down_type == TYPES.Default || EqualNodes(t_node, node) {
+                        if t_node.down_type == TYPES.Default || EqualNodes(t_node, h_node) {
                             if ActiveLayers.Has(l) {
                                 act_layers .= l . ", "
                                 act_cnt += 1
@@ -623,7 +622,7 @@ _GetKeyInfo(sc, md, cur_entries, prev_entries,
                     }
                 }
             }
-            txt .= _GetNodeExtraInfo(node) . "`n"
+            txt .= _GetNodeExtraInfo(h_node) . "`n"
         } else if h_node {
             txt .= _GetNodeStrInfo("Hold", h_node, cur_entries.uhold, , layer)
         }
