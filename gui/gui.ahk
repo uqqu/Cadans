@@ -164,7 +164,7 @@ ClearNested(is_hold, layer:="", *) {
     if layer_editing {
         selected_layers := [selected_layer]
     } else if ActiveLayers.Length == 1 {
-        selected_layers := ActiveLayers.GetAll()
+        selected_layers := ActiveLayers.order
     } else {
         layers := []
         checked_node := _GetFirst(is_hold ? gui_entries.uhold : gui_entries.ubase)

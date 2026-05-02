@@ -475,7 +475,7 @@ ShowSettings(*) {
     IniWrite(is_startup, "config.ini", "Main", "Autostart")
     CONF.autostart.v := is_startup
 
-    s_gui.Add("Text", "x361 y461 BackgroundTrans CGray", "v0.80")
+    s_gui.Add("Text", "x361 y461 BackgroundTrans CGray", "v0.81")
         .OnEvent("Click", (*) => Run("https://github.com/uqqu/Cadans/releases"))
     s_gui.Add("Picture", "x388 y451 BackgroundTrans", "ico/github.png")
         .OnEvent("Click", (*) => Run("https://github.com/uqqu/Cadans"))

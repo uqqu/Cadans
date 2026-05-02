@@ -256,7 +256,8 @@ _AddIndicators(unode, btn, is_hold:=false, ignore_hold_count:=false) {
     node := _GetFirst(unode)
     if node.down_type == TYPES.Modifier {
         cnt := ignore_hold_count ? 0 : _CountChild("", 0, gui_mod_val + (1 << node.down_val),
-            gui_entries.ubase.scancodes, gui_entries.ubase.chords, gui_entries.ubase.gestures)
+            gui_entries.ubase.scancodes, gui_entries.ubase.chords,
+            gui_entries.ubase.gestures, true)
     } else {
         cnt := _CountChild("", 0, 0, unode.scancodes, unode.chords, unode.gestures)
     }
@@ -572,7 +573,8 @@ _CountChild(layer, levels, mod_val, scs, chs, gsts, combined:=false) {
     for scs in [scs, chs, gsts] {
         for sc, mods in scs {
             for md, unode in mods {
-                if mod_val && (combined ? !(mod_val & md & ~1) : (mod_val !== (md & ~1))) {
+                if !mod_val && combined
+                    || !(combined ? ((mod_val & md) == mod_val) : (mod_val == (md & ~1))) {
                     continue
                 }
                 if layer && unode.layers.Has(layer) && _IsCounted(unode.layers[layer][0]) {
@@ -588,7 +590,7 @@ _CountChild(layer, levels, mod_val, scs, chs, gsts, combined:=false) {
                     }
                 }
                 if levels {
-                    cnt += _CountChild(layer, levels-1, mod_val, scs, chs, gsts)
+                    cnt += _CountChild(layer, levels-1, mod_val, scs, chs, gsts, combined)
                 }
             }
         }

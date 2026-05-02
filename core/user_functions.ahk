@@ -76,6 +76,25 @@ ToggleMod(md) {
 }
 
 
+SetToggleKeyState(key, state) {
+    current := GetKeyState(key, "T")
+    target := state == "On" ? true : state == "Off" ? false : !current
+
+    if current == target {
+        return
+    }
+
+    switch key {
+        case "CapsLock":
+            SetCapsLockState(target)
+        case "NumLock":
+            SetNumLockState(target)
+        case "ScrollLock":
+            SetScrollLockState(target)
+    }
+}
+
+
 GetDateTime(val, out:="Ouptut: Tooltip", t:=false) {
     outs[out](FormatTime(, val), t)
 }
@@ -569,9 +588,10 @@ custom_funcs := Map(
     "ActivateApp", ["Run app by given path or switch to it process, if specified.",
         "Path to app", "Process name (can be ommited)"
     ],
-    "ToggleMod", ["Toggle specified mod value (in script terms, not system modifiers).",
+    "ToggleMod", ["Toggle specified mod value (in program terms, not system modifiers).",
         "Mod value"
     ],
+    "SetToggleKeyState", ["Set key toggle state (on / off / toggle).", 5, 6],
     "GetDateTime", ["Get the current date(time) with selected format.", 3, 2],
     "GetCustomDateTime", ["Get the current datetime with your own format. Without commas!",
         "i.e. 'dddd d MMMM yyyy HH:mm'", 2
@@ -623,7 +643,7 @@ custom_func_keys := ["SetActiveLayers", "ToggleLayers", "TreatAsOtherNode", "Act
     "Reminder", "DelayedMediaPlayPause", "ChangeTextCase", "SmartTranslit", "IncrDecr",
     "PasteWithIncrDecr", "ClipboardSwap", "CustomString", "RemoveTextFormatting", "ShortenURL",
     "MinimizeWindows", "GenerateRandomPass", "ChangeDefaultHoldTime",
-    "AutoScrollStart", "AutoScrollStop"
+    "AutoScrollStart", "AutoScrollStop", "SetToggleKeyState"
 ]
 
 custom_func_ddls := [
@@ -632,7 +652,9 @@ custom_func_ddls := [
     ["dddd d MMMM yyyy HH:mm", "dd.MM.yyyy HH:mm", "dd.MM.yyyy HH:mm:ss", "MM/dd/yyyy h:mm tt",
     "yyyy-MM-ddTHH:mm:ss", "yyyy-MM-dd_HH-mm-ss", "HH:mm:ss", "d MMMM yyyy",
     "dd MMMM yyyy", "dd.MM.yy"],
-    ["Normalize", "Title", "Lower", "Upper", "Invert"]
+    ["Normalize", "Title", "Lower", "Upper", "Invert"],
+    ["CapsLock", "NumLock", "ScrollLock"],
+    ["On", "Off", "Toggle"]
 ]
 
 

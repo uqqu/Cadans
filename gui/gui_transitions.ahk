@@ -273,20 +273,34 @@ HideInappropriate(sc) {
             } else {
                 res := gui_entries.ubase.GetBaseHoldMod(name, gui_mod_val, 0, 0, 0, 0)
                 h_node := _GetFirst(res.uhold)
-                btn.Enabled := !h_node
+                btn.Enabled := !h_node && !res.ubase.gestures.Count
+            }
+        }
+    } else if AWMods.Has(sc) {
+        for name, btn in UI.buttons {
+            if name == "CurrMod" {
+                btn.Enabled := false
+            } else if AWMods.Has(name) {
+                btn.Enabled := true
+            } else {
+                res := gui_entries.ubase.GetBaseHoldMod(name, gui_mod_val, 0, 0, 0, 0)
+                b_node := _GetFirst(res.ubase)
+                btn.Enabled := !b_node && !res.ubase.gestures.Count
             }
         }
     } else {
         res := gui_entries.ubase.GetBaseHoldMod(sc, gui_mod_val, 0, 0, 0, 0)
         b_node := _GetFirst(res.ubase)
         h_node := _GetFirst(res.uhold)
-        m_node := _GetFirst(res.umod)
 
-        b := b_node && !h_node
+        b := !h_node && !res.ubase.gestures.Count
         for name in ONLY_BASE_SCS {
             try UI[String(name)].Enabled := b
         }
-        b := b_node || (h_node && !m_node)
+        b := !b_node && !res.ubase.gestures.Count
+        for name in AWMods {
+            try UI[String(name)].Enabled := b
+        }
     }
 }
 
