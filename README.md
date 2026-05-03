@@ -6,19 +6,255 @@
 
 ##
 
-Welcome to **Cadans** – an input customization tool that lets you assign actions to keys, combinations, and gestures.  
+Welcome to **Cadans** – an input customization tool that lets you assign your own actions to keys, combinations, and gestures.  
 Simple taps, holds, chords, modifiers, and multi-zone mouse gestures can all be combined and used in the way that suits your workflow.  
 
-Any event can trigger actions – from inserting text or symbols to controlling the system or running custom logic.  
-Each event also comes with its own fine-tuning options and can be chained together to form sequences with intermediate and final actions.  
+Any event can have actions assigned to it – from inserting text or symbols to controlling the system or running custom logic.  
+These assignments can be chained together, forming sequences of transitions with intermediate and final actions.  
 
-Cadans works with any keyboard and mouse, treating them as a unified input system – no firmware or special hardware required.  
-Assignments can be defined per application and per keyboard layout, organized for different workflows, and switched on the fly.  
+Assignments can be defined per application and per keyboard layout, grouped by use case, and switched on the fly.  
+Cadans runs on Windows and supports any keyboard and mouse, treating them as a unified input system – no firmware or special hardware required.  
 
 Only what you assign is affected – everything else stays unchanged, and input remains native unless explicitly overridden.  
 
-You can use just one part of it – for example, gestures only, or a single key for custom functions in a specific app.  
-Or go deeper and build more complex logic – it’s entirely up to you.  
+You can use individual features – basic remapping, gesture controls, or a single key for custom functions in a specific application.  
+Or go further and build more complex logic – it’s entirely up to you.  
+
+##
+
+<details><summary>tl;dr: Quick feature overview and usage examples</summary>
+<br>
+
+> Any `input` → with any `conditions` → can produce any `event` → and become an `assignment` in a system of actions and transitions
+
+<table>
+  <tr>
+    <th colspan="2">Input</th>
+  </tr>
+  <tr>
+    <td><strong>Keyboard</strong></td>
+    <td>
+      ✅ Full keyboard support, including system modifiers, extended media/office and F-rows (F13–F24), and dual-state numpad
+      <br><br>
+      ⚠ <b>Alt</b> and <b>Win</b>: hold-based events only
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Mouse</strong></td>
+    <td>
+      ✅ All mouse buttons and wheel scrolling are supported
+      <br><br>
+      ⚠ <i>Wheel scrolling</i> has no hold state by nature, so only trigger events are available<br>
+      • <i>Safety limitation</i>: LMB and RMB cannot be assigned at the <b>root</b> level <b>without</b> modifiers (gestures are allowed); available everywhere else
+    </td>
+  </tr>
+
+  <tr>
+    <th colspan="2">Conditions</th>
+  </tr>
+  <tr>
+    <td><strong>Layouts</strong></td>
+    <td>✅ Separate assignments per keyboard layout, plus global ones</td>
+  </tr>
+  <tr>
+    <td><strong>Processes</strong></td>
+    <td>✅ Separate assignments per application, on demand</td>
+  </tr>
+
+  <tr>
+    <th colspan="2">Events</th>
+  </tr>
+  <tr>
+    <td><strong>Taps</strong></td>
+    <td>✅</td>
+  </tr>
+  <tr>
+    <td><strong>Holds</strong></td>
+    <td>✅</td>
+  </tr>
+  <tr>
+    <td><strong>Multi-threshold holds</strong></td>
+    <td>❌</td>
+  </tr>
+  <tr>
+    <td><strong>Chords / combos</strong></td>
+    <td>✅</td>
+  </tr>
+  <tr>
+    <td><strong>Custom modifiers</strong></td>
+    <td>✅</td>
+  </tr>
+  <tr>
+    <td><strong>Gestures</strong></td>
+    <td>✅ (in 9 independent zones)</td>
+  </tr>
+  <tr>
+    <td><strong><i>Notes:</i></strong></td>
+    <td>
+      ✅ Keys and hotkeys without assigned events keep their native behavior<br><br>
+      ⚠️ Each key or button can have only one hold-type behavior: <i>hold</i>, <i>chord</i>, or <i>modifier</i>.<br>
+      Maximum event combination per key: <i>tap</i> + one hold-type + any number of <i>gestures</i> (in any zones)<br><br>
+      <em>
+        Most event interactions and interruptions have been tested for intuitive behavior, but edge cases may remain.<br>
+        <a href="https://github.com/uqqu/Cadans/issues">Please report</a> anything that feels wrong
+      </em>
+    </td>
+  </tr>
+
+  <tr>
+    <th colspan="2">Assignments</th>
+  </tr>
+
+  <tr>
+    <td><strong>Actions</strong></td>
+    <td>
+      Every assigned event has an action: character/text input, key simulation, function calls, helper types.<br>
+      <i>Tap</i> and <i>hold</i> assignments can also have an additional release action, with the same action types.
+    </td>
+  </tr>
+
+  <tr>
+    <td><strong>Chains</strong></td>
+    <td>
+      Assignments can continue into nested assignments, forming transition sequences with final and optional intermediate actions, with no length limit.<br>
+      Each transition opens a new level where the full set of events is available for assignment.
+    </td>
+  </tr>
+
+  <tr>
+    <td><strong>Behavior control</strong></td>
+    <td>
+      Assignment behavior can be configured for whatever behavior you need: waiting, triggering and transition rules, nested actions, etc.
+    </td>
+  </tr>
+
+  <tr>
+    <td><strong>Layers and management</strong></td>
+    <td>
+      All assignments are organized into layers (files for different scenarios), which are merged into one system and configured through the GUI.
+    </td>
+  </tr>
+
+  <tr>
+    <th colspan="2">Other</th>
+  </tr>
+
+  <tr>
+    <td><strong>Platforms</strong></td>
+    <td>⚠ Windows only</td>
+  </tr>
+  <tr>
+    <td><strong>Requirements</strong></td>
+    <td>✅ No special hardware or firmware required – just run the program</td>
+  </tr>
+</table>
+
+This is enough for a <b>quick start</b>: you can open the app, add your first assignments, and try them in practice.  
+Or explore the preset layers – ready-made examples for different scenarios that can be changed and extended.
+
+<details><summary>Preset layers / example use cases</summary>
+<br>
+
+Cadans comes with preset layers you can enable, inspect, and reuse as examples, starting points, or parts of your own setup.  
+
+Layers can be enabled and disabled at any time, and their assignments take effect immediately.  
+You can safely enable multiple layers at once, even if they define the same events – Cadans will handle everything automatically, combining assignments where possible and resolving conflicts by priority.
+<br>
+
+- **Default** – extended punctuation and symbols: 80+ additional characters in the letter block – one per key on hold, plus more via a modifier.<details><summary></summary>
+  ![](https://github.com/user-attachments/assets/0cbb3a71-8b19-4e3b-a1b6-3323f260de28)
+  ![](https://github.com/user-attachments/assets/dba7371e-97dc-46eb-81bb-b424a345a0c0)
+  </details>
+
+- **Leader** – multiple actions under a single key, serving as a template for building your own workflows and a simple introduction to short tap-based chains.<details><summary></summary>
+  ![](https://github.com/user-attachments/assets/d037848f-960c-4de1-97bd-71ca10577448)
+  ![](https://github.com/user-attachments/assets/03618ef1-3884-45b7-bb07-8f7b2c7b996c)
+  </details>
+
+##
+
+- **Mouse** – extensive mouse-driven control using two side-button modifiers and their combinations: navigation, media, text utilities, and more.  
+  Some assignments can continue into further actions – watch for the counters on keys.<details><summary></summary>
+  ![](https://github.com/user-attachments/assets/bd888327-e026-4988-9b11-8072611295f1)
+  ![](https://github.com/user-attachments/assets/936cf855-c348-4c9b-b1d0-06acc83e84b6)
+  ![](https://github.com/user-attachments/assets/f61c8bf7-0763-4f10-9f76-51908b86bc2d)
+  </details>
+
+- **RMB edge gestures** – zone-based gestures on RMB: different actions in 8 zones (excluding the center), including media control, window management, autoscroll, API calls, and more.  
+  The center zone remains fully native – no gesture detection is triggered there, so dragging and default behavior work as usual.  
+  Some gestures can also be continued into follow-up actions (e.g. gesture → RMB/LMB for related actions).<details><summary></summary>
+  ![](https://github.com/user-attachments/assets/02708176-34d6-48ef-b259-825539d58d86)
+
+  https://github.com/user-attachments/assets/1d3c148d-8408-46f2-87c9-88a7a4533e1c
+
+  </details>
+
+##
+
+- **Controlling Keys** – a different approach to control key placement, combined with Alt+hjkl navigation, media control, and small everyday utilities (number increment, delayed actions, clipboard tools, etc.), with more available through combinations of multiple modifiers.<details><summary></summary>
+  ![](https://github.com/user-attachments/assets/4e4ea2d7-5ca1-4575-b301-7f2587998a1e)
+  ![](https://github.com/user-attachments/assets/c706b9ae-7985-4764-929e-db19b069254c)
+  </details>
+
+- **One word caps** – lets you type in Caps for a single word, then turns off both CapsLock and the layer itself.  
+  Enabled from **Controlling Keys** (Shift+Esc), it demonstrates how layers can be used as part of logic, not just as static groups of assignments.<details><summary></summary>
+  ![](https://github.com/user-attachments/assets/54c8b38f-b905-4597-a60d-b622fd89acfd)
+  </details>
+
+##
+
+- **Numrow langs** folder – full pan-Latin (including romanizations) and pan-Cyrillic coverage without switching system layouts, organized into layers for different language groups.  
+  Each group is aligned with a standard layout of its script (qwerty / йцукен), allowing use within its own context without interfering with others.  
+  Additional characters are placed on the number row via modifier with tap/hold (lower/upper case), with consistent mappings across layers.  
+  A separate diacritics layer (layout-independent) provides combining marks via another modifier.<details><summary></summary>
+  ![](https://github.com/user-attachments/assets/32e57553-369c-403b-b0b9-bef358e29f9e)
+  ![](https://github.com/user-attachments/assets/f98b2a1a-e93a-4c3f-b530-355c550e9b13)
+  ![](https://github.com/user-attachments/assets/3be483b3-8930-4dca-81a0-4a8e2711ad7c)
+  </details>
+
+- **Custom layouts** folder – classic key remappings as layers: alternative layouts (Colemak, Dvorak, and others) available on demand.  
+  Includes 12 Latin and 5 Cyrillic layouts, aligned with qwerty/йцукен and intended for exploration or quick, situational use – not as a permanent replacement for your main layout.<details><summary></summary>
+  ![](https://github.com/user-attachments/assets/f836ba52-162c-4ad3-b34b-592c3b3d9ea0)
+  </details>
+
+##
+
+- **Emoji** – a full emoji layout: almost every key is an emoji (working on the rest), plus an additional layer accessed via tap + modifier.<details><summary></summary>
+  ![](https://github.com/user-attachments/assets/7f42c26e-d8cd-406c-a196-846ff5bebc13)
+  ![](https://github.com/user-attachments/assets/973d8509-9aef-43d2-85b5-e039b65c50b2)
+  </details>
+
+- **Morse** – try it yourself, not just on TV.<details><summary></summary>
+  ![](https://github.com/user-attachments/assets/548d5357-c3c2-49eb-bc3b-fb0b7c8876c5)
+  ![](https://github.com/user-attachments/assets/fc206100-9ff4-4d9d-b058-094f4e6f8889)
+  <br>
+  <p align="center">
+    <img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/morse.gif" width="50%">
+  </p><br>
+  </details>
+
+- **Angry** – a playful demo of the `Instant` option: intermediate steps in medium-length chains are executed, so the chain remains invisible while typing – until the final node is reached.<details><summary></summary>
+  ![](https://github.com/user-attachments/assets/938d167e-61cc-4010-80ec-aa36a1a5c461)
+  ![](https://github.com/user-attachments/assets/d8cd582e-7033-47fa-8402-96f0a53a5a8f)
+  <br>
+  <p align="center">
+    <img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/chain_instant.gif" width="50%">
+  </p><br>
+  </details>
+
+##
+
+- **…and anything you come up with** – these are only a small part of what’s possible.
+</details>
+
+Start by enabling a few layers and see what feels useful.  
+
+Use them as-is, edit them, combine them with your own layers, or treat them as templates for something completely different.
+
+##
+
+Below is the full explanation of how it all works – without compression and with all the details.
+</details>
 <br>
 
 # 🚀 Events
@@ -78,7 +314,7 @@ Gestures for each zone are defined independently. When determining whether to ac
 If no gestures are defined for that zone, gesture drawing does not activate, and the key behaves according to its other assignments or system defaults.
 
 The example below demonstrates zone-specific assignments – gestures are assigned to RMB in all zones except the center.  
-As a result, behavior in the center remains system-default, while outside of it, 8 independent gesture groups become available:
+As a result, behavior in the center remains system-default, while outside of it, 8 independent gesture groups become available. (mp4):
 
 https://github.com/user-attachments/assets/1d3c148d-8408-46f2-87c9-88a7a4533e1c
 
@@ -94,7 +330,7 @@ Also, each gesture has its own recognition options:
 
 These options can be combined within a single gesture or across multiple gestures.  
 
-Trigger keys also include visual settings for gestures: line color, gradient length and cycling, hint text position and its visibility during drawing.  
+Trigger keys also include visual settings for gestures: line color, gradient length and cycling, hint text position and its visibility during drawing. (mp4):
 
 https://github.com/user-attachments/assets/1559d7d0-45ea-4503-865a-50629ccd3015
 
@@ -112,10 +348,7 @@ It applies instantly, without waiting for the hold threshold. The threshold only
 if the key is released quickly – it is treated as a tap; if held – the tap action is ignored (an attempt to use it as a modifier).  
 If the modifier is used in at least one event, the key’s tap action will no longer trigger – regardless of the hold threshold.  
 
-> This is the only assignment type that can be applied to system modifier keys.  
-> This ensures full compatibility with standard system shortcuts. The program only intercepts combinations that you explicitly assign.  
-
-For example, if you define `Alt[mod_1]+F4 → (some_action)`, it will override the system behavior and execute your custom action, while other combinations without explicit assignments will continue to work as usual – `Alt+Tab`, `Alt+Esc`, ….  
+The program only intercepts combinations that you explicitly assign. For example, if you define `Alt[mod_1]+F4 → (some_action)`, it will override the system behavior and execute your custom action, while other combinations without explicit assignments will continue to work as usual – `Alt+Tab`, `Alt+Esc`, ….  
 
 Modifiers can be combined with each other to create new assignments – `Alt[mod_1] + q → §`, `RMB[mod_2] + Alt[mod_1] + q → ∑`, in any combination you define.
 
@@ -128,10 +361,10 @@ Modifiers can be combined with each other to create new assignments – `Alt[mod
 In addition to the keyboard (including extra key rows), **mouse** events are supported on the same terms and with the same capabilities.  
 They can also be part of chords, act as modifiers, have their own actions, holds, gestures, and transitions. They are not treated as a separate subsystem and can be used in the same way as keyboard events.  
 
-There are only 3 exceptions:
-- mouse scroll events and additional key rows do not support hold actions by their nature, so hold assignments cannot be defined for them;
-- for safety reasons, basic mouse button presses cannot be assigned at the **root** level **without** modifiers (gestures are still allowed);
-- for the same reason, system modifier keys can only be assigned as hold-based modifiers, without a tap action, in all cases.
+There are only three exceptions:
+- mouse scroll supports only trigger events, as it has no hold state by nature;
+- for safety reasons, basic mouse button presses are not available at the **root** level **without** modifiers (gestures are still allowed);
+- `Alt` and `Win` do not support _tap_ or _gesture_ assignments, ensuring full compatibility with standard system behavior.
 
 Everything else is available without restrictions, in any combination, and with no hardware requirements.  
 <br>
@@ -251,7 +484,7 @@ There are no depth limits for chains – from something like Morse code to full 
 
 <img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/morse.gif" width="400">
 
-Chains can consist of any event types, including chains made up entirely of chords or gestures.
+Chains can consist of any event types, including chains made up entirely of chords or gestures. (mp4):
 
 https://github.com/user-attachments/assets/c8595311-d7a6-46d7-a846-d1d9c4055fa7
 
@@ -294,7 +527,11 @@ Technical notes:
   - for example, `Alt[mod_1]+q, Alt[mod_2]+w → (some_action)` – if `Alt` is held through the transition, it acts as `1` on the first level and automatically becomes `2` on the next;
   - if no modifier assignment exists for the held key after the transition, it is reset and will not trigger any action on release;
 - When building the structure for UI and runtime, child elements of identical assignments across layers are merged.  
-For different assignments, the higher-priority one is selected, and only its children are used.
+For different assignments, the higher-priority one is selected, and only its children are used.  
+- Special handling for `Shift` and `Ctrl` to preserve their native behavior when used as system modifiers with other keys:
+  - taps trigger **only** on explicit press + release below the hold threshold;
+  - interrupted taps and unrecognized gestures (no fallback to tap/hold) are discarded to preserve native behavior;
+  - recognized gestures, chords, and holds behave without changes.
 <br>
 
 # 🧠 Assignments and actions
@@ -319,8 +556,8 @@ Actions can include:
 
 ##
 
-The `key simulation` type accepts a string in [AHK format](https://www.autohotkey.com/docs/v2/KeyList.htm), for example:  
-`{SC010}`, `+^{Left}`, `{End}{Shift down}{Home}{Shift up}{Backspace}`.  
+The `key simulation` type accepts a string in [AHK format](https://www.autohotkey.com/docs/v2/KeyList.htm), with hexadecimal scancodes (see Alt tooltips), for example:  
+`{SC01C}`, `+^{Left}`, `{End}{Shift down}{Home}{Shift up}{Backspace}`.  
 
 ##
 
@@ -367,7 +604,9 @@ Like all assignment parameters, it belongs to the specific event it is defined f
 A field where you can specify a custom delay before the hold event is triggered.  
 If not set, the global value from settings is used.  
 
-It is defined in the **tap** assignment and determines when it expires. It can also be specified in the hold assignment, but it will still be saved for the “base” event.  
+It can be specified in both **tap** and **hold** assignments.  
+Within the same layer, if a paired assignment exists, the value is saved to both.  
+At runtime, if tap and hold assignments come from different layers with different thresholds, the threshold defined in the hold assignment takes priority.
 
 If there is no corresponding hold assignment, this setting has no effect.  
 
@@ -433,6 +672,10 @@ Each type of zone can have its own line color or color sequence, or a special va
 
 If multiple colors are specified, or `random` with `n > 1` is used, you can also define the `gradient length` and whether it should be `cyclic`.  
 
+Gesture overlay settings are defined in the **tap** assignment and applied from it.  
+They can also be specified in the hold assignment, but are still stored in the tap.  
+If no tap assignment exists, it is created automatically with default values.
+
 ##
 
 ### > Name in GUI
@@ -484,14 +727,15 @@ If an event has multiple overlapping assignments across layers, only the highest
 Basic navigation is also available using physical keyboard taps/holds.  
 
 For modifiers, which do not have their own transition by design, `RMB`/hold toggles the modifier state itself, immediately affecting other assignments.  
-
-Due to system limitations, keys without hold events cannot be navigated via hold; and system modifiers do not have a press transition – their modifier assignment form opens immediately instead.  
+Events that do not have own hold behavior, such as `part of chord` and mouse scroll, cannot be navigated via hold.
 
 The special `Mod` key acts as an indicator of the current active modifier set, based on the internal representation `sum(modifier_value²)`.  
 Pressing it resets all active modifiers.  
 Active modifier values are shown individually in the top path bar and are also indicated by distinct outline colors on the corresponding modifier keys.  
 
-Additional key rows (F13-24 keys and multimedia/office keys) can be enabled in the settings.
+Additional key rows (F13-24 keys and multimedia/office keys) can be enabled in the settings.  
+Numpad key state separation can also be enabled there.  
+Without separation, assignments follow the physical key; with it, they depend on the current NumLock state.
 
 ##
 
@@ -584,7 +828,7 @@ Gestures cannot be added at the root level, under chords, or directly under othe
 
 > Gestures are tied to the `tap` event, as drawing mode starts immediately on key press.  
 > When navigating via `hold`, gestures are still shown in the list and can be modified, but this is simply the same list as for the `tap` transition.  
-> The same applies to the `hold threshold` and `gesture overlay` settings if the forms – they belong to the `tap` assignment, but are also accessible via `hold`.
+> The same applies to the `gesture overlay` settings in the forms – they belong to the `tap` assignment, but are also accessible via `hold`.
 
 At levels where gestures cannot be added, the list shows trigger keys (if any), along with their modifiers and the number of gestures assigned to them.  
 
@@ -722,8 +966,9 @@ File structure:
   ],
 }
 ```
-##
 </details>
+
+##
 </details>
 
 Assignment swapping is optional and not required for getting started – you can come back to it later.
