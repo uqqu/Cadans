@@ -36,7 +36,7 @@ Or go further and build more complex logic – it’s entirely up to you.
     <td>
       ✅ Full keyboard support, including system modifiers, extended media/office and F-rows (F13–F24), and dual-state numpad
       <br><br>
-      ⚠ <b>Alt</b> and <b>Win</b>: hold-based events only
+      ⚠️ <b>Alt</b> and <b>Win</b>: hold-based events only
     </td>
   </tr>
   <tr>
@@ -44,7 +44,7 @@ Or go further and build more complex logic – it’s entirely up to you.
     <td>
       ✅ All mouse buttons and wheel scrolling are supported
       <br><br>
-      ⚠ <i>Wheel scrolling</i> has no hold state by nature, so only trigger events are available<br>
+      ⚠️ <i>Wheel scrolling</i> has no hold state by nature, so only trigger events are available<br>
       • <i>Safety limitation</i>: LMB and RMB cannot be assigned at the <b>root</b> level <b>without</b> modifiers (gestures are allowed); available everywhere else
     </td>
   </tr>
@@ -141,7 +141,7 @@ Or go further and build more complex logic – it’s entirely up to you.
 
   <tr>
     <td><strong>Platforms</strong></td>
-    <td>⚠ Windows only</td>
+    <td>⚠️ Windows only</td>
   </tr>
   <tr>
     <td><strong>Requirements</strong></td>
