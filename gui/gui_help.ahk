@@ -548,7 +548,7 @@ _GetKeyInfo(sc, md, cur_entries, prev_entries,
     if !is_chord && !is_gesture {
         txt := "Key '" . _GetKeyName(sc, , true) . "'"
         if sc is Number {
-            txt .= " (sc " . sc . ")"
+            txt .= " (sc " . Format("{:X}", sc) . "₁₆)"
         }
     } else if is_chord {
         txt := "Chord '" . sc . "'"
