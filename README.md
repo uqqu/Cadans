@@ -4,18 +4,18 @@
 
 ##
 
-Welcome to **Cadans** – an input customization tool that lets you assign actions to keys, combinations, and gestures.  
-Simple taps, holds, chords, modifiers, and multi-zone mouse gestures can all be combined and used in the way that suits your workflow.  
+Welcome to **Cadans** – an input system where interactions can continue beyond a single action.  
 
-Any event can trigger an action – from inserting text or symbols to controlling the system or running custom logic.  
-These assignments can be chained together, forming sequences of transitions with intermediate and final actions.  
+From simple taps and holds to chords and multi-zone gestures – assign a wide range of actions to any event.  
+Or chain them together, turning events into a sequence that unfolds step by step, with intermediate and final actions.  
 
 Assignments can be defined per application and per keyboard layout, grouped by use case, and switched on the fly.  
-Cadans runs on Windows and supports any keyboard and mouse, treating them as a unified input system – no firmware or special hardware required.  
+Cadans runs on Windows and supports any keyboard and mouse, treating them as a unified input system.  
+No firmware or special hardware required.  
 
 Only what you assign is affected – everything else remains native unless explicitly overridden.  
 
-Use individual features – basic remapping, gesture controls, or a single key for custom functions in a specific app.  
+Use individual capabilities: basic remapping, gesture controls, or a single key for custom functions in a specific app.  
 Or go further and build more complex logic – it’s entirely up to you.  
 <br>
 
@@ -113,7 +113,7 @@ Or go further and build more complex logic – it’s entirely up to you.
   <tr>
     <td><strong>Actions</strong></td>
     <td>
-      Any event can trigger an action:<br>
+      Any assigned event can trigger an action:<br>
       <ul>
         <li>text or character input</li>
         <li>key simulation</li>
