@@ -10,10 +10,9 @@ From simple taps and holds to chords and multi-zone gestures – assign a wide r
 Or chain them together, turning events into a sequence that unfolds step by step, with intermediate and final actions.  
 
 Assignments can be defined per application and per keyboard layout, grouped by use case, and switched on the fly.  
-Cadans runs on Windows and supports any keyboard and mouse, treating them as a unified input system.  
-No firmware or special hardware required.  
-
 Only what you assign is affected – everything else remains native unless explicitly overridden.  
+
+Cadans runs on Windows and supports any keyboard and mouse, treating them as equal inputs within a single system.  
 
 Use individual capabilities: basic remapping, gesture controls, or a single key for custom functions in a specific app.  
 Or go further and build more complex logic – it’s entirely up to you.  

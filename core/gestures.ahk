@@ -63,7 +63,7 @@ GdipShutdown(*) {
 CreateGestOverlay() {
     global gest_overlay, g_mem_dc, g_hbm, g_bits
 
-    try gest_overlay.Destroy()
+    DestroyGestOverlay()
 
     if !GdipStartup() {
         return
@@ -102,9 +102,22 @@ ClearOverlay() {
 }
 
 
-GetOverlayGraphics() {
+GetOverlayGraphics(reset:=false) {
     global g_bits
     static bmp:=0, g:=0, cached_bits:=0
+
+    if reset {
+        if g {
+            DllCall("gdiplus\GdipDeleteGraphics", "ptr", g)
+            g := 0
+        }
+        if bmp {
+            DllCall("gdiplus\GdipDisposeImage", "ptr", bmp)
+            bmp := 0
+        }
+        cached_bits := 0
+        return 0
+    }
 
     if !g_bits {
         return 0
@@ -174,16 +187,25 @@ PresentOverlay() {
 
 
 DestroyGestOverlay() {
-    global gest_overlay, g_mem_dc, g_hbm
+    global gest_overlay, g_mem_dc, g_hbm, g_bits
+
+    SetTimer(TrackMouse, 0)
+    SetTimer(DestroyGestOverlay, 0)
+
+    GetOverlayGraphics(true)
 
     if gest_overlay {
         try gest_overlay.Destroy()
         gest_overlay := false
     }
+
+    g_bits := 0
+
     if g_hbm {
         DllCall("gdi32\DeleteObject", "ptr", g_hbm)
         g_hbm := 0
     }
+
     if g_mem_dc {
         DllCall("gdi32\DeleteDC", "ptr", g_mem_dc)
         g_mem_dc := 0
@@ -457,10 +479,12 @@ LiveHint(pts, gestures) {
     if !inited {
         if DllCall("gdiplus\GdipCreateFontFamilyFromName",
             "wstr", "Segoe UI", "ptr", 0, "ptr*", &fam:=0) {
+            busy := false
             return
         }
         if DllCall("gdiplus\GdipCreateFont",
             "ptr", fam, "float", CONF.font_size_lh.v, "int", 1, "int", 2, "ptr*", &fnt:=0) {
+            busy := false
             return
         }
 
@@ -479,6 +503,7 @@ LiveHint(pts, gestures) {
 
     g := GetOverlayGraphics()
     if !g {
+        busy := false
         return
     }
 
@@ -489,6 +514,7 @@ LiveHint(pts, gestures) {
         }
         if DllCall("gdiplus\GdipCreateFont", "ptr", fam,
             "float", fs, "int", 1, "int", 2, "ptr*", &fnt:=0) {
+            busy := false
             return
         }
         last_fs := fs
@@ -542,15 +568,6 @@ LiveHint(pts, gestures) {
         DllCall("gdiplus\GdipFillRectangle", "ptr", g, "ptr", brush_clear,
             "float", lbx-1, "float", lby-1, "float", lbw+2, "float", lbh+2)
         DllCall("gdiplus\GdipSetCompositingMode", "ptr", g, "int", 0)  ; SourceOver
-    }
-
-    if !g || !brush_bg || bw <= 0 || bh <= 0 {
-        FileAppend(
-            "Bad FillRectangle args: g=" . g . " brush_bg=" . brush_bg
-            . " bx=" . bx . " by=" . by . " bw=" . bw . " bh=" . bh,
-            A_ScriptDir . "\error_log.txt"
-        )
-        return
     }
 
     DllCall("gdiplus\GdipFillRectangle", "ptr", g, "ptr", brush_bg,
