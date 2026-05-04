@@ -4,18 +4,18 @@
 
 ##
 
-Welcome to **Cadans** – an input customization tool that lets you assign your own actions to keys, combinations, and gestures.  
+Welcome to **Cadans** – an input customization tool that lets you assign actions to keys, combinations, and gestures.  
 Simple taps, holds, chords, modifiers, and multi-zone mouse gestures can all be combined and used in the way that suits your workflow.  
 
-Any event can have actions assigned to it – from inserting text or symbols to controlling the system or running custom logic.  
+Any event can trigger an action – from inserting text or symbols to controlling the system or running custom logic.  
 These assignments can be chained together, forming sequences of transitions with intermediate and final actions.  
 
 Assignments can be defined per application and per keyboard layout, grouped by use case, and switched on the fly.  
 Cadans runs on Windows and supports any keyboard and mouse, treating them as a unified input system – no firmware or special hardware required.  
 
-Only what you assign is affected – everything else stays unchanged, and input remains native unless explicitly overridden.  
+Only what you assign is affected – everything else remains native unless explicitly overridden.  
 
-You can use individual features – basic remapping, gesture controls, or a single key for custom functions in a specific application.  
+Use individual features – basic remapping, gesture controls, or a single key for custom functions in a specific app.  
 Or go further and build more complex logic – it’s entirely up to you.  
 <br>
 
@@ -30,7 +30,7 @@ Or go further and build more complex logic – it’s entirely up to you.
   <tr>
     <td><strong>Keyboard</strong></td>
     <td>
-      <p>✅ Full keyboard support, including system modifiers, extended media/office and F-rows (F13–F24), and dual-state numpad</p>
+      <p>✅ Full keyboard support, including system modifiers and extended keys</p>
       <p>⚠️ <b>Alt</b> and <b>Win</b>: hold-based events only</p>
     </td>
   </tr>
@@ -40,7 +40,7 @@ Or go further and build more complex logic – it’s entirely up to you.
       <p>✅ All mouse buttons and wheel scrolling are supported</p>
       <em>
         Wheel scrolling has no hold state by nature, so only trigger events are available<br>
-        For safety, LMB and RMB are available everywhere except at the <b>root</b> level <b>without</b> modifiers (gestures are allowed)
+        For safety, LMB and RMB are available everywhere except the base level (gestures are allowed)
       </em>
     </td>
   </tr>
@@ -98,10 +98,10 @@ Or go further and build more complex logic – it’s entirely up to you.
     <td>
       <p>✅ Keys and hotkeys without assigned events keep their native behavior</p>
       <p>⚠️ Each key or button can have only one hold-type behavior: <i>hold</i>, <i>chord</i>, or <i>modifier</i>.<br>
-      Maximum event combination per key: <i>tap</i> + one hold-type + any number of <i>gestures</i> (in any zones)</p>
+      Maximum per key: <i>tap</i> + one hold-type + any number of <i>gestures</i> (in any zones)</p>
       <em>
-        Event interactions and interruptions are designed to behave intuitively across cases.<br>
-        If you find an edge case that feels wrong, <a href="https://github.com/uqqu/Cadans/issues">please report it</a>
+        Event interactions and interruptions are carefully designed to behave consistently and intuitively across cases.
+        If you find anything that still feels off, <a href="https://github.com/uqqu/Cadans/issues">please report it</a>
       </em>
     </td>
   </tr>
@@ -132,7 +132,7 @@ Or go further and build more complex logic – it’s entirely up to you.
       Each step can either execute an action or wait for further input.</p>
       <p><b>Assignments that lead to further steps still work on their own</b> – continuation extends behavior rather than replacing it.</p>
       <p>There is no fixed depth or structure – chains can be as simple or as long as needed.<br>
-      Even a single action fits this model – it is simply a chain with one step, resolving immediately.</p>
+      Even a single action fits this model – it is simply a one-step chain, resolving immediately.</p>
     </td>
   </tr>
 
@@ -160,7 +160,7 @@ Or go further and build more complex logic – it’s entirely up to you.
     <td></td>
     <td>
       <em>
-        This is how the system comes together: assigned events form chains that evolve over time, with fine-tuned behavior and their own actions, combined across dynamic layers and active conditions.
+        This is how the system comes together: assigned events form chains that evolve over time, with fine-tuned behavior and their own actions, combined across dynamic layers and conditions.
       </em>
     </td>
   </tr>
@@ -181,13 +181,13 @@ Or go further and build more complex logic – it’s entirely up to you.
 
 This is enough for a <b>quick start</b>: open the app, add your first assignments, and try them in practice.
 
-Or enable a few preset layers – are ready-made examples for different scenarios.  
-You can use them as-is, edit them, combine them with your own layers, or treat them as templates for something completely different.  
-If you prefer to see how it looks first with several examples, including gestures, see [Preset layers](../../wiki/🧰-Preset-layers).
+Or enable a few preset layers – ready-made examples for different scenarios.  
+Use them as-is, edit, combine with your own layers, or treat them as templates for something completely different.  
+If you prefer to see how it looks first, with several examples including gestures, see [Preset layers](../../wiki/🧰-Preset-layers).
 
 ##
 
-How it all works in detail, step by step:
+To see how it all works in detail, step by step:
 
 - [Step-by-step concepts](../../wiki/📘-Step‐by‐step-concepts) – from basic events to gestures, conditions, layers, and how chains work and interact
 - [GUI detailed overview](../../wiki/🖥%EF%B8%8F-GUI-detailed-overview) – every control, option, and interaction in the interface
