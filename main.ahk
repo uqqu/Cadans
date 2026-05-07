@@ -31,9 +31,10 @@ stack := []  ; queue of overlapping presses
 #Include "core\config.ahk"
 #Include "core\gesture_processing.ahk"
 #Include "core\gestures.ahk"
-#Include "core\user_functions.ahk"
+#Include "core\callable_functions.ahk"
 #Include "gui\gui.ahk"
 #Include "core\keys.ahk"
+#Include "user_functions.ahk"
 
 sysmod_state := Map()
 for sc in SYS_MODIFIERS {
