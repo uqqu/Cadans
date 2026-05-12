@@ -1,6 +1,7 @@
 ﻿form := false
 func_form := false
 init_drawing := false
+form_points := false
 from_prev := false
 gest_as_base := false
 child_behavior_opts := [
@@ -424,9 +425,10 @@ _FormToggleColors(trg, *) {
 
 
 SetGesture(*) {
-    global init_drawing, from_prev
+    global init_drawing, from_prev, form_points
 
     from_prev := false
+    form_points := false
     form["SetGesture"].Text := "Draw a gesture while holding RMB"
     init_drawing := true
     ToggleEnabled(false, form["Phase"], form["Save"], form["SaveWithReturn"], form["ShowGesture"])
@@ -491,7 +493,7 @@ ShowGesture(entries, *) {
         dirs: 0, closed: 0, len: 1
     }
 
-    gest_str := GestureToStr(points, rot, scal, dirs, phase)
+    gest_str := GestureToStr(form_points, rot, scal, dirs, phase)
     node_obj := {opts: {}, gesture_opts: gest_str[2]}
     vals := StrSplit(node_obj.gesture_opts, ";")
     for i, name in ["pool", "rotate", "scaling", "dirs", "closed", "len"] {
@@ -997,13 +999,14 @@ WriteValue(is_hold, custom_path:=false, paired:=false, *) {
 
 
 CloseForm(*) {
-    global form, func_form, init_drawing
+    global form, func_form, init_drawing, form_points
 
     try form.Destroy()
     try func_form.Destroy()
     form := false
     func_form := false
     init_drawing := false
+    form_points := false
 }
 
 
@@ -1129,7 +1132,7 @@ WriteGesture(as_base, entries, path, *) {
     phase := form["Phase"].Value
 
     if !from_prev {
-        gest_str := GestureToStr(points, rot, scal, dirs, phase)
+        gest_str := GestureToStr(form_points, rot, scal, dirs, phase)
     } else {
         if as_base {
             gest := _GetFirst(entries.ubase)

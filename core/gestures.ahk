@@ -314,7 +314,7 @@ SetOverlayOpts(opts, pool) {
 
 
 EndDraw(*) {
-    global is_drawing, init_drawing, points, overlay_opts, pool_gestures
+    global is_drawing, init_drawing, points, overlay_opts, pool_gestures, form_points
 
     if !is_drawing {
         return
@@ -325,6 +325,11 @@ EndDraw(*) {
     DestroyGestOverlay()
 
     if init_drawing {
+        form_points := []
+        for pair in points {
+            form_points.Push([pair[1], pair[2]])
+        }
+
         init_drawing := false
         try form["Save"].Enabled := true
         try form["SaveWithReturn"].Enabled := true
@@ -340,10 +345,9 @@ EndDraw(*) {
         }
         try WinActivate "ahk_id " . form.Hwnd
         return -1
-    } else {
-        ret := cum_len > Max(CONF.min_gesture_len.v, 10) ? Recognize(points, pool_gestures) : false
     }
 
+    ret := cum_len > Max(CONF.min_gesture_len.v, 10) ? Recognize(points, pool_gestures) : false
     overlay_opts := false
     pool_gestures := false
     return ret
