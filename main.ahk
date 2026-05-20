@@ -53,7 +53,7 @@ PreCheck(sc, *) {
     }
 
     if current_presses.Has(sc) || is_key_processing
-        || await_hold || await_gest || await_nest || chord_presses.Length
+        || await_hold || await_gest || await_nest || chord_presses.count
         || is_drawing || GuiCheck(sc) {
         return true
     }
@@ -324,7 +324,7 @@ TransitionProcessing(checked_unode, sc:=0, snapshot:=false) {
             SendKbd(fin.down_type,
                 snapshot && fin.down_type == TYPES.Default ? snapshot : fin.down_val)
         }
-        if !fin.is_irrevocable && curr_unode !== ROOTS[current_layout] && !chord_presses.Length {
+        if !fin.is_irrevocable && curr_unode !== ROOTS[current_layout] && !chord_presses.count {
             ToRoot()
         } else if sc && !chord_presses.Has(sc) {
             try current_presses.Delete(sc)
@@ -619,7 +619,7 @@ OnKeyDown(sc, rec:=false, forced:=false, *) {
             OnKeyDownRec()
             return
         }
-        if chord_presses.Length {
+        if chord_presses.count {
             is_key_processing := false
             catched_entries := false
             InterruptChord()
@@ -645,7 +645,7 @@ OnKeyDown(sc, rec:=false, forced:=false, *) {
     if catched_entries.uhold && uhold_fin && uhold_fin.down_type == TYPES.Chord {  ; chords
         TreatChord(catched_entries, sc)
         TreatGest(catched_entries, sc)
-    } else if chord_presses.Length && chord_presses.Any() {  ; chord interruption; re
+    } else if chord_presses.count && chord_presses.Any() {  ; chord interruption; re
         is_key_processing := false
         catched_entries := false
         InterruptChord()
@@ -763,7 +763,7 @@ OnKeyUp(sc, *) {
         sysmod_state[sc] := 0
     }
 
-    if chord_presses.Length && chord_presses.Any() {
+    if chord_presses.count && chord_presses.Any() {
         SendAwaiting("g", sc)
         InterruptChord(sc)
     } else {
@@ -777,7 +777,7 @@ OnKeyUp(sc, *) {
 
     try current_presses.Delete(sc)
 
-    b := !await_nest && chord_presses.Length == 1 && chord_presses.Has(sc) && !current_mod
+    b := !await_nest && chord_presses.count == 1 && chord_presses.Has(sc) && !current_mod
     chord_presses.Remove(sc)
     md := curr_unode.GetModFin(sc, true)
     if md {  ; release mod

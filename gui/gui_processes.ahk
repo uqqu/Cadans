@@ -1,49 +1,121 @@
-GuiProcCtxChanged(_ctrl, *) {
+GuiWindowCtxChanged(_ctrl, *) {
     global gui_proc_ctx
 
-    gui_proc_ctx := GetGuiProcessCtxByText(_ctrl.Text)
+    gui_proc_ctx := GetGuiWindowCtxByText(_ctrl.Text)
     ChangePath()
 }
 
 
-GetGuiProcessItems() {
-    items := []
-    for ctx_id in PROC_CTX.all_ids {
-        names := PROC_CTX.id_to_names[ctx_id]
+GetGuiWindowCtxItems() {
+    global GUI_CTX_BY_TEXT
 
-        if ArrayHasValue(names, "__other__") {
-            items.Push("*")
-        } else {
-            items.Push(CompressProcessNamesForGui(names))
+    GUI_CTX_BY_TEXT := Map()
+    seen := Map()
+    items := []
+
+    for ctx_id in WIN_CTX.all_ids {
+        txt := GetGuiWindowCtxText(ctx_id)
+
+        if ctx_id != WIN_CTX.other_id && !GetLayersDifferFromOther(ctx_id).Length {
+            continue
+        }
+
+        if !seen.Has(txt) {
+            seen[txt] := true
+            GUI_CTX_BY_TEXT[txt] := ctx_id
+            items.Push(txt)
         }
     }
+
+    ArraySort(items, (a, b) => StrCompare(a, b))
+
     return items
 }
 
 
-GetGuiProcessTextByCtx(ctx_id) {
-    if !ctx_id || !PROC_CTX.id_to_names.Has(ctx_id) {
+GetGuiWindowCtxText(ctx_id, with_compress:=true) {
+    if !ctx_id || !WIN_CTX.id_to_key.Has(ctx_id) {
         return "*"
     }
 
-    names := PROC_CTX.id_to_names[ctx_id]
+    key := WIN_CTX.id_to_key[ctx_id]
 
-    if ArrayHasValue(names, "__other__") {
+    if key == "__other__" {
         return "*"
     }
 
-    return CompressProcessNamesForGui(names)
-}
+    proc_items := []
+    other_tokens := []
 
+    for token in StrSplit(key, ",", " `t`r`n") {
+        token := Trim(token)
+        if !token {
+            continue
+        }
 
-GetGuiProcessCtxByText(txt) {
-    for ctx_id in PROC_CTX.all_ids {
-        if GetGuiProcessTextByCtx(ctx_id) == txt {
-            return ctx_id
+        if IsGuiProcToken(token) {
+            proc_items.Push(ParseGuiProcToken(token))
+        } else {
+            other_tokens.Push(GuiWindowCtxToken(token))
         }
     }
 
-    return PROC_CTX.other_id
+    ArraySort(proc_items, (a, b) => StrCompare(a.txt, b.txt))
+    ArraySort(other_tokens, (a, b) => StrCompare(a, b))
+
+    parts := []
+
+    if proc_items.Length {
+        if with_compress {
+            parts.Push(CompressProcessItemsForGui(proc_items))
+        } else {
+            for _, item in proc_items {
+                parts.Push(item.txt)
+            }
+        }
+    }
+
+    for _, token in other_tokens {
+        parts.Push(token)
+    }
+
+    return parts.Length ? JoinArr(parts, ", ") : "*"
+}
+
+
+GuiProcBaseName(token) {
+    token := GuiWindowCtxToken(token)
+
+    p := InStr(token, "[")
+    return p ? SubStr(token, 1, p - 1) : token
+}
+
+
+GetGuiWindowCtxByText(txt) {
+    global GUI_CTX_BY_TEXT
+
+    if IsSet(GUI_CTX_BY_TEXT) && GUI_CTX_BY_TEXT.Has(txt) {
+        return GUI_CTX_BY_TEXT[txt]
+    }
+
+    return WIN_CTX.other_id
+}
+
+
+GuiWindowCtxToken(token) {
+    token := Trim(token)
+
+    sign := ""
+    if SubStr(token, 1, 1) == "-" {
+        sign := "-"
+        token := SubStr(token, 2)
+    }
+
+    if SubStr(token, 1, 2) == "p:" {
+        token := SubStr(token, 3)
+    }
+
+    return sign . token
 }
 
 
@@ -75,63 +147,104 @@ GetExpandedGroupMembers(group_name) {
 }
 
 
-CompressProcessNamesForGui(proc_names) {
-    remaining := Map()
-    order_map := Map()
+CompressProcessItemsForGui(proc_items) {
+    items_by_base := Map()
 
-    for i, name in proc_names {
-        remaining[name] := true
-        if !order_map.Has(name) {
-            order_map[name] := i
+    for i, item in proc_items {
+        if !items_by_base.Has(item.base_name) {
+            items_by_base[item.base_name] := []
         }
+        items_by_base[item.base_name].Push(i)
     }
 
     alias_candidates := []
 
     for alias, _ in CONF.ProcessGroups {
         members := GetExpandedGroupMembers(alias)
-        if members.Length < 2 {
+        norm_members := []
+
+        for _, member in members {
+            norm_members.Push(GuiProcBaseName(member))
+        }
+
+        if norm_members.Length < 2 {
             continue
         }
 
         b := true
         first_pos := 10**9
+        member_indices := []
 
-        for _, member in members {
-            if !remaining.Has(member) {
+        for _, member in norm_members {
+            if !items_by_base.Has(member) {
                 b := false
                 break
             }
-            if order_map.Has(member) && order_map[member] < first_pos {
-                first_pos := order_map[member]
+
+            indices := items_by_base[member]
+
+            chosen_index := 0
+            for _, idx in indices {
+                item := proc_items[idx]
+
+                if item.suffix {
+                    chosen_index := idx
+                    break
+                }
+            }
+
+            if !chosen_index {
+                chosen_index := indices[1]
+            }
+
+            member_indices.Push(chosen_index)
+
+            if chosen_index < first_pos {
+                first_pos := chosen_index
             }
         }
 
         if b {
+            common_suffix := ""
+            common_set := false
+
+            for _, idx in member_indices {
+                item := proc_items[idx]
+
+                if !common_set {
+                    common_suffix := item.suffix
+                    common_set := true
+                } else if common_suffix != item.suffix {
+                    common_suffix := ""
+                    break
+                }
+            }
+
             alias_candidates.Push({
                 alias: alias,
-                members: members,
+                alias_txt: alias . common_suffix,
+                members: norm_members,
+                member_indices: member_indices,
                 first_pos: first_pos,
-                size: members.Length
+                size: norm_members.Length
             })
         }
     }
 
-    if alias_candidates.Length {
-        ArraySort(alias_candidates, (a, b) => (
-            a.first_pos != b.first_pos
-                ? a.first_pos - b.first_pos
-                : b.size - a.size
-        ))
-    }
+    ArraySort(alias_candidates, (a, b) => (
+        a.first_pos != b.first_pos
+            ? a.first_pos - b.first_pos
+            : b.size - a.size
+    ))
 
-    used := Map()
+    used_indices := Map()
     result_items := []
 
     for _, cand in alias_candidates {
         can_take := true
-        for _, member in cand.members {
-            if used.Has(member) {
+
+        for _, idx in cand.member_indices {
+            if used_indices.Has(idx) {
                 can_take := false
                 break
             }
@@ -140,26 +253,25 @@ CompressProcessNamesForGui(proc_names) {
         if can_take {
             result_items.Push({
                 p: cand.first_pos,
-                txt: cand.alias
+                txt: cand.alias_txt
             })
-            for _, member in cand.members {
-                used[member] := true
+
+            for _, idx in cand.member_indices {
+                used_indices[idx] := true
             }
         }
     }
 
-    for i, name in proc_names {
-        if !used.Has(name) {
+    for i, item in proc_items {
+        if !used_indices.Has(i) {
             result_items.Push({
                 p: i,
-                txt: name
+                txt: item.txt
             })
         }
     }
 
-    if result_items.Length {
-        ArraySort(result_items, (a, b) => a.p - b.p)
-    }
+    ArraySort(result_items, (a, b) => a.p - b.p)
 
     parts := []
     for _, item in result_items {
@@ -171,13 +283,51 @@ CompressProcessNamesForGui(proc_names) {
 
 
 GetLayersDifferFromOther(ctx_id:=0) {
+    if !ctx_id {
+        ctx_id := gui_proc_ctx
+    }
+
     res := []
     for layer in ActiveLayers.order {
         a := LayerAllowedInCtx(layer, ctx_id)
-        b := LayerAllowedInCtx(layer, PROC_CTX.other_id)
+        b := LayerAllowedInCtx(layer, WIN_CTX.other_id)
         if a != b {
             res.Push(layer)
         }
     }
     return res
+}
+
+
+IsGuiProcToken(token) {
+    token := Trim(token)
+
+    if SubStr(token, 1, 1) == "-" {
+        token := SubStr(token, 2)
+    }
+
+    return SubStr(token, 1, 2) == "p:"
+}
+
+
+ParseGuiProcToken(token) {
+    token := Trim(token)
+
+    if SubStr(token, 1, 1) == "-" {
+        token := SubStr(token, 2)
+    }
+
+    if SubStr(token, 1, 2) == "p:" {
+        token := SubStr(token, 3)
+    }
+
+    p := InStr(token, "[")
+    base_name := p ? SubStr(token, 1, p - 1) : token
+    suffix := p ? SubStr(token, p) : ""
+
+    return {
+        base_name: base_name,
+        suffix: suffix,
+        txt: base_name . suffix
+    }
 }

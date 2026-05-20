@@ -1,5 +1,7 @@
+r_gui := false
+
 LVLayerClick(lv, row, is_right_click:=false, *) {
-    global last_selected_layer, selected_layer_priority
+    global last_selected_layer
 
     _UnhighlightSelectedChord()
     ToggleEnabled(0, UI.chs_toggles, UI.gest_toggles)
@@ -14,7 +16,6 @@ LVLayerClick(lv, row, is_right_click:=false, *) {
         return
     }
 
-    selected_layer_priority := 0
     if row {
         last_selected_layer := ""
         for folder in layer_path {
@@ -23,7 +24,6 @@ LVLayerClick(lv, row, is_right_click:=false, *) {
         last_selected_layer .= lv.GetText(row, 3)
         ToggleEnabled(1, UI.layer_ctrl_btns)
         if lv.GetText(row, 2) {
-            selected_layer_priority := lv.GetText(row, 2)
             ToggleEnabled(1, UI.layer_move_btns)
         } else {
             ToggleEnabled(0, UI.layer_move_btns)
@@ -82,7 +82,7 @@ LVLayerDoubleClick(lv, row, from_selected:=false) {
         ToggleVisibility(1, UI["BtnBackToRoot"])
         ToggleVisibility(0, UI.layer_move_btns, UI.layer_ctrl_btns, UI["BtnAddNewLayer"])
 
-        if AllLayers.map[selected_layer] is Integer {
+        if AllLayers[selected_layer] is Integer {
             MergeLayer(selected_layer)
         }
     }
@@ -102,6 +102,8 @@ LVLayerCheck(lv, row, is_right_click) {
         return
     }
 
+    ToggleFreeze(1)
+
     layer_name := ""
     for folder in layer_path {
         layer_name .= folder . "\"
@@ -110,17 +112,18 @@ LVLayerCheck(lv, row, is_right_click) {
 
     if !icon_type {  ; inactive
         is_right_click ? ActiveLayers.Add(layer_name, , 1) : ActiveLayers.Add(layer_name)
-        if AllLayers.map[layer_name] is Integer {
+        if AllLayers[layer_name] is Integer {
             MergeLayer(layer_name)
         }
     } else {  ; active
         ActiveLayers.Remove(layer_name)
     }
     for i, name in ActiveLayers.order {
-        ActiveLayers.map[name] := i
+        ActiveLayers.Set(name, i)
     }
 
     _WriteActiveLayersToConfig()
+    ToggleFreeze(0)
 }
 
 
@@ -132,13 +135,16 @@ _WriteActiveLayersToConfig(without_upd:=false) {
 
     IniWrite(SubStr(str_value, 1, -2), "config.ini", "Main", "ActiveLayers")
     if !without_upd {
+        ToggleFreeze(1)
         UpdLayers()
         ChangePath()
+        ToggleFreeze(0)
     }
 }
 
 
 AddNewLayer(*) {
+    ToggleFreeze(1)
     name := "new layer"
     layer_str := "layers\"
     for folder in layer_path {
@@ -151,21 +157,21 @@ AddNewLayer(*) {
         }
         name := "new layer (" . i . ")"
     }
-    LayersMeta[name] := Map("version", 0.8, "rtags", "", "rdescription", "", "rprocesses", "",
-        "tags", [], "processes", Map("*", true))
+    LayersMeta[name] := Map("version", 0.81, "rtags", "", "rdescription", "", "rprocesses", "",
+        "tags", [], "processes", [{invert: false, kind: "*", val: "*", children: []}])
     SerializeMap(Map(), name)
-    AllLayers.Add(name, Map())
+    AllLayers.Add(name, true)
     UpdLayers()
     UpdateKeys()
+    ToggleFreeze(0)
 }
 
 
 EditSelectedLayer(*) {
-    static prev:=false
+    global r_gui
 
-    try prev.Destroy()
+    RDestroy()
     r_gui := Gui("-SysMenu", "Edit meta for `"" . last_selected_layer . "`"")
-    prev := r_gui
     r_gui.SetFont("s9")
 
     label_w := 70
@@ -190,20 +196,32 @@ EditSelectedLayer(*) {
     tags_edit.Text := LayersMeta[last_selected_layer]["rtags"]
 
     y += row_h + gap_y
-    r_gui.Add("Text", "+0x200 x14 y" . y . " w" . label_w . " h" . row_h, "Processes")
+    r_gui.Add("Text", "+0x200 x14 y" . y . " w" . label_w . " h" . row_h, "Window rule")
     proc_edit := r_gui.Add("Edit", "vProcesses h20 x" . edit_x . " yp+2 w" . (edit_w - 24))
     proc_edit.Text := LayersMeta[last_selected_layer]["rprocesses"]
     r_gui.Add("Button", "x+4 yp+0 h20 w20", "?").OnEvent("Click", (*) => MsgBox(
-        "You can limit assignments from this layer to work only in specific applications"
-        . " or, conversely, exclude those applications."
-        . "`nUse process names (as in Task Manager) or the groups associated with them,"
-        . " as you define it in a special section of the settings."
-        . "`nUse a comma as a separator. Case-insensitive."
-        . "`n`nExamples`nThe layer is active only in "
-        . "certain processes: `"+firefox.exe, chrome.exe`""
-        . "`nThe layer is disabled only in specific group: `"-games`""
-        . "`nCan be combined to specifically exclude from the group: `"-browsers, +firefox.exe`""
-        . "`nLeave blank to keep the layer always active.", "Help"
+        "You can limit assignments from this layer to work only in specific windows."
+        . "`nUse process names, ahk-groups, title regular expressions,"
+        . "`nand predefined groups from the settings – all with the same syntax."
+        . "`n`n(Comma-separated. Case-insensitive)"
+        . "`nExamples:"
+        . "`n`nOnly in certain groups/applications:`n  'browsers, totalcmd.exe'"
+        . "`n`nWith the 'c:' prefix – only when the class matches:`n  'c:XamlExplorerHostIslandWindow'"
+        . "`n`nWith the 't:' prefix – only when the title matches (Google: ahk regex quickRef):"
+        . "`n  't:^Cadans|^Commits'"
+        . "`n`nUse them to refine conditions:"
+        . "`n  'explorer.exe[c:XamlExplorerHostIslandWindow]',"
+        . "`n  'explorer.exe[t:^Task View$]',"
+        . "`n  'browsers[t:i)Google]',"
+        . "`n  'c:XamlExplorerHostIslandWindow[t:^Task View$]'"
+        . "`nNested rules are also supported:"
+        . "`n  'explorer.exe[c:XamlExplorerHostIslandWindow[t:^Task View$]]'"
+        . "`n`n'-' at any level acts as inversion:"
+        . "`n  '-games, -explorer.exe' = 'everywhere except this group and app'"
+        . "`n  'explorer.exe[-t:^Task View$]' = 'all explorer windows except Task View'"
+        . "`n  '-explorer.exe[-t:^Task View$]' = 'everywhere outside explorer, BUT including Task View'"
+        . "`n  'browsers[-t:Google]' = 'all browser processes while the title does not contain Google'"
+        . "`n`nLeave blank to keep the layer always active.", "Help"
     ))
 
     y += row_h + 8
@@ -212,19 +230,21 @@ EditSelectedLayer(*) {
     cancel_btn := r_gui.Add("Button", "x+8 yp+0 w66 h20", "Cancel")
 
     save_btn.OnEvent("Click", Save)
-    cancel_btn.OnEvent("Click", Cancel)
-    r_gui.OnEvent("Escape", Cancel)
-    r_gui.OnEvent("Close", Cancel)
+    cancel_btn.OnEvent("Click", RDestroy)
+    r_gui.OnEvent("Escape", RDestroy)
+    r_gui.OnEvent("Close", RDestroy)
 
     r_gui.Show("AutoSize Center")
 
     Save(*) {
+        ToggleFreeze(1)
         new_filepath := "layers/" . r_gui["Name"].Text . ".json"
         old_filepath := "layers/" . last_selected_layer . ".json"
         if new_filepath !== old_filepath {
             if FileExist(new_filepath) && MsgBox(
                 "File with this name already exists. Do you want to overwrite it?",
                 "Confirmation", "YesNo Icon?") == "No" {
+                ToggleFreeze(0)
                 return
             }
             FileMove("layers/" . last_selected_layer . ".json", new_filepath, true)
@@ -235,19 +255,16 @@ EditSelectedLayer(*) {
         n_proc := r_gui["Processes"].Text
         m := LayersMeta[last_selected_layer]
         if n_tags == m["rtags"] && n_descr == m["rdescription"] && n_proc == m["rprocesses"] {
-            r_gui.Destroy()
             if new_filepath !== old_filepath {
-                ToggleFreeze(1)
-                ReadLayers()
-                FillRoots()
-                UpdLayers()
+                Refresh()
                 FillLayerTags()
                 FillLayers()
                 FillOther()
             }
+            ToggleFreeze(0)
+            RDestroy()
             return
         }
-        ToggleFreeze(1)
 
         src := FileOpen(new_filepath, "r", "UTF-8")
         first_line := RTrim(src.ReadLine(), "`r`n")
@@ -283,51 +300,47 @@ EditSelectedLayer(*) {
 
         FileMove(tmp, new_filepath, 1)
 
-        if ActiveLayers.Has(last_selected_layer) {
+        if new_filepath !== old_filepath && ActiveLayers.Has(last_selected_layer) {
             p := ActiveLayers[last_selected_layer]
             ActiveLayers.Remove(last_selected_layer)
             ActiveLayers.Add(r_gui["Name"].Text, , p)
             _WriteActiveLayersToConfig(true)
         }
 
-        r_gui.Destroy()
-
-        ReadLayers()
-        FillRoots()
-        UpdLayers()
-        FillLayerTags()
-        FillLayers()
-        FillOther()
+        Refresh(2)
+        RDestroy()
     }
+}
 
-    Cancel(*) {
-        r_gui.Destroy()
+RDestroy(*) {
+    global r_gui
+
+    if r_gui {
+        try r_gui.Destroy()
+        r_gui := false
     }
 }
 
 
-
 DeleteSelectedLayer(*) {
-    global selected_layer_priority, last_selected_layer
+    global last_selected_layer
 
     if MsgBox("Do you really want to delete that layer?", "Confirmation", "YesNo Icon?") == "No" {
         return
     }
+    ToggleFreeze(1)
 
     FileDelete("layers/" . last_selected_layer . ".json")
     AllLayers.Remove(last_selected_layer)
-    if selected_layer_priority {
+    if ActiveLayers.Has(last_selected_layer) {
         ActiveLayers.Remove(last_selected_layer)
-        _WriteActiveLayersToConfig()
-        selected_layer_priority := 0
+        _WriteActiveLayersToConfig(true)
     }
-    if !AllLayers.Length {
+    if !AllLayers.count {
         AddNewLayer()
     }
     last_selected_layer := ""
-    ReadLayers()
-    FillRoots()
-    UpdLayers()
+    Refresh()
     FillLayerTags()
     FillLayers()
     FillOther()
@@ -345,16 +358,25 @@ MoveDownSelectedLayer(*) {
 
 
 _MoveSelectedLayer(sign, to_the_end:=false, *) {
-    global selected_layer_priority
+    lv := UI["LV_layers"]
+    loop lv.GetCount() {
+        if lv.GetText(A_Index, 3) == last_selected_layer {
+            try {
+                prior := Integer(UI["LV_layers"].GetText(A_Index, 2))
+            } catch {
+                return
+            }
+            break
+        }
+    }
 
-    prior := selected_layer_priority
-    if prior == (sign == -1 ? 1 : ActiveLayers.Length) {
+    if prior == (sign == -1 ? 1 : ActiveLayers.count) {
         _FocusLastLayerLV()
         return
     }
 
-    fin := to_the_end ? (sign == -1 ? 1 : ActiveLayers.order.Length) : prior + 1 * sign
-    while selected_layer_priority !== fin {
+    fin := to_the_end ? (sign == -1 ? 1 : ActiveLayers.count) : prior + 1 * sign
+    while prior !== fin {
         n := prior + 1 * sign
         from := ActiveLayers.order[prior]
         to := ActiveLayers.order[n]
@@ -362,8 +384,7 @@ _MoveSelectedLayer(sign, to_the_end:=false, *) {
         ActiveLayers.map[to] := prior
         ActiveLayers.order[prior] := ActiveLayers.order[n]
         ActiveLayers.order[n] := from
-        selected_layer_priority := n
-        prior := selected_layer_priority
+        prior := n
     }
 
     _WriteActiveLayersToConfig()
@@ -372,14 +393,19 @@ _MoveSelectedLayer(sign, to_the_end:=false, *) {
 
 
 _FocusLastLayerLV() {
-    lv := UI["LV_layers"]
-    lv.Focus()
-    loop lv.GetCount() {
-        if lv.GetText(A_Index, 2) == selected_layer_priority {
-            lv.Modify(A_Index, "Select Focus")
-            LVLayerClick(UI["LV_layers"], A_Index)
-            return
+    if last_selected_layer {
+        lv := UI["LV_layers"]
+        lv.Focus()
+        loop lv.GetCount() {
+            if lv.GetText(A_Index, 3) == last_selected_layer {
+                p := lv.GetText(A_Index, 2) != ""
+                lv.Modify(0, "-Select")
+                lv.Modify(A_Index, "Select Focus Vis")
+                break
+            }
         }
+        ToggleEnabled(p, UI.layer_move_btns)
+        ToggleEnabled(1, UI.layer_ctrl_btns)
     }
 }
 

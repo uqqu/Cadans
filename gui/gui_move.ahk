@@ -75,7 +75,7 @@ ChangePath(len:=-1, discard_md:=true, *) {
     global gui_mod_val, gui_entries, gui_sysmods
 
     UI["Hidden"].Focus()
-    if temp_chord || is_updating {
+    if temp_chord {
         return
     }
 

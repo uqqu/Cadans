@@ -88,14 +88,22 @@ TrayToggleSuspend() {
 
 
 ToggleFreeze(state:=2) {
-    global is_updating
+    global is_updating, pending_event
     static prev_path_txt:="", prev_title:=""
+
+    if state == 0 && !is_updating || state == 1 && is_updating {
+        return
+    }
 
     if state == 0 || state == 2 && is_updating {
         is_updating := false
         try {
             UI.path[1].Text := prev_path_txt
             UI.Title := prev_title
+        }
+        if pending_event {
+            pending_event := false
+            ApplyForegroundWindow(false)
         }
     } else if !is_updating {
         is_updating := true
@@ -132,7 +140,7 @@ ClearCurrentValue(is_hold, layer:="", *) {
         return
     }
 
-    if ActiveLayers.Length == 1 {
+    if ActiveLayers.count == 1 {
         selected_layers := ActiveLayers.order
     } else {
         layers := []
@@ -143,6 +151,7 @@ ClearCurrentValue(is_hold, layer:="", *) {
             }
         }
         if !layers.Length {
+            ToggleFreeze(0)
             return
         }
         selected_layers := layers.Length == 1 ? layers : ChooseLayers(layers)
@@ -163,7 +172,7 @@ ClearNested(is_hold, layer:="", *) {
 
     if layer_editing {
         selected_layers := [selected_layer]
-    } else if ActiveLayers.Length == 1 {
+    } else if ActiveLayers.count == 1 {
         selected_layers := ActiveLayers.order
     } else {
         layers := []
@@ -174,6 +183,7 @@ ClearNested(is_hold, layer:="", *) {
             }
         }
         if !layers.Length {
+            ToggleFreeze(0)
             return
         }
         selected_layers := layers.Length == 1 ? layers : ChooseLayers(layers)
@@ -190,15 +200,12 @@ ClearNested(is_hold, layer:="", *) {
         json_node[-2] := Map()
         json_node[-1] := Map()
         SerializeMap(json_root, layer)
+        UpdateLayerInRoots(layer, json_root)
     }
 
-    FillRoots()
-    if layer_editing {
-        AllLayers.map[selected_layer] := true
-        MergeLayer(selected_layer)
-    }
     UpdLayers()
     ChangePath()
+    ToggleFreeze(0)
 }
 
 
@@ -295,7 +302,7 @@ _GetFirst(node, certain_layer:="", ctx_id:=0) {
         ctx_id := gui_proc_ctx
     }
 
-    if buffer_view && node.layers.map.Has("buffer") && node.layers["buffer"][0] {
+    if buffer_view && node.layers.Has("buffer") && node.layers["buffer"][0] {
         return node.layers["buffer"][0]
     }
 
@@ -309,7 +316,7 @@ _GetFirst(node, certain_layer:="", ctx_id:=0) {
 
     def := false
     for layer in ActiveLayers.order {
-        if node.layers.map.Has(layer) && node.layers[layer][0] {
+        if node.layers.Has(layer) && node.layers[layer][0] {
             n := node.layers[layer][0]
 
             if !IsNodeAllowedForCtx(n, ctx_id) {

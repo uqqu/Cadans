@@ -5,10 +5,7 @@ A_HotkeyInterval := 0
 version := 0
 s_gui := false
 is_updating := false
-
-active_hwnd := WinActive("A")
-active_proc := ""
-try active_proc := WinGetProcessName("ahk_id " . active_hwnd)
+pending_event := false
 
 static_lang_names := Map(
     67699721, "qwerty en",
@@ -113,27 +110,7 @@ LANGS.Add(0, "Global assignments")
 
 first_start := CheckConfig()
 current_layout := CONF.LayoutAliases[GetCurrentLayout()]
-ReadLayers()
-FillRoots()
-UpdLayers()
-
-DllCall("SetWinEventHook", "UInt", 0x0003, "UInt", 0x0003,  ; EVENT_SYSTEM_FOREGROUND
-    "Ptr", 0, "Ptr", CallbackCreate(WinEventProc), "UInt", 0, "UInt", 0, "UInt", 0, "Ptr")
-
-WinEventProc(hWinEventHook, event, hwnd, *) {
-    global active_proc, active_hwnd
-
-    fg := WinExist("A")
-    if !fg || active_hwnd == fg {
-        return
-    }
-    active_hwnd := fg
-    active_proc := WinGetProcessName("ahk_id " . fg)
-    try SetCurrentProcessContext(active_proc)
-    CheckLayout()
-    ToRoot()
-}
-
+Refresh()
 
 ErrorHandler(err, mode) {
     Suspend true
@@ -717,10 +694,11 @@ SaveConfig(*) {
             b := 2
         }
 
-        if s_gui["IgnoreInactiveLayers"].Value != CONF.ignore_inactive.v {
-            for layer in ActiveLayers.map {
-                raw_roots := DeserializeMap(layer)
-                AllLayers.map[layer] := CountLangMappings(raw_roots)
+        if !s_gui["IgnoreInactiveLayers"].Value && CONF.ignore_inactive.v {
+            for layer in AllLayers.order {
+                if !ActiveLayers.Has(layer) && AllLayers[layer] is Integer {
+                    MergeLayer(layer)
+                }
             }
         }
 
@@ -752,16 +730,12 @@ SaveConfig(*) {
         IniWrite(IsInStartup(), "config.ini", "Main", "Autostart")
     }
 
-    s_gui.Destroy()
-    s_gui := false
     if b == 2 {
         Run(A_ScriptFullPath)  ; rerun with new keys
     } else {
         CollectUserValues()
         if proc {
-            ReadLayers()
-            FillRoots()
-            UpdLayers()
+            Refresh()
         }
         if b {
             CONF.T := "T" . CONF.MS_LP.v / 1000
@@ -771,6 +745,7 @@ SaveConfig(*) {
             overlay := false
             DrawLayout()
         }
+        CloseSettingsEvent(false)
     }
 }
 
@@ -840,10 +815,10 @@ EscSettingsEvent(*) {
 }
 
 
-CloseSettingsEvent(*) {
+CloseSettingsEvent(strict:=true, *) {
     global s_gui
 
-    if CheckChanges() && MsgBox(
+    if strict && CheckChanges() && MsgBox(
         "You have unsaved changes. Do you really want to close the window?",
         "Confirmation", "YesNo Icon?") == "No" {
         return true

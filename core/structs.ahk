@@ -86,7 +86,7 @@ class UnifiedNode {
     }
 
     GetRawFin() {
-        if !this.layers.Length {
+        if !this.layers.count {
             return false
         }
 
@@ -242,7 +242,7 @@ class UnifiedNode {
 
     BuildActives(prior_layers, sc:=0, md:=0, ctx_ids:=0) {
         if !ctx_ids {
-            ctx_ids := PROC_CTX.all_ids
+            ctx_ids := WIN_CTX.all_ids
         }
 
         if this._build_stamp !== version {
@@ -276,7 +276,7 @@ class UnifiedNode {
 
         default_key := ""
         for key in order {
-            if ArrayHasValue(groups[key].ctx_ids, PROC_CTX.other_id) {
+            if ArrayHasValue(groups[key].ctx_ids, WIN_CTX.other_id) {
                 default_key := key
                 break
             }
@@ -336,6 +336,51 @@ class UnifiedNode {
         }
 
         return false
+    }
+
+    RemoveLayerRecursive(layer_name) {
+        if this.layers.Has(layer_name) {
+            this.layers.Remove(layer_name)
+        }
+
+        for mp in [this.scancodes, this.chords, this.gestures] {
+            to_delete_sc := []
+
+            for sc, mods in mp {
+                to_delete_md := []
+
+                for md, child_unode in mods {
+                    child_unode.RemoveLayerRecursive(layer_name)
+
+                    if !child_unode.HasStructuralContent() {
+                        to_delete_md.Push(md)
+                    }
+                }
+
+                for md in to_delete_md {
+                    mods.Delete(md)
+                }
+
+                if !mods.Count {
+                    to_delete_sc.Push(sc)
+                }
+            }
+
+            for sc in to_delete_sc {
+                mp.Delete(sc)
+            }
+        }
+
+        this.proc_variants := Map()
+        this.proc_ctx_to_variant := Map()
+        this._build_stamp := 0
+    }
+
+    HasStructuralContent() {
+        return this.layers.count
+            || this.scancodes.Count
+            || this.chords.Count
+            || this.gestures.Count
     }
 }
 
@@ -442,6 +487,18 @@ NodeSig(node) {
 }
 
 
+Refresh(gui_update:=false) {
+    ToggleFreeze(1)
+    ReadLayers()
+    FillRoots()
+    UpdLayers()
+    if gui_update {
+        gui_update == 1 ? UpdateKeys() : ChangePath()
+    }
+    ToggleFreeze(0)
+}
+
+
 ReadLayers() {
     global AllLayers, ActiveLayers, LayersMeta, AllTags
 
@@ -455,7 +512,7 @@ ReadLayers() {
         AllLayers.Add(name)
         LayersMeta[name] := _GetMetaInfo(FileRead(A_LoopFilePath))
     }
-    if !AllLayers.Length {
+    if !AllLayers.count {
         AllLayers.Add("default_layer")
         SerializeMap(Map(), "default_layer")
     }
@@ -478,47 +535,52 @@ ReadLayers() {
 }
 
 
+UpdateLayerInRoots(layer, raw_roots:=false) {
+    for _, root in ROOTS {
+        root.RemoveLayerRecursive(layer)
+    }
+    MergeLayer(layer, raw_roots)
+}
+
+
 UpdLayers() {
     global curr_unode, version
 
-    ToggleFreeze(1)
-
-    FinalizeProcessRules()
-    SetCurrentProcessContext(active_proc)
+    FinalizeContextRules()
     version += 1
+    SetCurrentWindowContext(active_proc, active_class, active_title)
     for _, root in ROOTS {
         root.BuildActives(ActiveLayers.order)
     }
     curr_unode := ROOTS[gui_lang ?? 0]
-    ToggleFreeze(0)
 }
 
 
 GetLayerList() {
-    return ActiveLayers.Length ? ActiveLayers.order : AllLayers.order
+    return ActiveLayers.count ? ActiveLayers.order : AllLayers.order
 }
 
 
 FillRoots() {
     global ROOTS  ; bloody roots
 
-    t_roots := Map(0, UnifiedNode())
+    ROOTS := Map(0, UnifiedNode())
     for lang in LANGS.map {
-        t_roots[lang] := UnifiedNode()
+        ROOTS[lang] := UnifiedNode()
     }
-    ROOTS := t_roots
 
-    for arr in (CONF.ignore_inactive.v
-        ? [[ActiveLayers, Map()]] : [[ActiveLayers, Map()], [AllLayers, ActiveLayers]]) {
-        for layer in arr[1].map {
-            if !arr[2].Has(layer) {
+    for layer in ActiveLayers.order {
+        MergeLayer(layer)
+    }
+
+    if !CONF.ignore_inactive.v {
+        for layer in AllLayers.order {
+            if !ActiveLayers.Has(layer) {
                 MergeLayer(layer)
             }
         }
-        if selected_layer ?? 0 && !ActiveLayers.Has(selected_layer)
-            && AllLayers.map[selected_layer] is Integer {
-            MergeLayer(selected_layer)
-        }
+    } else if selected_layer ?? 0 && !ActiveLayers.Has(selected_layer) {
+        MergeLayer(selected_layer)
     }
 
     if saved_level {
@@ -532,9 +594,11 @@ FillRoots() {
 }
 
 
-MergeLayer(layer) {
-    raw_roots := DeserializeMap(layer)
-    AllLayers.map[layer] := CountLangMappings(raw_roots)
+MergeLayer(layer, raw_roots:=false) {
+    if !raw_roots {
+        raw_roots := DeserializeMap(layer)
+    }
+    AllLayers.Set(layer, CountLangMappings(raw_roots))
     for lang, root in raw_roots {
         if !LANGS.Has(lang) {
             if !CONF.unfam_layouts.v {

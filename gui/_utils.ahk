@@ -113,8 +113,8 @@ GetRowIconIndex(lv, row) {
     NumPut("uint", 0x0002, item, 0)
     NumPut("int", row - 1, item, 4)
     NumPut("int", 0, item, 8)
-    SendMessage(0x104B, 0, item, lv)
-    offset := (A_PtrSize = 8) ? 36 : 32
+    SendMessage(0x104B, 0, item.Ptr, lv.Hwnd)
+    offset := A_PtrSize == 8 ? 36 : 28
     return NumGet(item, offset, "int")
 }
 
@@ -136,7 +136,7 @@ GetColumnAtCursor(lv, with_row:=false) {
     NumPut("int", NumGet(pt, 0, "int"), hti, 0)
     NumPut("int", NumGet(pt, 4, "int"), hti, 4)
 
-    SendMessage(0x1039, 0, hti, lv)
+    SendMessage(0x1039, 0, hti.Ptr, lv.Hwnd)
 
     if with_row {
         row := row || (NumGet(hti, 12, "int") + 1)

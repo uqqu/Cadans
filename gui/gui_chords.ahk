@@ -159,14 +159,14 @@ DeleteSelectedChord(_, without_confirmation:=false, without_upd:=false) {
         }
 
 	    SerializeMap(json_root, layer)
+        UpdateLayerInRoots(layer, json_root)
     }
     selected_chord := ""
-    ReadLayers()
+    UpdLayers()
     if !without_upd {
-        FillRoots()
-        UpdLayers()
-        ChangePath()
+        UpdateKeys()
     }
+    ToggleFreeze(0)
 }
 
 
@@ -215,7 +215,7 @@ SaveEditedChord(*) {
     } else {
         equal := false
     }
-    if !equal && (layer_editing || ActiveLayers.order.Length == 1) {
+    if !equal && (layer_editing || ActiveLayers.count == 1) {
         layer := layer_editing ? selected_layer : ActiveLayers.order[1]
         chord_txt := ChordToStr(temp_chord)
         if gui_entries.ubase.chords.Has(chord_txt)

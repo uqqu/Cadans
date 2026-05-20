@@ -73,6 +73,7 @@ DeleteSelectedGesture(*) {
         "Confirmation", "YesNo Icon?") == "No" {
         return
     }
+    ToggleFreeze(1)
 
     gest_layer := ""
     checked_layers := layer_editing ? [selected_layer] : ActiveLayers.order
@@ -108,8 +109,8 @@ DeleteSelectedGesture(*) {
 
     SerializeMap(json_root, gest_layer)
     selected_gesture := ""
-    ReadLayers()
-    FillRoots()
+    UpdateLayerInRoots(gest_layer, json_root)
     UpdLayers()
     ChangePath()
+    ToggleFreeze(0)
 }

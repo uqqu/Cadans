@@ -8,6 +8,6 @@
 
 
 Hello() {
-    ToolTip("Hello")
-    SetTimer(ToolTip, -1000)
+    ToolTip(active_proc . " | " . active_class . " | " . active_title)
+    SetTimer(ToolTip, -10000)
 }

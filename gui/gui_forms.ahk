@@ -74,7 +74,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
     prior_layer := false
     if unode {
         for layer in layers {
-            if unode.layers.map.Has(layer) && unode.layers[layer][0] {
+            if unode.layers.Has(layer) && unode.layers[layer][0] {
                 prior_layer := layer
                 break
             }
@@ -548,7 +548,7 @@ ChangeFormPlaceholder(unode, paired, layers, save_type:=0, is_up:=0, is_layer_ed
         return
     }
 
-    if !is_up && unode && unode.layers.Length && unode.layers.Has(layer) && unode.layers[layer][0]
+    if !is_up && unode && unode.layers.count && unode.layers.Has(layer) && unode.layers[layer][0]
         && (prev_layer !== layer || unode.layers[layer][0].down_type == form["TypeDDL"].Value) {
 
         val := unode.layers[layer][0]
@@ -612,7 +612,7 @@ ChangeFormPlaceholder(unode, paired, layers, save_type:=0, is_up:=0, is_layer_ed
         title := "Existing" . name . "for layer '" . layer . "'"
     }
 
-    if !is_up && paired && paired.layers.Length
+    if !is_up && paired && paired.layers.count
         && paired.layers.Has(layer) && paired.layers[layer][0] {
         p := paired.layers[layer][0]
         try form["CustomLP"].Text := p.custom_lp_time || ""
@@ -1105,16 +1105,11 @@ WriteChord(chord:=false, *) {
     ToggleVisibility(0, UI.chs_back)
     ToggleVisibility(1, UI.chs_front)
 
-    FillRoots()
-    if layer_editing {
-        AllLayers.map[selected_layer] := true
-        MergeLayer(selected_layer)
-    }
+    UpdateLayerInRoots(temp_layer, json_root)
     UpdLayers()
     ChangePath()
-
-    try form.Destroy()
-    form := false
+    ToggleFreeze(0)
+    CloseForm()
 }
 
 
@@ -1155,6 +1150,8 @@ WriteGesture(as_base, entries, path, *) {
         }
     }
 
+    ToggleFreeze(1)
+
     layers := GetLayerList()
     temp_layer := layer_editing ? selected_layer
         : (layers.Length == 1 ? layers[1] : form["LayersDDL"].Text)
@@ -1177,6 +1174,7 @@ WriteGesture(as_base, entries, path, *) {
         && SubStr(form.Title, 1, 8) !== "Existing"
         && MsgBox("An identical gesture already exists on this layer. "
         . "Do you want to overwrite it?", "Confirmation", "YesNo Icon?") == "No" {
+        ToggleFreeze(0)
         return
     }
 
@@ -1204,13 +1202,10 @@ WriteGesture(as_base, entries, path, *) {
 
     SerializeMap(json_root, temp_layer)
 
-    FillRoots()
-    if layer_editing {
-        AllLayers.map[selected_layer] := true
-        MergeLayer(selected_layer)
-    }
+    UpdateLayerInRoots(temp_layer, json_root)
     UpdLayers()
     ChangePath()
+    ToggleFreeze(0)
     CloseForm()
 }
 
@@ -1240,13 +1235,10 @@ SaveValue(
     json_node[11] := gest_opts
     SerializeMap(json_root, layer)
 
-    FillRoots()
-    if layer_editing {
-        AllLayers.map[selected_layer] := true
-        MergeLayer(selected_layer)
-    }
+    UpdateLayerInRoots(layer, json_root)
     UpdLayers()
     ChangePath()
+    ToggleFreeze(0)
 }
 
 

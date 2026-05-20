@@ -56,7 +56,7 @@ DeserializeMap(filename) {
 
 _GetMetaInfo(data) {
     res := Map("version", 0.6, "rtags", "", "rdescription", "", "rprocesses", "",
-        "tags", [], "processes", Map("*", true))
+        "tags", [], "processes", [{invert: false, kind: "*", val: "*", children: []}])
     lns := StrSplit(data, "`n", "`r`n`t ", 5)
 
     if RegExMatch(lns[1], "^//\s*([0-9]+(?:\.[0-9]+)?)", &m) {
@@ -83,59 +83,256 @@ _GetMetaInfo(data) {
     }
 
     if StrLen(res["rprocesses"]) {
-        res["processes"] := ParseProcessesRule(res["rprocesses"])
+        res["processes"] := ParseProcessesString(res["rprocesses"])
     }
 
     return res
 }
 
 
-ParseProcessesRule(rule_str) {
-    ops := OrderedMap()
-    rule_str := Trim(rule_str)
+ParseProcessesString(s) {
+    rules := []
 
-    if !rule_str {
-        return Map("*", true)
+    for part in SplitTopLevelComma(s) {
+        for rule in ParseWindowRuleExpanded(part) {
+            rules.Push(rule)
+        }
     }
 
-    current_sign := ""
-    first_sign := ""
+    return rules
+}
 
-    for part in StrSplit(rule_str, ",", " `t`r`n") {
-        part := Trim(part)
-        if !part {
+
+ParseWindowRuleExpanded(s, seen:=false) {
+    rule := ParseWindowRule(s)
+    return ExpandWindowRule(rule, seen)
+}
+
+
+ExpandWindowRule(rule, seen:=false) {
+    seen := seen || Map()
+
+    if rule.kind != "p" || !CONF.ProcessGroups.Has(rule.val) {
+        return [rule]
+    }
+
+    group_name := rule.val
+
+    if seen.Has(group_name) {
+        return []
+    }
+
+    seen[group_name] := true
+
+    res := []
+
+    for group_part in SplitTopLevelComma(CONF.ProcessGroups[group_name]) {
+        for group_rule in ParseWindowRuleExpanded(group_part, seen) {
+            group_rule.invert := rule.invert ? !group_rule.invert : group_rule.invert
+
+            for child in rule.children {
+                group_rule.children.Push(CloneWindowRule(child))
+            }
+
+            res.Push(group_rule)
+        }
+    }
+
+    seen.Delete(group_name)
+    return res
+}
+
+
+WindowRulePredicate(rule, proc, cls:="", title:="", is_root:=true) {
+    matched := WindowAtomMatches(rule, proc, cls, title)
+
+    for child in rule.children {
+        if !WindowRulePredicate(child, proc, cls, title, false) {
+            matched := false
+            break
+        }
+    }
+
+    return (!is_root && rule.invert) ? !matched : matched
+}
+
+
+_WindowRulesAllow(rules, proc, cls:="", title:="") {
+    if !rules || !rules.Length {
+        return true
+    }
+
+    has_positive := false
+
+    for i, rule in rules {
+        if !rule.invert {
+            has_positive := true
+            break
+        }
+    }
+
+    allowed := !has_positive
+
+    for rule in rules {
+        if !WindowRulePredicate(rule, proc, cls, title, true) {
             continue
         }
 
-        sign := SubStr(part, 1, 1)
-        if sign == "+" || sign == "-" {
-            current_sign := sign
-            if !first_sign {
-                first_sign := sign
-            }
-            name := NormName(SubStr(part, 2))
-        } else {
-            if !current_sign {
-                continue
-            }
-            sign := current_sign
-            name := NormName(part)
-        }
+        allowed := !rule.invert
+    }
 
-        if !name {
+    return allowed
+}
+
+
+CloneWindowRule(rule) {
+    children := []
+
+    for child in rule.children {
+        children.Push(CloneWindowRule(child))
+    }
+
+    return {
+        invert: rule.invert,
+        kind: rule.kind,
+        val: rule.val,
+        children: children
+    }
+}
+
+
+ParseWindowRule(s) {
+    invert := ParseRuleInvert(&s)
+    parts := SplitRuleHeadChildren(s)
+    atom := ParseRuleAtom(parts.head)
+
+    rule := {
+        invert: invert,
+        kind: atom.kind,
+        val: atom.val,
+        children: []
+    }
+
+    if parts.children {
+        for child_s in SplitTopLevelComma(parts.children) {
+            rule.children.Push(ParseWindowRule(child_s))
+        }
+    }
+
+    return rule
+}
+
+
+ParseRuleInvert(&s) {
+    s := Trim(s)
+
+    if SubStr(s, 1, 1) == '-' {
+        s := Trim(SubStr(s, 2))
+        return true
+    }
+
+    if SubStr(s, 1, 1) == '+' {
+        s := Trim(SubStr(s, 2))
+    }
+
+    return false
+}
+
+
+ParseRuleAtom(s) {
+    s := Trim(s)
+
+    if RegExMatch(s, "i)^(p|proc|process):(.+)$", &m) {
+        return {kind: "p", val: NormName(m[2])}
+    } else if RegExMatch(s, "i)^(c|class):(.+)$", &m) {
+        return {kind: "c", val: Trim(m[2])}
+    } else if RegExMatch(s, "i)^(t|title):(.+)$", &m) {
+        return {kind: "t", val: Trim(m[2])}
+    }
+
+    ; default = process
+    return {kind: "p", val: NormName(s)}
+}
+
+
+FindTopBracket(s) {
+    in_quote := false
+    is_esc := false
+
+    loop Parse s {
+        ch := A_LoopField
+
+        if is_esc {
+            is_esc := false
+        } else if ch == "\" {
+            is_esc := true
+        } else if ch == '"' {
+            in_quote := !in_quote
+        } else if !in_quote && ch == "[" {
+            return A_Index
+        }
+    }
+
+    return 0
+}
+
+
+SplitRuleHeadChildren(s) {
+    s := Trim(s)
+    _pos := FindTopBracket(s)
+
+    if !_pos {
+        return {head: s, children: ""}
+    }
+
+    head := Trim(SubStr(s, 1, _pos - 1))
+    rest := Trim(SubStr(s, _pos))
+
+    if SubStr(rest, 1, 1) != "[" || SubStr(rest, -1) != "]" {
+        throw Error("Invalid window rule brackets: " . s)
+    }
+
+    return {
+        head: head,
+        children: SubStr(rest, 2, StrLen(rest) - 2)
+    }
+}
+
+
+SplitTopLevelComma(s) {
+    res := []
+    start := 1
+    depth := 0
+    in_quote := false
+    is_esc := false
+
+    loop Parse s {
+        ch := A_LoopField
+
+        if is_esc {
+            is_esc := false
+        } else if ch == "\" {
+            is_esc := true
+        } else if ch == '"' {
+            in_quote := !in_quote
+        } else if in_quote {
             continue
+        } else if ch == "[" {
+            depth += 1
+        } else if ch == "]" {
+            depth -= 1
+        } else if ch == "," && depth == 0 {
+            part := Trim(SubStr(s, start, A_Index - start))
+            if part {
+                res.Push(part)
+            }
+            start := A_Index + 1
         }
-
-        ops.Set(name, sign == "+")
     }
 
-    if !first_sign {
-        return Map("*", true)
-    }
-
-    res := Map("*", first_sign == "-")
-    for name in ops.order {
-        res[name] := ops[name]
+    part := Trim(SubStr(s, start))
+    if part {
+        res.Push(part)
     }
 
     return res

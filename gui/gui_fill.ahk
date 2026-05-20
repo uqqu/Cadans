@@ -154,7 +154,7 @@ FillOneButton(sc, btn, d_sc, is_disabled:=false) {
     btn.Enabled := true
     btn.SetFont("Norm")
 
-    res := gui_entries.ubase.GetBaseHoldMod(d_sc, gui_mod_val, false, false, false, false)
+    res := gui_entries.ubase.GetBaseHoldMod(d_sc, gui_mod_val, false, false, false, false, gui_proc_ctx)
     b_node := _GetFirst(res.ubase)
     h_node := _GetFirst(res.uhold)
     m_node := _GetFirst(res.umod)
@@ -494,13 +494,13 @@ FillLayers() {
             folder_cnt := 0
         }
 
-        if CONF.ignore_inactive.v && !v {
+        if !v && AllLayers[name] is Integer {
             UI["LV_layers"].Add("Icon1", , , split[-1])
             continue
         }
         cnt := [0, 0]
         if buffer_view || !current_path.Length {
-            for lang, val in AllLayers.map[name] {
+            for lang, val in AllLayers[name] {
                 cnt[2 - (lang == gui_lang)] += val
             }
             lang := UI["Langs"].Text == "Global assignments" ? "Global" : UI["Langs"].Text
@@ -560,8 +560,6 @@ FillLayers() {
     if folder_name {
         UI["LV_layers"].Add("Icon3", , , folder_name, folder_cnt || "")
     }
-
-    ToggleEnabled(0, UI.layer_move_btns, UI.layer_ctrl_btns)
 }
 
 
@@ -581,7 +579,7 @@ _CountChild(layer, levels, mod_val, scs, chs, gsts, combined:=false) {
                     cnt += 1
                 }
                 if !layer {
-                    for nlayer in unode.layers.map {
+                    for nlayer in unode.layers.order {
                         if (buffer_view || ActiveLayers.Has(nlayer))
                             && _IsCounted(unode.layers[nlayer][0]) {
                             cnt += 1
@@ -781,7 +779,7 @@ FillOther() {
         UI.copy_options_menu.Disable("3&")
     }
 
-    ToggleEnabled(0, UI.layer_move_btns, UI.layer_ctrl_btns, UI.chs_toggles, UI.gest_toggles)
+    ToggleEnabled(0, UI.chs_toggles, UI.gest_toggles)
 
     ToggleEnabled(saved_level && !buffer_view && !temp_chord && selected_layer
         && (saved_level[1] !== 2 || current_path.Length), UI["BtnShowPasteMenu"])
@@ -797,12 +795,38 @@ FillOther() {
     if selected_layer {
         return
     }
+    RefreshGuiWindowCtxDdl()
+}
+
+
+RefreshGuiWindowCtxDdl(old_txt:="") {
+    global gui_proc_ctx
+
+    if !old_txt {
+        try old_txt := UI["DdlProcCtx"].Text
+    }
+
+    items := GetGuiWindowCtxItems()
 
     UI["DdlProcCtx"].Enabled := true
     UI["DdlProcCtx"].Delete()
-    UI["DdlProcCtx"].Add(GetGuiProcessItems())
-    UI["DdlProcCtx"].Text := GetGuiProcessTextByCtx(gui_proc_ctx)
-    if UI["DdlProcCtx"].Text == "*" {
-        gui_proc_ctx := 1
+    UI["DdlProcCtx"].Add(items)
+
+    if old_txt && ArrayHasValue(items, old_txt) {
+        UI["DdlProcCtx"].Text := old_txt
+        gui_proc_ctx := GetGuiWindowCtxByText(old_txt)
+        return
     }
+
+    SetCurrentWindowContext(active_proc, active_class, active_title)
+    gui_proc_ctx := current_ctx
+
+    txt := GetGuiWindowCtxText(gui_proc_ctx)
+
+    if !ArrayHasValue(items, txt) {
+        gui_proc_ctx := WIN_CTX.other_id
+        txt := GetGuiWindowCtxText(gui_proc_ctx)
+    }
+
+    UI["DdlProcCtx"].Text := txt
 }

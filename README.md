@@ -52,8 +52,8 @@ Or go further and build more complex logic – it’s entirely up to you.
     <td>✅ Separate assignments per keyboard layout, plus global ones</td>
   </tr>
   <tr>
-    <td><strong>Processes</strong></td>
-    <td>✅ Separate assignments per application, on demand</td>
+    <td><strong>Window contexts</strong></td>
+    <td>✅ Separate assignments per application/class/title, on demand</td>
   </tr>
   <tr>
     <td><strong>Layer activity (dynamic)</strong></td>

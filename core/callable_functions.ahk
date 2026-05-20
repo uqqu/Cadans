@@ -33,6 +33,9 @@ SetActiveLayers(layers*) {
     ActiveLayers := OrderedMap()
     for layer in layers {
         ActiveLayers.Add(layer)
+        if AllLayers[layer] is Integer {
+            MergeLayer(layer)
+        }
     }
     _WriteActiveLayersToConfig()
 }
@@ -44,11 +47,11 @@ ToggleLayers(layers*) {
     for layer in layers {
         layer_pos := layer[1] || -1
         layer_name := layer[2]
-        if ActiveLayers.map.Has(layer_name) {
+        if ActiveLayers.Has(layer_name) {
             ActiveLayers.Remove(layer_name)
         } else {
             ActiveLayers.Add(layer_name, , layer_pos)
-            if AllLayers.map[layer_name] is Integer {
+            if AllLayers[layer_name] is Integer {
                 MergeLayer(layer_name)
             }
         }

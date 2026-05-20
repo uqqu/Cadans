@@ -9,7 +9,7 @@ AltHelp() {
     }
 
     MouseGetPos(,, &win_id, &ctrl_hwnd, 2)
-    if !ctrl_hwnd || ctrl_hwnd == prev_hwnd {
+    if !IsSet(ctrl_hwnd) || !ctrl_hwnd || ctrl_hwnd == prev_hwnd {
         return
     }
 
@@ -44,32 +44,37 @@ AltHelp() {
             txt .= "`nResets when pressed."
         }
     } else if i_sc == "DdlProcCtx" {
-        txt := "List of process groups (contexts) with their own assignments.`n"
-            . "They are determined by the rules of active layers.`n`n"
+        txt := "List of window contexts with their own assignments.`n"
+            . "They are derived from the window rules of active layers.`n`n"
+
         if obj.Enabled {
             txt .= "Now you see assignments for"
             if obj.Text == "*" {
-                txt .= " all processes that do not have their own rules."
+                txt .= " all windows that do not have their own rules."
             } else {
-                txt .= ":`n" . JoinArr(PROC_CTX.id_to_names[gui_proc_ctx], ", ")
+                txt .= ":`n" . GetGuiWindowCtxText(gui_proc_ctx, false)
                 txt .= "`n`nThis context is derived from the following layers "
                     . "(in addition to the global ones):`n"
                     . JoinArr(GetLayersDifferFromOther(gui_proc_ctx), ", ")
             }
         } else {
-            txt .= "In layer editing mode, this shows only the raw rule of the layer"
+            txt .= "In layer editing mode, this shows only the raw window rule of the layer"
             if obj.Text == "*" {
-                txt .= ", but this layer has no rule for processes.`nIt is always active."
+                txt .= ", but this layer has no window rule.`nIt is always active."
             } else {
                 txt .= ":`n" . obj.Text
+
                 b := false
                 for n in StrSplit(obj.Text, ",", " `n`r`t") {
-                    if CONF.ProcessGroups.Has(n) {
+                    n := Trim(n)
+                    group_name := GuiWindowCtxToken(n)
+
+                    if CONF.ProcessGroups.Has(group_name) {
                         if !b {
                             txt .= "`n`nThe rule refers to the groups defined in the settings:"
                             b := true
                         }
-                        txt .= "`n" . n . " = " . CONF.ProcessGroups[n]
+                        txt .= "`n" . group_name . " = " . CONF.ProcessGroups[group_name]
                     }
                 }
             }
@@ -158,7 +163,7 @@ AltHelp() {
                     . "`nIdentical assignments are merged, including their nested assignments."
             } else if c == 3 {
                 txt := "Layers and subfolders, as named in the 'layers' directory.`nWith Alt it "
-                    . "shows meta information, such as description, tags and process rule."
+                    . "shows meta information, such as description, tags and window rule."
             } else if !path.Length {
                 if c == 4 {
                     txt := "At the root level, this column shows the total number of assignments "
@@ -215,7 +220,7 @@ AltHelp() {
                         txt .= "Tags: " . m["rtags"] . "`n"
                     }
                     if m["rprocesses"] {
-                        txt .= "Has process rule: " . m["rprocesses"]
+                        txt .= "Has window rule: " . m["rprocesses"]
                     }
                 } else if c == 4 && val {
                     entries := _GetUnholdEntries()
@@ -391,7 +396,7 @@ AltHelp() {
     } else if i_sc == "BtnDeleteSelectedLayer" {
         txt := "Completely delete the selected layer. This action cannot be undone."
     } else if i_sc == "BtnEditSelectedLayer" {
-        txt := "View and edit the layer [path/]name, description, tags and process rule."
+        txt := "View and edit the layer [path/]name, description, tags and window rule."
     } else if i_sc == "BtnMoveUpSelectedLayer" {
         txt := "Raise the priority of the selected layer.`nIf different layers have "
             . "assignments for the same event,`nthe one from the highest-priority layer is used."
@@ -465,10 +470,10 @@ AltHelp() {
         tag := obj.Text
         if tag == "Active" {
             txt := "Toggle visibility of all active layers"
-            cnt := ActiveLayers.Length
+            cnt := ActiveLayers.count
         } else if tag == "Inactive" {
             txt := "Toggle visibility of all inactive layers"
-            cnt := AllLayers.Length - ActiveLayers.Length
+            cnt := AllLayers.count - ActiveLayers.count
         } else {
             if tag == "<untagged>" {
                 txt := "Toggle visibility of all layers without tags"
@@ -641,7 +646,7 @@ _GetKeyInfo(sc, md, cur_entries, prev_entries,
             b := false
             for md, val in other_mods {
                 if !seen.Has(md & ~1) {
-                    if !layer_editing || val.layers.map.Has(selected_layer) {
+                    if !layer_editing || val.layers.Has(selected_layer) {
                         mods := DecomposeMods(md, true)
                         if !mods {
                             b := true

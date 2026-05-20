@@ -2,7 +2,7 @@ class OrderedMap {
     __New() {
         this.map := Map()
         this.order := []
-        this.Length := 0
+        this.count := 0
     }
 
     __Item[name] {
@@ -11,8 +11,8 @@ class OrderedMap {
 
     Add(name, data?, pos_?) {
         if !this.map.Has(name) {
-            this.Length += 1
-            this.map[name] := data ?? this.Length
+            this.count += 1
+            this.map[name] := data ?? this.count
             IsSet(pos_) ? this.order.InsertAt(pos_, name) : this.order.Push(name)
         }
     }
@@ -39,7 +39,7 @@ class OrderedMap {
 
     Remove(name) {
         if this.map.Has(name) {
-            this.Length -= 1
+            this.count -= 1
             this.map.Delete(name)
             for i, existing in this.order {
                 if existing == name {
@@ -169,6 +169,18 @@ NormName(name) {
     return Trim(StrLower(name))
 }
 
+NormProc(name) {
+    return NormName(name)
+}
+
+NormClass(name) {
+    return Trim(name)
+}
+
+NormTitle(title) {
+    return title
+}
+
 
 GetCurrentLayout() {
     return Integer(DllCall("GetKeyboardLayout", "UInt",
@@ -181,9 +193,9 @@ GetLayoutLangFromHKL(hkl) {
         return static_lang_names[hkl]
     }
 
-    buf := Buffer(9)
+    buf := Buffer(9 * 2, 0)
     DllCall("GetLocaleInfoW", "UInt", hkl & 0xFFFF, "UInt", 0x59, "Ptr", buf, "Int", 9)
-    return StrGet(buf)
+    return StrGet(buf, "UTF-16")
 }
 
 

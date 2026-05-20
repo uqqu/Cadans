@@ -67,7 +67,7 @@ SaveDrag(_, all_mods:=false, all_langs:=false, *) {
         return
     }
 
-    if !buffer_view && !layer_editing && ActiveLayers.order.Length !== 1 {
+    if !buffer_view && !layer_editing && ActiveLayers.count !== 1 {
         inp := MsgBox("You're not in layer editing mode. "
             . "Do you want to apply the changes to all of them? "
             . "(press 'no' to manually select layers)",
@@ -109,22 +109,17 @@ SaveDrag(_, all_mods:=false, all_langs:=false, *) {
         }
         if is_curr_changed && !buffer_view {
             SerializeMap(json_root, layer)
+            UpdateLayerInRoots(layer, json_root)
             is_changed := true
         }
     }
 
     if is_changed {
-        FillRoots()
-        if layer_editing {
-            AllLayers.map[selected_layer] := true
-            MergeLayer(selected_layer)
-        }
         UpdLayers()
-    } else {
-        ToggleFreeze(0)
     }
 
     EndDragMode()
+    ToggleFreeze(0)
 }
 
 
@@ -565,11 +560,11 @@ PasteLevel(_, paste_type, *) {
     _CleanSaved()
 
     SerializeMap(json_root, selected_layer)
-    FillRoots()
-    AllLayers.map[selected_layer] := true
-    MergeLayer(selected_layer)
+    AllLayers.Set(selected_layer, true)
+    UpdateLayerInRoots(selected_layer, json_root)
     UpdLayers()
     ChangePath()
+    ToggleFreeze(0)
 }
 
 

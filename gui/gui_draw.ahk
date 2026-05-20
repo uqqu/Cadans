@@ -195,6 +195,7 @@ DrawLayersLV() {
 
     UI.layer_move_btns := [UI["BtnMoveUpSelectedLayer"], UI["BtnMoveDownSelectedLayer"]]
     UI.layer_ctrl_btns := [UI["BtnEditSelectedLayer"], UI["BtnDeleteSelectedLayer"]]
+    ToggleEnabled(0, UI.layer_move_btns, UI.layer_ctrl_btns)
 }
 
 
@@ -300,7 +301,7 @@ DrawOther() {
     UI.SetFont("Norm s" . Round(8 * CONF.font_scale.v))
 
     UI.Add("DropDownList", Scale(840, rh, 160) " Choose1 vDdlProcCtx")
-        .OnEvent("Change", GuiProcCtxChanged)
+        .OnEvent("Change", GuiWindowCtxChanged)
 
     UI.Add("Button", "vBtnEnableDragMode " . Scale(1015, rh, 26, 20), "🔀")
     UI.Add("Button", "vBtnShowBuffer " . Scale(1041, rh, 26, 20), "👁").OnEvent("Click", ShowBuffer)
