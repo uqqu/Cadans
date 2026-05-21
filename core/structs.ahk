@@ -175,11 +175,14 @@ class UnifiedNode {
         next_priors := []
 
         for layer in prior_layers {
-            if !LayerAllowedInCtx(layer, ctx_id) || !this.layers.Has(layer) {
+            if !this.layers.Has(layer) {
                 continue
             }
 
             node := this.layers[layer][0] || this.layers[layer][1]
+            if node.down_type && !AssignmentAllowedInCtx(layer, node, ctx_id) {
+                continue
+            }
             if !fin {
                 fin := node
                 next_priors.Push(layer)
@@ -396,9 +399,14 @@ BuildNode(raw_node, sc, md, down_type:=false) {
     for i, name in [
         "down_type", "down_val", "up_type", "up_val", "is_instant", "is_irrevocable",
         "custom_lp_time", "custom_nk_time", "child_behavior", "gui_shortname", "gesture_opts",
+        "window_rule",
     ] {
         node_obj.%name% := is_root ? 0 : raw_node[i]
     }
+    node_rule := ParseNodeProcessesString(is_root ? "" : node_obj.window_rule)
+    node_obj.window_rule := node_rule.raw
+    node_obj.window_processes := node_rule.rules
+    node_obj.window_override := node_rule.override
 
     if StrLen(sc) > 256 {  ; gesture ^^'
         node_obj.opts := {}
@@ -436,7 +444,8 @@ GetDefaultNode(sc, md) {
         up_type: TYPES.Disabled, up_val: "",
         is_instant: 0, is_irrevocable: 0,
         custom_lp_time: 0, custom_nk_time: 0,
-        child_behavior: 4, gui_shortname: "", gesture_opts: "",
+        child_behavior: 4, gui_shortname: "", gesture_opts: "", window_rule: "",
+        window_processes: [], window_override: false,
         sc: sc, md: md
     }
     return node_obj
@@ -446,7 +455,7 @@ GetDefaultNode(sc, md) {
 GetDefaultJsonNode(mod_val:=0, given_type:=false) {
     return [
         (given_type || (mod_val ? TYPES.Disabled : TYPES.Default)),
-        "", TYPES.Disabled, "", 0, 0, 0, 0, 4, "", "", Map(), Map(), Map()
+        "", TYPES.Disabled, "", 0, 0, 0, 0, 4, "", "", "", Map(), Map(), Map()
     ]
 }
 

@@ -324,6 +324,8 @@ CheckConfig() {
         "Custom &hold threshold:", "Purple")
     CONF.custom_child_time_ind_color := ConfValue("Colors", "CustomNested", "color", "str",
         "Custom nested e&vent timeout:", "Fuchsia")
+    CONF.node_window_rule_ind_color := ConfValue("Colors", "NodeWindowRule", "color", "str",
+        "Custom &window rule:", "Aqua")
     CONF.nested_counter_ind_color := ConfValue("Colors", "NestedCounter", "color", "str",
         "N&ested assignment counter:", "Green")
 
@@ -452,9 +454,9 @@ ShowSettings(*) {
     IniWrite(is_startup, "config.ini", "Main", "Autostart")
     CONF.autostart.v := is_startup
 
-    s_gui.Add("Text", "x361 y461 BackgroundTrans CGray", "v0.81")
+    s_gui.Add("Text", "x361 y484 BackgroundTrans CGray", "v0.82")
         .OnEvent("Click", (*) => Run("https://github.com/uqqu/Cadans/releases"))
-    s_gui.Add("Picture", "x388 y451 BackgroundTrans", "ico/github.png")
+    s_gui.Add("Picture", "x388 y474 BackgroundTrans", "ico/github.png")
         .OnEvent("Click", (*) => Run("https://github.com/uqqu/Cadans"))
 
     tabs.UseTab("GUI")
@@ -528,7 +530,7 @@ ShowSettings(*) {
     }
     s_gui.Add("Text", "x20 w380 y+8 h1 0x10")
     s_gui.Add("Text", "x20 w380 y+10 h34 Center", "Button indicator colors:")
-    loop 7 {
+    loop 8 {
         c := CONF.Colors[A_Index + 7]
         _AddElems(c.form_type, A_Index == 1 ? 285 : "", , [
             c.double_height, c.ini_name . (c.is_num ? " Number" : ""),
@@ -560,7 +562,7 @@ ShowSettings(*) {
     tabs.OnEvent("Change", (*) => DllCall("SetFocus", "ptr", s_gui.Hwnd))
 
 
-    s_gui.Show("w420 h480")
+    s_gui.Show("w420 h505")
 }
 
 

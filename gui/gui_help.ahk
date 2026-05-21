@@ -741,6 +741,9 @@ _GetNodeExtraInfo(node, is_gesture:=false) {
     if node.custom_nk_time {
         res .= "`nHas a custom child-event timeout – " . node.custom_nk_time
     }
+    if node.window_rule {
+        res .= "`nWindow rule: " . node.window_rule
+    }
     if node.child_behavior !== 4 {
         res .= "`nChild behavior is changed to '" . [
             "Backsearch", "Send current + backsearch",

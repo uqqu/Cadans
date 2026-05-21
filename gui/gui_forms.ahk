@@ -128,6 +128,9 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
                 ToggleVisibility(false, form.colors[i])
             }
         }
+        form.Add("Text", "x10 y+10 w60", "Window rule:")
+        form.Add("Edit", "x+5 yp-2 w211 vWindowRule")
+        form.Add("Button", "x+4 yp+2 h20 w20", "?").OnEvent("Click", ShowNodeWindowRuleHelp)
         form.Add("Button", "x10 y+10 w100 h20 vCancel", "❌ Cancel")
         form.Add("Button", "x+0 yp+0 w100 h20 Default vSave", "💾 Save")
         form.Add("Button", "x+0 yp+0 w100 h20 vSaveWithReturn", "↩ Save and back")
@@ -150,7 +153,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         form["Cancel"].OnEvent("Click", CloseForm)
         form["Save"].OnEvent("Click", WriteValue.Bind(save_type, _current_path, false))
         form["SaveWithReturn"].OnEvent("Click",
-            (*) => (WriteValue(save_type, _current_path, false), ChangePath(current_path.Length - 1)))
+            (*) => SaveFormWithReturn(WriteValue.Bind(save_type, _current_path, false)))
         form.Show("w320")
         ChangeFormPlaceholder(unode, paired, layers, 1, , , 1)
         return
@@ -282,6 +285,11 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         form.bottom.Push(form.Add("Edit", "x+5 yp-2 w235 vShortname"))
         form["Shortname"].GetPos(, &y, , &h)
     }
+    form.bottom.Push(form.Add("Text", "x10 y" . (8 + y + h) . " w65", "Window rule:"))
+    form.bottom.Push(form.Add("Edit", "x+0 yp-2 w211 vWindowRule"))
+    form.bottom.Push(form.Add("Button", "x+4 yp+2 h20 w20", "?"))
+    form.bottom[-1].OnEvent("Click", ShowNodeWindowRuleHelp)
+    form["WindowRule"].GetPos(, &y, , &h)
 
     ; control
     fn := (save_type == 2
@@ -291,7 +299,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
     form.Add("Button", "x10 y" . (8 + y + h) . " w100 h20 vCancel", "❌ Cancel").OnEvent("Click", CloseForm)
     form.Add("Button", "x+0 yp+0 w100 h20 Default vSave", "💾 Save").OnEvent("Click", fn)
     form.Add("Button", "x+0 yp+0 w100 h20 Default vSaveWithReturn", "↩ Save and back")
-        .OnEvent("Click", (*) => (fn(), ChangePath(current_path.Length - 1)))
+        .OnEvent("Click", (*) => SaveFormWithReturn(fn))
     form.bottom.Push(form["Cancel"], form["Save"], form["SaveWithReturn"])
     if save_type == 3 {
         if !selected_gesture {
@@ -320,6 +328,50 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         } else if save_type < 2 && curr_val.gesture_opts {
             ShowHideButtons(form["ColorToggle"])
         }
+    }
+}
+
+
+ShowNodeWindowRuleHelp(*) {
+    MsgBox(
+        "You can limit this assignment to work only in specific windows."
+        . "`nUse process names, ahk-groups, title regular expressions,"
+        . "`nand predefined groups from the settings - all with the same syntax."
+        . "`n`nExamples:"
+        . "`n`nOnly in certain groups/applications:`n  'browsers, totalcmd.exe'"
+        . "`n`nWith the 'c:' prefix - only when the class matches:"
+        . "`n  'c:XamlExplorerHostIslandWindow'"
+        . "`n`nWith the 't:' prefix - only when the title matches:"
+        . "`n  't:^Cadans|^Commits'"
+        . "`n`nUse them to refine conditions:"
+        . "`n  'explorer.exe[c:XamlExplorerHostIslandWindow]'"
+        . "`n  'explorer.exe[t:^Task View$]'"
+        . "`n`n'-' at any level acts as inversion."
+        . "`nDo not mix inverted and non-inverted siblings at the same level."
+        . "`n`nBy default this rule is applied together with the layer window rule."
+        . "`n`nLeave blank to follow only the layer rule."
+        . "`n`n---`n`nStart it with '!' to override the layer rule for this assignment:"
+        . "`n  '!firefox.exe'"
+        . "`n  '!-firefox.exe'", "Help"
+    )
+}
+
+
+ValidateFormWindowRule() {
+    err := GetWindowRuleValidationError(form["WindowRule"].Text, true)
+    if !err {
+        return true
+    }
+
+    MsgBox(err, "Invalid window rule", "Icon!")
+    return false
+}
+
+
+SaveFormWithReturn(fn) {
+    fn()
+    if !form {
+        ChangePath(current_path.Length - 1)
     }
 }
 
@@ -542,8 +594,10 @@ ChangeFormPlaceholder(unode, paired, layers, save_type:=0, is_up:=0, is_layer_ed
     if !is_type {  ; sysmod
         form["ValInp"].Text := ""
         form["Shortname"].Text := ""
+        form["WindowRule"].Text := ""
         try form["ValInp"].Text := unode.layers[layer][0].down_val
         try form["Shortname"].Text := unode.layers[layer][0].gui_shortname
+        try form["WindowRule"].Text := unode.layers[layer][0].window_rule
         form["ValInp"].Focus()
         return
     }
@@ -590,6 +644,7 @@ ChangeFormPlaceholder(unode, paired, layers, save_type:=0, is_up:=0, is_layer_ed
             if save_type !== 2 {
                 form["Shortname"].Text := val.gui_shortname
             }
+            form["WindowRule"].Text := val.window_rule
             form["ChildBehaviorDDL"].Value := val.child_behavior
 
             form["CBIrrevocable"].Value := val.is_irrevocable
@@ -890,10 +945,14 @@ FuncFormClose(*) {
 
 
 WriteValue(is_hold, custom_path:=false, paired:=false, *) {
+    if !ValidateFormWindowRule() {
+        return
+    }
+
     vals := Map()
     for name in [
         "LayersDDL", "TypeDDL", "ValInp", "UpTypeDDL", "UpValInp", "CustomLP", "CustomNK",
-        "Shortname", "ColorInp", "ColorInpEdges", "ColorInpCorners",
+        "Shortname", "WindowRule", "ColorInp", "ColorInpEdges", "ColorInpCorners",
         "GradLenInp", "GradLenInpEdges", "GradLenInpCorners",
     ] {
         vals[name] := false
@@ -969,7 +1028,7 @@ WriteValue(is_hold, custom_path:=false, paired:=false, *) {
                 new_lp,
                 p.custom_nk_time,
                 p.child_behavior, p.gui_shortname,
-                new_gest_opts, custom_path
+                new_gest_opts, p.window_rule, custom_path
             )
         }
 
@@ -981,7 +1040,7 @@ WriteValue(is_hold, custom_path:=false, paired:=false, *) {
             new_lp,
             (vals["CustomNK"] != CONF.MS_NK.v ? vals["CustomNK"] : false),
             vals["ChildBehaviorDDL"], vals["Shortname"],
-            is_hold ? "" : new_gest_opts, custom_path
+            is_hold ? "" : new_gest_opts, vals["WindowRule"], custom_path
         )
     } else {
         SaveValue(
@@ -992,7 +1051,7 @@ WriteValue(is_hold, custom_path:=false, paired:=false, *) {
             new_lp,
             (vals["CustomNK"] != CONF.MS_NK.v ? vals["CustomNK"] : false),
             vals["ChildBehaviorDDL"], vals["Shortname"],
-            new_gest_opts, custom_path
+            new_gest_opts, vals["WindowRule"], custom_path
         )
     }
 }
@@ -1012,6 +1071,10 @@ CloseForm(*) {
 
 WriteChord(chord:=false, *) {
     global form, temp_chord, start_temp_chord
+
+    if !ValidateFormWindowRule() {
+        return
+    }
 
     if Integer(form["CBIrrevocable"].Value) && Integer(form["ChildBehaviorDDL"].Value) == 5
         && MsgBox("You set irrevocable option with ignoring unassigned children.`n"
@@ -1078,7 +1141,7 @@ WriteChord(chord:=false, *) {
         (lp != CONF.MS_LP.v ? lp : false),
         (nk != CONF.MS_NK.v ? nk : false),
         Integer(form["ChildBehaviorDDL"].Value),
-        "", "", sc_mp ?? Map(), ch_mp ?? Map(), Map(),
+        "", "", form["WindowRule"].Text, sc_mp ?? Map(), ch_mp ?? Map(), Map(),
     ]
 
     SerializeMap(json_root, temp_layer)
@@ -1115,6 +1178,10 @@ WriteChord(chord:=false, *) {
 
 WriteGesture(as_base, entries, path, *) {
     global form
+
+    if !ValidateFormWindowRule() {
+        return
+    }
 
     try {
         scal := form["Scaling"].Text == "" ? CONF.scale_impact.v : Float(form["Scaling"].Text)
@@ -1197,7 +1264,7 @@ WriteGesture(as_base, entries, path, *) {
         Integer(form["CBInstant"].Value), Integer(form["CBIrrevocable"].Value),
         0, (form["CustomNK"].Text != CONF.MS_NK.v ? Integer(form["CustomNK"].Text || 0) : 0),
         Integer(form["ChildBehaviorDDL"].Value), form["Shortname"].Text || form["ValInp"].Text,
-        gest_str[2], sc_mp ?? Map(), ch_mp ?? Map(), Map(),
+        gest_str[2], form["WindowRule"].Text, sc_mp ?? Map(), ch_mp ?? Map(), Map(),
     ]
 
     SerializeMap(json_root, temp_layer)
@@ -1213,7 +1280,7 @@ WriteGesture(as_base, entries, path, *) {
 SaveValue(
     is_hold, layer, down_type, down_val:="", up_type:=false, up_val:="",
     is_instant:=false, is_irrevocable:=false, custom_lp_time:=false, custom_nk_time:=false,
-    child_behavior:=false, shortname:="", gest_opts:="", custom_path:=false
+    child_behavior:=false, shortname:="", gest_opts:="", window_rule:="", custom_path:=false
 ) {
     ToggleFreeze(1)
     json_root := DeserializeMap(layer)
@@ -1233,6 +1300,7 @@ SaveValue(
     json_node[9] := child_behavior == false ? 4 : Integer(child_behavior)
     json_node[10] := shortname
     json_node[11] := gest_opts
+    json_node[12] := window_rule
     SerializeMap(json_root, layer)
 
     UpdateLayerInRoots(layer, json_root)

@@ -279,7 +279,8 @@ _AddIndicators(unode, btn, is_hold:=false, ignore_hold_count:=false) {
         [node.is_instant, CONF.instant_ind_color.v],
         [node.up_type !== TYPES.Disabled, CONF.additional_up_ind_color.v],
         [node.custom_lp_time, CONF.custom_hold_time_ind_color.v],
-        [node.custom_nk_time, CONF.custom_child_time_ind_color.v]
+        [node.custom_nk_time, CONF.custom_child_time_ind_color.v],
+        [node.window_rule, CONF.node_window_rule_ind_color.v]
     ] {
         if arr[1] {
             res := _AddOverlayItem(x + p * (A_Index - 1), y, arr[2])

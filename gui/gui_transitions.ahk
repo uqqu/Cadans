@@ -580,7 +580,7 @@ _CleanSaved() {
                 || ((res[1] == TYPES.Disabled || res[1] == TYPES.Default)
                     && (!res[2] && res[3] == TYPES.Disabled
                         && !res[4] && !res[5] && !res[6] && !res[7] && !res[8]
-                        && res[9] == 4 && !res[10] && !res[11])
+                        && res[9] == 4 && !res[10] && !res[11] && !res[12])
                     )
                 )
         {
@@ -604,14 +604,14 @@ _SwapIndValues(a, b, i) {
 _SwapBaseValues(a, b, t, mod_val) {
     default_value := GetDefaultJsonNode(mod_val)
     flag := true
-    loop 11 {
+    loop 12 {
         if b[A_Index] !== default_value[A_Index] {
             flag := false
             break
         }
     }
     if t || flag {
-        loop 11 {
+        loop 12 {
             _SwapIndValues(a, b, A_Index)
         }
     }

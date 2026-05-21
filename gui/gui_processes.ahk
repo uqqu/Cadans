@@ -16,7 +16,7 @@ GetGuiWindowCtxItems() {
     for ctx_id in WIN_CTX.all_ids {
         txt := GetGuiWindowCtxText(ctx_id)
 
-        if ctx_id != WIN_CTX.other_id && !GetLayersDifferFromOther(ctx_id).Length {
+        if ctx_id != WIN_CTX.other_id && !WindowCtxDiffersFromOther(ctx_id) {
             continue
         }
 
@@ -47,7 +47,7 @@ GetGuiWindowCtxText(ctx_id, with_compress:=true) {
     proc_items := []
     other_tokens := []
 
-    for token in StrSplit(key, ",", " `t`r`n") {
+    for token in SplitTopLevelComma(key) {
         token := Trim(token)
         if !token {
             continue
@@ -128,7 +128,7 @@ IsNodeAllowedForCtx(node, ctx_id) {
         ctx_id := gui_proc_ctx
     }
 
-    return LayerAllowedInCtx(node.layer_name, ctx_id)
+    return AssignmentAllowedInCtx(node.layer_name, node, ctx_id)
 }
 
 
@@ -296,6 +296,28 @@ GetLayersDifferFromOther(ctx_id:=0) {
         }
     }
     return res
+}
+
+
+WindowCtxDiffersFromOther(ctx_id) {
+    if GetLayersDifferFromOther(ctx_id).Length {
+        return true
+    }
+
+    for _, rule_set in WIN_CTX.node_rule_sets {
+        if NodeRuleSetAllowedInCtx(rule_set, ctx_id)
+            != NodeRuleSetAllowedInCtx(rule_set, WIN_CTX.other_id) {
+            return true
+        }
+    }
+
+    return false
+}
+
+
+NodeRuleSetAllowedInCtx(rule_set, ctx_id) {
+    sample := WIN_CTX.id_to_samples[ctx_id][1]
+    return NodeRuleSetAllows(rule_set, sample.proc, sample.class, sample.title)
 }
 
 

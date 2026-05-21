@@ -157,7 +157,7 @@ AddNewLayer(*) {
         }
         name := "new layer (" . i . ")"
     }
-    LayersMeta[name] := Map("version", 0.81, "rtags", "", "rdescription", "", "rprocesses", "",
+    LayersMeta[name] := Map("version", 0.82, "rtags", "", "rdescription", "", "rprocesses", "",
         "tags", [], "processes", [{invert: false, kind: "*", val: "*", children: []}])
     SerializeMap(Map(), name)
     AllLayers.Add(name, true)
@@ -203,8 +203,7 @@ EditSelectedLayer(*) {
         "You can limit assignments from this layer to work only in specific windows."
         . "`nUse process names, ahk-groups, title regular expressions,"
         . "`nand predefined groups from the settings – all with the same syntax."
-        . "`n`n(Comma-separated. Case-insensitive)"
-        . "`nExamples:"
+        . "`n`nExamples:"
         . "`n`nOnly in certain groups/applications:`n  'browsers, totalcmd.exe'"
         . "`n`nWith the 'c:' prefix – only when the class matches:`n  'c:XamlExplorerHostIslandWindow'"
         . "`n`nWith the 't:' prefix – only when the title matches (Google: ahk regex quickRef):"
@@ -237,6 +236,13 @@ EditSelectedLayer(*) {
     r_gui.Show("AutoSize Center")
 
     Save(*) {
+        n_proc := r_gui["Processes"].Text
+        err := GetWindowRuleValidationError(n_proc)
+        if err {
+            MsgBox(err, "Invalid window rule", "Icon!")
+            return
+        }
+
         ToggleFreeze(1)
         new_filepath := "layers/" . r_gui["Name"].Text . ".json"
         old_filepath := "layers/" . last_selected_layer . ".json"
@@ -252,7 +258,6 @@ EditSelectedLayer(*) {
 
         n_tags := r_gui["Tags"].Text
         n_descr := r_gui["Descr"].Text
-        n_proc := r_gui["Processes"].Text
         m := LayersMeta[last_selected_layer]
         if n_tags == m["rtags"] && n_descr == m["rdescription"] && n_proc == m["rprocesses"] {
             if new_filepath !== old_filepath {

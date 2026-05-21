@@ -3,10 +3,11 @@
         _CleanMap(values)
     }
     m := LayersMeta[filename]
+    m["version"] := 0.82
 
     try FileDelete("layers/" . filename . ".json")
     FileAppend(
-        "// 0.81`r`n// " . m["rtags"] . "`r`n// "
+        "// 0.82`r`n// " . m["rtags"] . "`r`n// "
         . m["rdescription"] . "`r`n// " . m["rprocesses"] . "`r`n" . Dump(mp, "", conv),
         "layers/" . filename . ".json", "UTF-8"
     )
@@ -36,7 +37,8 @@ _CleanMap(mp, parent_md:=0) {
     }
     ref := parent_md ? TYPES.Disabled : TYPES.Default
     if mp.Length > 2 && !mp[-3].Count && !mp[-2].Count && !mp[-1].Count && mp[1] == ref && !mp[2]
-        && mp[3] == TYPES.Disabled && !mp[4] && !mp[5] && !mp[6] && !mp[7] && !mp[8] {
+        && mp[3] == TYPES.Disabled && !mp[4] && !mp[5] && !mp[6] && !mp[7] && !mp[8]
+        && !mp[12] {
         return false
     }
     return true
@@ -47,7 +49,7 @@ DeserializeMap(filename) {
     data := FileRead("layers/" . filename . ".json")
     ver := LayersMeta[filename]["version"]
     struct := Load(StripLineComments(data))
-    if ver < 0.71 {
+    if ver < 0.82 {
         UpdateLayerVersion(struct, ver)
     }
     return struct
@@ -102,10 +104,76 @@ ParseProcessesString(s) {
     return rules
 }
 
+ParseNodeProcessesString(s) {
+    s := Trim(s)
+    override := SubStr(s, 1, 1) == "!"
+    if override {
+        s := Trim(SubStr(s, 2))
+    }
+
+    return {
+        raw: (override ? "!" : "") . s,
+        override: override,
+        rules: StrLen(s) ? ParseProcessesString(s) : []
+    }
+}
+
+
+GetWindowRuleValidationError(s, allow_override:=false) {
+    s := Trim(s)
+    if allow_override && SubStr(s, 1, 1) == "!" {
+        s := Trim(SubStr(s, 2))
+    }
+    if !StrLen(s) {
+        return ""
+    }
+
+    try {
+        rules := []
+        for part in SplitTopLevelComma(s) {
+            rules.Push(ParseWindowRule(part))
+        }
+        return _GetWindowRuleLevelError(rules)
+    } catch Error as err {
+        return "Invalid window rule syntax.`n`n" . err.Message
+    }
+}
+
+
+_GetWindowRuleLevelError(rules) {
+    if rules.Length {
+        invert := rules[1].invert
+        for rule in rules {
+            if rule.invert !== invert {
+                return "Window rules cannot mix inverted and non-inverted entries at one level."
+                    . "`n`nUse only positive siblings, such as 'a, b',"
+                    . "`nor only inverted siblings, such as '-a, -b'."
+            }
+        }
+    }
+
+    for rule in rules {
+        err := _GetWindowRuleLevelError(rule.children)
+        if err {
+            return err
+        }
+    }
+
+    return ""
+}
+
 
 ParseWindowRuleExpanded(s, seen:=false) {
     rule := ParseWindowRule(s)
-    return ExpandWindowRule(rule, seen)
+    res := []
+
+    for expanded in ExpandWindowRule(rule, seen) {
+        for child_expanded in ExpandWindowRuleChildren(expanded) {
+            res.Push(child_expanded)
+        }
+    }
+
+    return res
 }
 
 
@@ -198,6 +266,45 @@ CloneWindowRule(rule) {
         val: rule.val,
         children: children
     }
+}
+
+
+ExpandWindowRuleChildren(rule) {
+    if !rule.children.Length {
+        return [rule]
+    }
+
+    shared_children := []
+    alt_children := []
+
+    for child in rule.children {
+        target := child.invert ? shared_children : alt_children
+        for variant in ExpandWindowRuleChildren(child) {
+            target.Push(variant)
+        }
+    }
+
+    if !alt_children.Length {
+        variant := CloneWindowRule(rule)
+        variant.children := shared_children
+        return [variant]
+    }
+
+    res := []
+
+    for alt_child in alt_children {
+        variant := CloneWindowRule(rule)
+        variant.children := []
+
+        for shared_child in shared_children {
+            variant.children.Push(shared_child)
+        }
+
+        variant.children.Push(alt_child)
+        res.Push(variant)
+    }
+
+    return res
 }
 
 
@@ -377,6 +484,18 @@ UpdateLayerVersion(data, from) {
                 p.InsertAt(1, p.Pop())
             }
             p[-4] := "5;0;0.00;0;0;1"
+        } else {
+            for t in [p[-1], p[-2], p[-3]] {
+                for _, schex_val in t {
+                    for _, md_val in schex_val {
+                        stack.Push(md_val)
+                    }
+                }
+            }
+        }
+
+        if from < 0.82 && p.Length !== 4 {
+            p.InsertAt(12, "")  ; node window rule
         }
     }
 }
