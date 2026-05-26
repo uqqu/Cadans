@@ -203,10 +203,10 @@ DrawGesturesLV() {
     UI["LV_layers"].GetPos(&x, , &w)
     p := Scale(, CONF.ref_height.v + 29, 425, CONF.ref_height.v)
     UI.AddListView("vLV_gestures " . p . " x" . (x + w - 1),
-        ["Gesture name", "Value", "Options", "→", "Layer", "roll it back"])
+        ["", "Gesture name", "Value", "Options", "→", "Layer", "sort key", "roll it back"])
     UI["LV_gestures"].OnEvent("DoubleClick", LVGestureDoubleClick)
     UI["LV_gestures"].OnEvent("Click", LVGestureClick)
-    for i, w in [110, 110, 95, 30, 65, 0] {
+    for i, w in [44, 96, 92, 88, 30, 60, 0, 0] {
         UI["LV_gestures"].ModifyCol(i, w * CONF.gui_scale.v)
     }
 

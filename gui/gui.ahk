@@ -434,6 +434,7 @@ _AddOverlayItem(x, y, colour, txt:="") {
         return false
     }
 
+    colour := NormalizeGuiColor(colour)
     if !txt {
         elem := overlay.AddText("x" . x . " y" . y . " " . Scale(,, 3, 3) . " Background" . colour)
     } else {

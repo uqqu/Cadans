@@ -1,7 +1,7 @@
-GuiWindowCtxChanged(_ctrl, *) {
+GuiWindowCtxChanged(obj, *) {
     global gui_proc_ctx
 
-    gui_proc_ctx := GetGuiWindowCtxByText(_ctrl.Text)
+    gui_proc_ctx := GetGuiWindowCtxByText(obj.Text)
     ChangePath()
 }
 

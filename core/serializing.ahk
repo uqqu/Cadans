@@ -496,8 +496,23 @@ UpdateLayerVersion(data, from) {
 
         if from < 0.82 && p.Length !== 4 {
             p.InsertAt(12, "")  ; node window rule
+            p[11] := CompactGestureOverlayOpts(p[11])
         }
     }
+}
+
+
+CompactGestureOverlayOpts(opts) {
+    vals := StrSplit(opts, ";")
+    if vals.Length <= 10 {
+        return opts
+    }
+
+    compact := vals[1] . ";"
+    loop vals.Length - 10 {
+        compact .= vals[A_Index + 10] . ";"
+    }
+    return compact
 }
 
 

@@ -755,8 +755,8 @@ RuleShouldCreateSample(parent_rule, rule) {
 
 
 UpdateWindowContextHooks() {
-    static hook_foreground := 0, hook_title := 0, hook_shell := 0,
-        cb_foreground := 0, cb_title := 0, cb_shell := 0
+    static hook_foreground:=0, hook_title:=0, hook_shell:=0,
+        cb_foreground:=0, cb_title:=0, cb_shell:=0
 
     need_base := WIN_CTX.has_rules
     need_title := WIN_CTX.has_rules && WIN_CTX.uses_title
@@ -806,10 +806,15 @@ OnForegroundChanged(hWinEventHook, event, hwnd, *) {
         return
     }
 
+    info := TryGetWindowInfo(hwnd)
+    if !info {
+        return
+    }
+
     active_hwnd := hwnd
-    active_proc := WinGetProcessName(hwnd)
-    active_class := WinGetClass(hwnd)
-    active_title := WinGetTitle(hwnd)
+    active_proc := info.proc
+    active_class := info.cls
+    active_title := info.title
     if active_title == "Task Switching" {
         ApplyForegroundWindow(true)
     } else {
@@ -832,13 +837,13 @@ OnTitleChanged(hWinEventHook, event, hwnd, *) {
         return
     }
 
-    try {
-        proc := WinGetProcessName(hwnd)
-        cls := WinGetClass(hwnd)
-        title := WinGetTitle(hwnd)
-    } catch {
+    info := TryGetWindowInfo(hwnd)
+    if !info {
         return
     }
+    proc := info.proc
+    cls := info.cls
+    title := info.title
     if hwnd == active_hwnd && title == active_title && cls == active_class && proc == active_proc {
         return
     }
@@ -872,15 +877,33 @@ ApplyForegroundWindow(with_reset:=false) {
         return
     }
 
+    info := TryGetWindowInfo(hwnd)
+    if !info {
+        return
+    }
+
     active_hwnd := hwnd
-    active_class := WinGetClass(hwnd)
-    active_proc := WinGetProcessName(hwnd)
-    active_title := WinGetTitle(hwnd)
+    active_class := info.cls
+    active_proc := info.proc
+    active_title := info.title
 
     SetCurrentWindowContext(active_proc, active_class, active_title)
 
     if with_reset {
         CheckLayout()
         ToRoot()
+    }
+}
+
+
+TryGetWindowInfo(hwnd) {
+    try {
+        return {
+            proc: WinGetProcessName(hwnd),
+            cls: WinGetClass(hwnd),
+            title: WinGetTitle(hwnd),
+        }
+    } catch {
+        return false
     }
 }

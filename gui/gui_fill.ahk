@@ -164,13 +164,7 @@ FillOneButton(sc, btn, d_sc, is_disabled:=false) {
         l := selected_layer ? selected_layer : buffer_view ? "buffer" : false
         gsts := l ? GetLayerGestures(res.ubase, l) : _GetGestures(res.ubase, gui_proc_ctx)
         if gsts.Count {
-            opts := StrSplit(b_node.gesture_opts, ";")
             backgr := CONF.has_gestures_color.v
-            try backgr := Format("{:#06x}", Integer("0x"
-                . Trim(StrSplit(CONF.gest_colors[1].v, ",")[1])))
-            try backgr := Format("{:#06x}", Integer("0x" . opts[8]))
-            try backgr := Format("{:#06x}", Integer("0x" . opts[5]))
-            try backgr := Format("{:#06x}", Integer("0x" . opts[2]))
         }
         _AddIndicators(res.ubase, btn)
         switch b_node.down_type {
@@ -611,7 +605,8 @@ FillGestures() {
     if !path.Length || path[-1][4] || path[-1][3]
         || SubStr(path[-1][1], 1, 2) == "Wh" && path[-1][1] !== "WhClick" || AWMods.Has(path[-1][1]) {
         ToggleEnabled(0, UI["BtnAddNewGesture"], UI.gest_toggles)
-        for i, val in [["Has nested gestures", 220], ["→", 190], ["", 0], ["", 0], ["", 0]] {
+        _CreateGesturePreviewImageList()
+        for i, val in [["Has nested gestures", 220], ["→", 190], ["", 0], ["", 0], ["", 0], ["", 0], ["", 0]] {
             UI["LV_gestures"].ModifyCol(i, val[2] * CONF.gui_scale.v, val[1])
         }
         l := selected_layer ? selected_layer : buffer_view ? "buffer" : false
@@ -637,20 +632,31 @@ FillGestures() {
                         "",
                         (name || _GetKeyName(sc, true))
                             . (md ? (" (mod " . DecomposeMods(md, true) . ")") : ""),
-                        cnt, "", "", "",
+                        cnt, "", "", "", "",
+                        Format("{:08}", 999999 - cnt) . "|" . (name || _GetKeyName(sc, true)),
                         sc . ";" . md
                     )
                 }
             }
         }
+        UI["LV_gestures"].ModifyCol(7, "Sort")
         return
     }
 
-    for i, val in [["Gesture name", 110], ["Value", 110], ["Options", 95],
-        ["→", 30], ["Layer", 65], ["roll it back", 0]] {
+    img_size := _CreateGesturePreviewImageList()
+    img_w := img_size[1]
+    img_h := img_size[2]
+
+    for i, val in [["", 44], ["Gesture name", 96], ["Value", 92], ["Options", 88],
+        ["→", 30], ["Layer", 60], ["sort key", 0], ["roll it back", 0]] {
         UI["LV_gestures"].ModifyCol(i, val[2] * CONF.gui_scale.v, val[1])
     }
     entries := _GetUnholdEntries()
+    parent_opts := ""
+    try parent_opts := _GetFirst(entries.ubase).gesture_opts
+    preview_color_cache := Map()
+    preview_icon_keys := Map()
+    preview_path_key := _GesturePreviewPathKey(path)
 
     ToggleEnabled(1, UI["BtnAddNewGesture"])
     checked_layers := layer_editing ? [selected_layer] : ActiveLayers.order
@@ -658,6 +664,9 @@ FillGestures() {
         ubase := entries.ubase.GetBaseHoldMod(vec_str, gui_mod_val, false, true).ubase
         child_node := _GetFirst(ubase)
         if !child_node {
+            continue
+        }
+        if !CONF.show_unavailable_gestures.v && !GesturePoolEnabled(child_node.opts.pool) {
             continue
         }
 
@@ -679,25 +688,232 @@ FillGestures() {
                 val := "(" . child_node.down_val . ")"
         }
 
+        preview_colors := _GetGestureThumbnailColors(child_node.opts.pool, parent_opts, preview_color_cache)
+        hicon := _GetGesturePreviewIcon(preview_path_key, child_node, vec_str, img_w, img_h,
+            preview_colors, preview_icon_keys)
+        ico := hicon ? DllCall("comctl32\ImageList_AddIcon",
+            "ptr", UI.gesture_preview_icons, "ptr", hicon, "int") + 1 : 0
         UI["LV_gestures"].Add(
+            ico ? "Icon" . ico : "",
             "",
             child_node.gui_shortname,
             val,
             _GestOptsToText(child_node.gesture_opts),
             cnt || "",
             layer_text,
+            _GestureSortKey(child_node),
             vec_str
         )
     }
     ToggleEnabled(entries && entries.ubase && entries.ubase !== ROOTS[gui_lang],
         UI["BtnAddNewGesture"])
-    UI["LV_gestures"].ModifyCol(1, "Sort")
+    _PruneGesturePreviewIconCache(preview_path_key, preview_icon_keys)
+    UI["LV_gestures"].ModifyCol(7, "Sort")
+}
+
+
+_GetGesturePreviewIcon(path_key, node, vec_str, img_w, img_h, preview_colors, used_keys) {
+    state := _GesturePreviewCacheState(img_w, img_h)
+    try {
+        cache := UI.gesture_preview_cache
+    } catch {
+        UI.gesture_preview_cache := Map()
+        UI.gesture_preview_cache_state := state
+        cache := UI.gesture_preview_cache
+    }
+    try {
+        old_state := UI.gesture_preview_cache_state
+    } catch {
+        old_state := ""
+    }
+    if old_state !== state {
+        _ClearGesturePreviewIconCache()
+        UI.gesture_preview_cache_state := state
+        cache := UI.gesture_preview_cache
+    }
+    if !cache.Has(path_key) {
+        cache[path_key] := Map()
+    }
+    path_cache := cache[path_key]
+
+    mode_key := node.opts.pool ~= "i)^[a-d]$" ? CONF.gest_center_mode.v : ""
+    key := mode_key . "|" . vec_str . "|"
+        . node.gesture_opts . "|" . _GesturePreviewColorsKey(preview_colors)
+    used_keys[key] := true
+    if !path_cache.Has(key) {
+        path_cache[key] := CreateGesturePreviewHIcon(node, img_w, img_h, true, true, preview_colors)
+    }
+    return path_cache[key]
+}
+
+
+_GesturePreviewCacheState(img_w, img_h) {
+    return img_w . "x" . img_h . "|"
+        . CONF.gest_pool_marker_color.v . "|" . CONF.gest_thumbnail_color.v . "|"
+        . CONF.gest_color_mode.v
+}
+
+
+_GesturePreviewColorsKey(colors) {
+    res := ""
+    for colour in colors {
+        res .= Format("{:06X}", colour) . ","
+    }
+    return res
+}
+
+
+_ClearGesturePreviewIconCache() {
+    try {
+        cache := UI.gesture_preview_cache
+    } catch {
+        UI.gesture_preview_cache := Map()
+        UI.gesture_preview_random_cache := Map()
+        return
+    }
+    for _, path_cache in cache {
+        for _, hicon in path_cache {
+            if hicon {
+                DllCall("DestroyIcon", "ptr", hicon)
+            }
+        }
+    }
+    UI.gesture_preview_cache := Map()
+    UI.gesture_preview_random_cache := Map()
+}
+
+
+_PruneGesturePreviewIconCache(path_key, used_keys) {
+    try {
+        cache := UI.gesture_preview_cache
+    } catch {
+        return
+    }
+    if !cache.Has(path_key) {
+        return
+    }
+    path_cache := cache[path_key]
+
+    to_delete := []
+    for key, hicon in path_cache {
+        if !used_keys.Has(key) {
+            if hicon {
+                DllCall("DestroyIcon", "ptr", hicon)
+            }
+            to_delete.Push(key)
+        }
+    }
+    for key in to_delete {
+        path_cache.Delete(key)
+    }
+    if !path_cache.Count {
+        cache.Delete(path_key)
+    }
+}
+
+
+_GesturePreviewPathKey(path) {
+    key := buffer_view ? "buffer" . buffer_view : "lang" . gui_lang
+    if layer_editing && selected_layer {
+        key .= "|layer:" . selected_layer
+    }
+    for part in path {
+        key .= "|" . part[1] . ":" . part[2] . ":" . part[3] . ":" . part[4]
+    }
+    return key
+}
+
+
+_GestureSortKey(node) {
+    pool := ParseGesturePool(StrSplit(node.gesture_opts, ";")[1])
+    return Format("{:02}", _GesturePoolSortIndex(pool)) . "|" . node.gui_shortname
+}
+
+
+_GesturePoolSortIndex(pool) {
+    static ret:=Map(1, 1, 2, 2, 3, 3, 4, 4, 5, 5,
+        6, 10, 7, 11, 8, 12, 9, 13, "a", 6, "b", 7, "c", 8, "d", 9)
+    return ret.Get(pool, 99)
+}
+
+
+_GetGestureThumbnailColors(pool, parent_opts, cache) {
+    colour := Trim(CONF.gest_thumbnail_color.v)
+    if colour {
+        try return [ParseAhkColor(colour)]
+        return [0x202020]
+    }
+
+    pool := ParseGesturePool(pool)
+    color_key := GetGestureColorKey(pool)
+    if cache.Has(color_key) {
+        return cache[color_key]
+    }
+
+    vals := StrSplit(parent_opts, ";")
+    colors := GetGestureOverlayOption(vals, color_key, 0)
+    colors := colors !== "" ? colors : CONF.gest_zone_colors[color_key].v
+    out := []
+    if RegExMatch(colors, "i)random\((\d+)\)", &m) {
+        try {
+            random_cache := UI.gesture_preview_random_cache
+        } catch {
+            UI.gesture_preview_random_cache := Map()
+            random_cache := UI.gesture_preview_random_cache
+        }
+        random_key := parent_opts . "|" . color_key . "|" . colors
+        if random_cache.Has(random_key) {
+            out := random_cache[random_key]
+        } else {
+            loop m[1] {
+                out.Push((Random(0, 255) << 16) | (Random(0, 255) << 8) | Random(0, 255))
+            }
+            random_cache[random_key] := out
+        }
+    } else {
+        for colour in StrSplit(colors, ",") {
+            try out.Push(ParseAhkColor(colour))
+        }
+    }
+    if !out.Length {
+        out := [0x202020]
+    }
+    cache[color_key] := out
+    return out
+}
+
+
+_ResetGesturePreviewImageList() {
+    try {
+        old_icons := UI.gesture_preview_icons
+    } catch {
+        old_icons := 0
+    }
+
+    try UI["LV_gestures"].SetImageList(0, 1)
+    SendMessage(0x1003, 1, 0, UI["LV_gestures"].Hwnd)  ; LVM_SETIMAGELIST, LVSIL_SMALL
+    if old_icons {
+        DllCall("comctl32\ImageList_Destroy", "ptr", old_icons)
+    }
+    UI.gesture_preview_icons := 0
+}
+
+
+_CreateGesturePreviewImageList() {
+    _ResetGesturePreviewImageList()
+    img_w := Round(38 * CONF.gui_scale.v)
+    img_h := Round(20 * CONF.gui_scale.v)
+    UI.gesture_preview_icons := DllCall("comctl32\ImageList_Create",
+        "int", img_w, "int", img_h, "uint", 0x20, "int", 10, "int", 10, "ptr")
+    SendMessage(0x1003, 1, UI.gesture_preview_icons, UI["LV_gestures"].Hwnd)  ; LVM_SETIMAGELIST, LVSIL_SMALL
+    return [img_w, img_h]
 }
 
 
 _GestOptsToText(opts) {
     vals := StrSplit(opts, ";")
-    str := ["TL", "T", "TR", "L", "C", "R", "BL", "B", "BR"][Integer(vals[1])]
+    pool := ParseGesturePool(vals[1])
+    str := (GesturePoolEnabled(pool) ? "" : "-") . GetGesturePoolShortName(pool)
     if vals[2] + 1 != CONF.gest_rotate.v {
         str .= ", rotate: " . ["no", "de-noise", "invar."][Integer(vals[2]) + 1]
     }

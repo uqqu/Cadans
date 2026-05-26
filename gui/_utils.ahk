@@ -91,6 +91,22 @@ ColorPick(parent_hwnd, start_color:="") {
 }
 
 
+NormalizeGuiColor(colour) {
+    colour := Trim(String(colour))
+    if AHK_COLORS.Has(colour) {
+        colour := AHK_COLORS[colour]
+    } else {
+        for name, val in AHK_COLORS {
+            if StrLower(colour) == StrLower(name) {
+                colour := val
+                break
+            }
+        }
+    }
+    return RegExReplace(colour, "i)^0x")
+}
+
+
 PasteColorFromPick(parent_hwnd, elem, append_mode:=false, *) {
     last_color := ""
     try last_color := StrSplit(elem.Text, ",")[-1]

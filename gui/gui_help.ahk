@@ -101,10 +101,17 @@ AltHelp() {
                 } else if c == 2 {
                     txt := "Number of nested gestures for the key."
                 }
-            } else if c < 3 {
+            } else if c == 1 {
+                txt := "Mini-preview of the gesture drawing.`n"
+                    . "The diamond marks the gesture pool. Edge and corner pool markers are "
+                    . "partly clipped by the preview border; center split pools are shown inside "
+                    . "the preview.`n`nThe stroke color follows the parent trigger's gesture "
+                    . "overlay colors for this pool, unless a fixed thumbnail color is set in "
+                    . "Gestures settings."
+            } else if c < 4 {
                 txt := "List of gestures assigned for the current path."
                     . "`nDouble-click a gesture to go deeper and add nested assignments."
-            } else if c == 3 {
+            } else if c == 4 {
                 txt := "Pool and recognition options for gestures.`nOptions are shown only if "
                     . "they differ from global settings.`nHold Alt to see all options.`n"
                     . "`nPool: TopLeft, Top, TopRight, Left, Center, Right, BottomLeft, "
@@ -113,11 +120,11 @@ AltHelp() {
                     . "`nScale impact: from 0 (no effect) to 1 (perfect matching)"
                     . "`nBidirectional matching (on/off)"
                     . "`nStart-point invariance, only for closed figures (on/off)"
-            } else if c == 4 {
+            } else if c == 5 {
                 txt := "Number of nested assignments for this gesture.`n"
                     . "Gestures (and chords as well) can have any child assignments,`n"
                     . "including new key-triggers with own gestures."
-            } else if c == 6 {
+            } else if c == 7 {
                 txt := "Seriously, you don't need this"
             }
         } else {
@@ -127,7 +134,10 @@ AltHelp() {
             }
             by_cursor_pos := true
             prev_hwnd := fake_hwnd
-            res := StrSplit(obj.GetText(r, 6), ";")
+            res := StrSplit(obj.GetText(r, 8), ";")
+            if !res.Length || !res[1] {
+                return
+            }
             gst := res[1]
             md := 0
             try md := Integer(res[2])
@@ -366,8 +376,8 @@ AltHelp() {
                 . "as base part of the overall key event."
         } else {
             txt := "Add a new gesture under the current trigger key.`n`n"
-                . "Gestures under each trigger are divided into 9 separate pools: "
-                . "4 edges, 4 corners and 1 center pool.`n"
+                . "Gestures under each trigger are divided into pools mapped from "
+                . "4 optional edge zones, 4 optional corner zones, and center zones.`n"
                 . "Drawing mode starts when you press a key that has gestures assigned "
                 . "for the pool at the current cursor position.`nThis does not override the "
                 . "standard behavior of the key or its tap/hold assignments.`n"
@@ -382,7 +392,7 @@ AltHelp() {
                 . "`nPool settings are global and configured in the general settings."
         }
     } else if i_sc == "BtnShowSelectedGesture" {
-        txt := "Show the gesture drawing.`nDrawing starts from the center of the pool where the "
+        txt := "Show the gesture drawing.`nDrawing starts from the center of the zone where the "
             . "gesture is defined,`nusing the color defined for the trigger key (if any)."
     } else if i_sc == "BtnChangeSelectedGesture" {
         txt := "Change the assignment for the selected gesture.`n"
@@ -753,23 +763,10 @@ _GetNodeExtraInfo(node, is_gesture:=false) {
     if node.gesture_opts {
         vals := StrSplit(node.gesture_opts, ";")
         if is_gesture {
-            res .= "`n`n" . ["Top-left corner", "Top edge", "Top-right corner", "Left edge",
-                "Center", "Right edge", "Bottom-left corner", "Bottom edge",
-                "Bottom-right corner"][Integer(vals[1])] . " pool"
-            if vals[1] != 5 {
-                res .= " (edge size by conf – " . CONF.edge_size.v . "px)"
-            }
-            sh := 0
-            if vals[1] = 2 || vals[1] = 4 || vals[1] = 6 || vals[1] = 7 {
-                sh := 3
-                if CONF.edge_gestures.v == 1 || CONF.edge_gestures.v == 3 {
-                    res .= "`nWarning: edge gestures are disabled in the global settings."
-                }
-            } else if vals[1] = 1 || vals[1] = 3 || vals[1] = 7 || vals[1] = 9 {
-                sh := 6
-                if CONF.edge_gestures.v == 1 || CONF.edge_gestures.v == 2 {
-                    res .= "`nWarning: corner gestures are disabled in the global settings."
-                }
+            pool := ParseGesturePool(vals[1])
+            res .= "`n`n" . GetGesturePoolName(pool) . " pool"
+            if !GesturePoolEnabled(pool) {
+                res .= "`nWarning: this gesture pool is disabled in the global settings."
             }
             rot := ["disabled", "noise reduction", "fully rotation-invariance"]
             if vals[2] = 0 {
@@ -787,48 +784,58 @@ _GetNodeExtraInfo(node, is_gesture:=false) {
             res .= "`n" . (vals[5] ? "> " : "") . "Closed figure start-point invariance: "
                 . ["disabled", "enabled"][vals[5] ? (Integer(vals[5]) + 1) : 1]
             parent_opts := StrSplit(_GetFirst(_GetUnholdEntries().ubase).gesture_opts, ";")
-            colors := parent_opts.Has(2+sh) ? parent_opts[2+sh] : 0
-            grad_len := parent_opts.Has(3+sh) ? parent_opts[3+sh] : 0
-            grad_loop := parent_opts.Has(4+sh) ? parent_opts[4+sh] : 0
-            if colors || grad_len || grad_loop {
+            color_key := GetGestureColorKey(pool)
+            colors := GetGestureOverlayOption(parent_opts, color_key, 0)
+            grad_len := GetGestureOverlayOption(parent_opts, color_key, 1)
+            grad_loop := GetGestureOverlayOption(parent_opts, color_key, 2)
+            if colors !== "" || grad_len !== "" || grad_loop !== "" {
                 res .= "`nCustom options from parent trigger key:"
                 if colors !== "" {
                     res .= "`n   Color " . colors
                 }
-                if grad_loop !== "" && grad_loop != CONF.grad_loop[sh/3+1].v {
+                if grad_loop !== "" && grad_loop != CONF.gest_zone_grad_loop[color_key].v {
                     res .= "`n   Gradient cycling is " . ["disabled", "enabled"][grad_loop+1]
                 }
-                if grad_len !== "" && grad_len != CONF.grad_loop[sh/3+1].v {
+                if grad_len !== "" && grad_len != CONF.gest_zone_grad_len[color_key].v {
                     res .= "`n   Gradient cycle length " . grad_len
                 }
             }
         } else {
-            res .= "`n`nCustom for nested gestures:"
+            custom := ""
             p := vals.Get(1, CONF.gest_live_hint.v + 2)
             if p && p !== CONF.gest_live_hint.v + 2 {
-                res .= "`nLive hints position – " . ["top", "center", "bottom", "disabled"][p-1]
+                custom .= "`nLive hints position – " . ["top", "center", "bottom", "disabled"][p-1]
             }
-            loop 3 {
-                i := (A_Index - 1) * 3
-                colors := vals.Has(2+i) ? vals[2+i] : 0
-                grad_len := vals.Has(3+i) ? vals[3+i] : 0
-                grad_loop := vals.Has(4+i) ? vals[4+i] : 0
-                if colors || grad_len || grad_loop {
-                    res .= ["`nCenter pool:", "`nEdges:", "`nCorners:"][A_Index]
+            for zone in GestureColorZones {
+                color_key := zone[2]
+                colors := GetGestureOverlayOption(vals, color_key, 0)
+                grad_len := GetGestureOverlayOption(vals, color_key, 1)
+                grad_loop := GetGestureOverlayOption(vals, color_key, 2)
+                if colors !== "" || grad_len !== "" || grad_loop !== "" {
+                    custom .= "`n" . GetGesturePoolName(zone[1]) . ":"
                     if colors !== "" {
-                        res .= "`n   Color " . colors
+                        custom .= "`n   Color " . colors
                     }
-                    if grad_loop !== "" && grad_loop != CONF.grad_loop[A_Index].v {
-                        res .= "`n   Gradient cycling is " . ["disabled", "enabled"][grad_loop+1]
+                    if grad_loop !== "" && grad_loop != CONF.gest_zone_grad_loop[color_key].v {
+                        custom .= "`n   Gradient cycling is " . ["disabled", "enabled"][grad_loop+1]
                     }
-                    if grad_len !== "" && grad_len != CONF.grad_len[A_Index].v {
-                        res .= "`n   Gradient cycle length " . grad_len
+                    if grad_len !== "" && grad_len != CONF.gest_zone_grad_len[color_key].v {
+                        custom .= "`n   Gradient cycle length " . grad_len
                     }
                 }
+            }
+            if custom {
+                res .= "`n`nCustom for nested gestures:" . custom
             }
         }
     }
     return res
+}
+
+
+GetGestureOverlayOption(opts, color_key, zone_offset) {
+    zi := GetGestureZoneOverrideIndex(color_key, zone_offset)
+    return opts.Has(zi) ? opts[zi] : ""
 }
 
 

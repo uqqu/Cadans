@@ -5,33 +5,132 @@ PI := 3.141592653589793
 
 
 GetPool(x, y) {
-    static mp:=[5, 4, 6, "-lr-", 2, 1, 3, "-tb-", 8, 7, 9]
-    ;  6 5 7
-    ;  2 1 3
-    ; 10 9 11
+    w := A_ScreenWidth
+    h := A_ScreenHeight
 
-    l := x <= CONF.edge_size.v
-    r := x >= (A_ScreenWidth - CONF.edge_size.v)
-    t := y <= CONF.edge_size.v
-    b := y >= (A_ScreenHeight - CONF.edge_size.v)
-
-    switch CONF.edge_gestures.v {
-        case 1:  ; without edges/corners
-            return 5
-        case 2:  ; only edges
-            pre := (l | (r << 1) | (t << 2) | (b << 3)) + 1
-            w := A_ScreenWidth - x
-            h := A_ScreenHeight - y
-            return mp[pre == 6 ? (x > y ? 5 : 2)
-                : pre == 7 ? (w > y ? 5 : 3)
-                : pre == 10 ? (h > x ? 2 : 9)
-                : pre == 11 ? (h > w ? 3 : 9) : pre]
-        case 3:  ; only corners
-            pre := (l | (r << 1) | (t << 2) | (b << 3)) + 1
-            return mp[[2, 3, 5, 9].Has(pre) ? 1 : pre]
-        case 4:  ; both
-            return mp[(l | (r << 1) | (t << 2) | (b << 3)) + 1]
+    if InGestureCorner(x, y, CONF.gest_zone_tl.v, 0, 0) {
+        return 1
+    } else if InGestureCorner(x, y, CONF.gest_zone_tr.v, w, 0) {
+        return 3
+    } else if InGestureCorner(x, y, CONF.gest_zone_br.v, w, h) {
+        return 9
+    } else if InGestureCorner(x, y, CONF.gest_zone_bl.v, 0, h) {
+        return 7
     }
+
+    edge := GetEdgeGesturePool(x, y, w, h)
+    return edge ? edge : GetCenterGesturePool(x, y)
+}
+
+
+InGestureCorner(x, y, size, corner_x, corner_y) {
+    return size && Abs(x - corner_x) <= size && Abs(y - corner_y) <= size
+}
+
+
+ParseGesturePool(pool) {
+    return pool ~= "^\d+$" ? Integer(pool) : pool
+}
+
+
+GetEdgeGesturePool(x, y, w, h) {
+    x_dist := Min(x, w - x)
+    y_dist := Min(y, h - y)
+
+    if x_dist > y_dist {
+        if y < h - y {
+            return CONF.gest_zone_t.v && y <= CONF.gest_zone_t.v ? 2 : 0
+        }
+        return CONF.gest_zone_b.v && h - y <= CONF.gest_zone_b.v ? 8 : 0
+    }
+
+    if x < w - x {
+        return CONF.gest_zone_l.v && x <= CONF.gest_zone_l.v ? 4 : 0
+    }
+    return CONF.gest_zone_r.v && w - x <= CONF.gest_zone_r.v ? 6 : 0
+}
+
+
+GetCenterGesturePool(x, y) {
+    switch CONF.gest_center_mode.v {
+        case "Grid":
+            return y < A_ScreenHeight / 2
+                ? (x < A_ScreenWidth / 2 ? "a" : "b")
+                : (x < A_ScreenWidth / 2 ? "d" : "c")
+        case "Diagonal":
+            nx := x / A_ScreenWidth - 0.5
+            ny := y / A_ScreenHeight - 0.5
+            return Abs(nx) >= Abs(ny)
+                ? (nx < 0 ? "d" : "b")
+                : (ny < 0 ? "a" : "c")
+    }
+
+    return 5
+}
+
+
+GetGesturePoolName(pool) {
+    if pool is Number {
+        return [
+            "Top-left corner", "Top edge", "Top-right corner", "Left edge", "Center",
+            "Right edge", "Bottom-left corner", "Bottom edge", "Bottom-right corner"
+        ][pool]
+    }
+
+    switch pool {
+        case "a":
+            return CONF.gest_center_mode.v == "Diagonal" ? "Top center" : "Top-left center"
+        case "b":
+            return CONF.gest_center_mode.v == "Diagonal" ? "Right center" : "Top-right center"
+        case "c":
+            return CONF.gest_center_mode.v == "Diagonal" ? "Bottom center" : "Bottom-right center"
+        case "d":
+            return CONF.gest_center_mode.v == "Diagonal" ? "Left center" : "Bottom-left center"
+    }
+
+    return "Center"
+}
+
+
+GetGesturePoolShortName(pool) {
+    if pool is Number {
+        return ["TL", "T", "TR", "L", "C", "R", "BL", "B", "BR"][pool]
+    }
+
+    return "C:" . StrUpper(pool)
+}
+
+
+GetGesturePoolZoneSize(pool) {
+    if pool is Number {
+        return [
+            CONF.gest_zone_tl.v, CONF.gest_zone_t.v, CONF.gest_zone_tr.v, CONF.gest_zone_l.v, 0,
+            CONF.gest_zone_r.v, CONF.gest_zone_bl.v, CONF.gest_zone_b.v, CONF.gest_zone_br.v
+        ][pool]
+    }
+
+    return 0
+}
+
+
+GetGesturePoolGroup(pool) {
+    if pool == 5 || pool ~= "i)^[a-d]$" {
+        return 0
+    }
+
+    return Mod(pool, 2) ? 2 : 1
+}
+
+
+GesturePoolEnabled(pool) {
+    if pool == 5 {
+        return CONF.gest_center_mode.v == "Single"
+    }
+    if pool ~= "i)^[a-d]$" {
+        return CONF.gest_center_mode.v !== "Single"
+    }
+
+    return GetGesturePoolZoneSize(pool) > 0
 }
 
 

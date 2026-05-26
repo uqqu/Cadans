@@ -413,7 +413,8 @@ BuildNode(raw_node, sc, md, down_type:=false) {
         vals := StrSplit(node_obj.gesture_opts, ";")
         for i, name in ["pool", "rotate", "scaling", "dirs", "closed", "len"] {
             try {
-                node_obj.opts.%name% := name == "scaling" ? Float(vals[i]) : Integer(vals[i])
+                node_obj.opts.%name% := name == "pool" ? ParseGesturePool(vals[i])
+                    : name == "scaling" ? Float(vals[i]) : Integer(vals[i])
             } catch {
                 node_obj.opts.%name% := default_opts.%name%
             }

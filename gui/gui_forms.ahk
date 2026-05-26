@@ -96,41 +96,10 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         form.Add("Text", "x10 y+10 w150 vLHText", "Live hint position:")
         form.Add("DDL", "x+0 yp-3 w150 Choose1 vLiveHint",
             ["Follow global setting", "Top", "Center", "Bottom", "Disabled"])
-        form.color_buttons := [
-            form.Add("Button", "x10 y+10 w100 vColorGeneral", "General"),
-            form.Add("Button", "x+0 yp0 w100 vColorEdges", "Edges"),
-            form.Add("Button", "x+0 yp0 w100 vColorCorners", "Corners"),
-        ]
-        for i, btn in form.color_buttons {
-            btn.OnEvent("Click", _FormToggleColors.Bind(i))
-        }
-        form["ColorGeneral"].Enabled := false
-
-        form["ColorGeneral"].GetPos(, &cy, , &ch)
-
-        form.colors := [[], [], []]
-        for i, name in ["", "Edges", "Corners"] {
-            form.colors[i].Push(
-                form.Add("Text", "x10 y" . (8 + cy + ch) . " w150 h20", "Gesture colors:"),
-                form.Add("Edit", "Center x+0 yp0 w130 h20 vColorInp" . name),
-                form.Add("Button", "x+0 yp+0 w20 h20 vColor" . name . "Pick", "🎨"),
-                form.Add("Text", "x10 y+5 w150 h20", "Gradient cycle length:"),
-                form.Add("Edit", "Center x+0 yp0 w150 h20 vGradLenInp" . name),
-                form.Add("CheckBox", "x10 y+5 w300 vGradCycle" . name, "Gradient cycling"),
-            )
-            SendMessage(0x1501, true, StrPtr(CONF.gest_colors[i].v), form["ColorInp" . name].Hwnd)
-            SendMessage(0x1501, true,
-                StrPtr("" . CONF.grad_len[i].v), form["GradLenInp" . name].Hwnd)
-            form["Color" . name . "Pick"].OnEvent(
-                "Click", PasteColorFromPick.Bind(form.Hwnd, form["ColorInp" . name], true)
-            )
-            if i !== 1 {
-                ToggleVisibility(false, form.colors[i])
-            }
-        }
-        form.Add("Text", "x10 y+10 w60", "Window rule:")
-        form.Add("Edit", "x+5 yp-2 w211 vWindowRule")
-        form.Add("Button", "x+4 yp+2 h20 w20", "?").OnEvent("Click", ShowNodeWindowRuleHelp)
+        _AddFormGestureOverlay(1)
+        form.Add("Text", "x10 y+14 w65", "Window rule:")
+        form.Add("Edit", "x+0 yp-2 w211 vWindowRule")
+        form.Add("Button", "x+4 yp+0 h20 w20", "?").OnEvent("Click", ShowNodeWindowRuleHelp)
         form.Add("Button", "x10 y+10 w100 h20 vCancel", "❌ Cancel")
         form.Add("Button", "x+0 yp+0 w100 h20 Default vSave", "💾 Save")
         form.Add("Button", "x+0 yp+0 w100 h20 vSaveWithReturn", "↩ Save and back")
@@ -186,7 +155,9 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
 
     ; gesture
     if save_type == 3 {
-        form.Add("Button", "x10 y+10 w280 vSetGesture", "Set gesture pattern")
+        form.Add("Button", "x10 y+10 w20 vShowGestureZones", "⊞")
+            .OnEvent("Click", ShowFormGestureZonePreview)
+        form.Add("Button", "x+0 yp+0 w260 vSetGesture", "Set gesture pattern")
             .OnEvent("Click", SetGesture)
         form.Add("Button", "x+0 yp+0 w20 vShowGesture", "🙈")
             .OnEvent("Click", ShowGesture.Bind(_gui_entries))
@@ -243,43 +214,15 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
             .Visible := false
         form.Add("DDL", "x+0 yp-3 w150 Choose1 vLiveHint",
             ["Follow global setting", "Top", "Center", "Bottom", "Disabled"]).Visible := false
-        form.color_buttons := [
-            form.Add("Button", "x10 y+10 w100 vColorGeneral", "General"),
-            form.Add("Button", "x+0 yp0 w100 vColorEdges", "Edges"),
-            form.Add("Button", "x+0 yp0 w100 vColorCorners", "Corners"),
-        ]
-        for i, btn in form.color_buttons {
-            btn.OnEvent("Click", _FormToggleColors.Bind(i))
-            btn.Visible := false
-        }
-        form["ColorGeneral"].Enabled := false
-
-        form["ColorGeneral"].GetPos(, &cy, , &ch)
-
-        form.colors := [[], [], []]
-        for i, name in ["", "Edges", "Corners"] {
-            form.colors[i].Push(
-                form.Add("Text", "x10 y" . (8 + cy + ch) . " w150 h20", "Gesture colors:"),
-                form.Add("Edit", "Center x+0 yp0 w130 h20 vColorInp" . name),
-                form.Add("Button", "x+0 yp+0 w20 h20 vColor" . name . "Pick", "🎨"),
-                form.Add("Text", "x10 y+5 w150 h20", "Gradient cycle length:"),
-                form.Add("Edit", "Center x+0 yp0 w150 h20 vGradLenInp" . name),
-                form.Add("CheckBox", "x10 y+5 w300 vGradCycle" . name, "Gradient cycling"),
-            )
-            SendMessage(0x1501, true, StrPtr(CONF.gest_colors[i].v), form["ColorInp" . name].Hwnd)
-            SendMessage(0x1501, true,
-                StrPtr("" . CONF.grad_len[i].v), form["GradLenInp" . name].Hwnd)
-            form["Color" . name . "Pick"].OnEvent(
-                "Click", PasteColorFromPick.Bind(form.Hwnd, form["ColorInp" . name], true)
-            )
-            ToggleVisibility(false, form.colors[i])
-        }
+        _AddFormGestureOverlay(0)
 
         form["UpTypeDDL"]
             .OnEvent("Change", ChangeFormPlaceholder.Bind(unode, false, layers, save_type, 1, 0, 0))
         form["UpTypeDDL"].Text := curr_val ? TYPES_R[curr_val.up_type] : "Disabled"
     }
     form.bottom := []
+    form.bottom.Push(form.Add("Text", "x10 y" . (8 + y + h) . " w300 h1 0x10"))
+    form.bottom[-1].GetPos(, &y, , &h)
     if save_type !== 2 {
         form.bottom.Push(form.Add("Text", "x10 y" . (8 + y + h) . " w60", "Shortname:"))
         form.bottom.Push(form.Add("Edit", "x+5 yp-2 w235 vShortname"))
@@ -287,7 +230,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
     }
     form.bottom.Push(form.Add("Text", "x10 y" . (8 + y + h) . " w65", "Window rule:"))
     form.bottom.Push(form.Add("Edit", "x+0 yp-2 w211 vWindowRule"))
-    form.bottom.Push(form.Add("Button", "x+4 yp+2 h20 w20", "?"))
+    form.bottom.Push(form.Add("Button", "x+4 yp+0 h20 w20", "?"))
     form.bottom[-1].OnEvent("Click", ShowNodeWindowRuleHelp)
     form["WindowRule"].GetPos(, &y, , &h)
 
@@ -417,17 +360,19 @@ ShowChainOptions(*) {
 }
 
 
-ShowHideButtons(ctrl, *) {
+ShowHideButtons(obj, *) {
     ToggleEnabled(1, form["InChainToggle"], form["UpToggle"])
     try form["ColorToggle"].Enabled := true
-    ctrl.Enabled := false
-    if ctrl.Name == "InChainToggle" {
-        ToggleVisibility(0, form["LiveHint"], form["LHText"], form.color_buttons, form.colors*)
+    obj.Enabled := false
+    if obj.Name == "InChainToggle" {
+        ToggleVisibility(0, form["LiveHint"], form["LHText"], form.color_controls)
+        _FormHideGestureColorEditors()
         ToggleVisibility(0, form.up_fields)
         ToggleVisibility(1, form.chain_options)
         form["CBIrrevocable"].GetPos(, &sh)
-    } else if ctrl.Name == "UpToggle" {
-        ToggleVisibility(0, form["LiveHint"], form["LHText"], form.color_buttons, form.colors*)
+    } else if obj.Name == "UpToggle" {
+        ToggleVisibility(0, form["LiveHint"], form["LHText"], form.color_controls)
+        _FormHideGestureColorEditors()
         ToggleVisibility(1, form.up_fields)
         if form["UpTypeDDL"].Value < 3 {
             ToggleVisibility(0, form["UpValInp"], form["UpValText"])
@@ -435,18 +380,11 @@ ShowHideButtons(ctrl, *) {
         ToggleVisibility(0, form.chain_options)
         form["UpValInp"].GetPos(, &sh)
     } else {
-        ToggleVisibility(1, form["LiveHint"], form["LHText"], form.color_buttons)
+        ToggleVisibility(1, form["LiveHint"], form["LHText"], form.color_controls)
         ToggleVisibility(0, form.up_fields)
         ToggleVisibility(0, form.chain_options)
-        for i, btn in form.color_buttons {
-            if !btn.Enabled {
-                for elem in form.colors[i] {
-                    elem.Visible := true
-                }
-                break
-            }
-        }
-        form["GradCycle"].GetPos(, &sh)
+        _FormSelectGestureColorZone(form.selected_color_zone)
+        form["GradCyclePool" . form.selected_color_zone].GetPos(, &sh)
     }
     sh += 30
 
@@ -468,10 +406,173 @@ ShowHideButtons(ctrl, *) {
 }
 
 
-_FormToggleColors(trg, *) {
-    for i, arr in form.colors {
-        ToggleVisibility(i == trg, arr)
-        form.color_buttons[i].Enabled := i !== trg
+_FormHideGestureColorEditors() {
+    for key, arr in form.colors {
+        ToggleVisibility(0, arr)
+    }
+}
+
+
+ShowFormGestureZonePreview(*) {
+    ShowGestureZonePreview({
+        center_mode: CONF.gest_center_mode.v,
+        t: CONF.gest_zone_t.v,
+        r: CONF.gest_zone_r.v,
+        b: CONF.gest_zone_b.v,
+        l: CONF.gest_zone_l.v,
+        tl: CONF.gest_zone_tl.v,
+        tr: CONF.gest_zone_tr.v,
+        br: CONF.gest_zone_br.v,
+        bl: CONF.gest_zone_bl.v,
+        color: ParseAhkColor(CONF.gest_zone_preview_color.v),
+    }, "Blink")
+}
+
+
+_AddFormGestureOverlay(is_visible:=0) {
+    form.color_buttons := []
+    form.color_controls := []
+    form.colors := Map()
+    form.selected_color_zone := _FormDefaultGestureColorZone()
+
+    x := 32
+    y := 0
+    form["LiveHint"].GetPos(, &y, , &h)
+    y += h + 8
+    w := 256
+    h := 144
+    bw := 42
+    th := 34
+    cw := w - bw * 2
+    ch := h - th * 2
+    hw := cw // 2
+    hh := ch // 2
+
+    _AddFormGestureZoneButton("TL", "TL", x, y, bw, th)
+    _AddFormGestureZoneButton("T", "T", x + bw, y, cw, th)
+    _AddFormGestureZoneButton("TR", "TR", x + bw + cw, y, bw, th)
+    _AddFormGestureZoneButton("L", "L", x, y + th, bw, ch)
+    _AddFormGestureZoneButton("R", "R", x + bw + cw, y + th, bw, ch)
+    _AddFormGestureZoneButton("BL", "BL", x, y + th + ch, bw, th)
+    _AddFormGestureZoneButton("B", "B", x + bw, y + th + ch, cw, th)
+    _AddFormGestureZoneButton("BR", "BR", x + bw + cw, y + th + ch, bw, th)
+
+    if CONF.gest_center_mode.v == "Single" {
+        _AddFormGestureZoneButton("C", "C", x + bw, y + th, cw, ch)
+    } else if CONF.gest_center_mode.v == "Grid" {
+        _AddFormGestureZoneButton("CA", "a", x + bw, y + th, hw, hh)
+        _AddFormGestureZoneButton("CB", "b", x + bw + hw, y + th, cw - hw, hh)
+        _AddFormGestureZoneButton("CD", "d", x + bw, y + th + hh, hw, ch - hh)
+        _AddFormGestureZoneButton("CC", "c", x + bw + hw, y + th + hh, cw - hw, ch - hh)
+    } else {
+        _AddFormGestureZoneButton("CA", "a", x + bw + cw // 2 - 35, y + th + 4, 70, 24)
+        _AddFormGestureZoneButton("CD", "d", x + bw + 8, y + th + ch // 2 - 12, 70, 24)
+        _AddFormGestureZoneButton("CB", "b", x + bw + cw - 78, y + th + ch // 2 - 12, 70, 24)
+        _AddFormGestureZoneButton("CC", "c", x + bw + cw // 2 - 35, y + th + ch - 28, 70, 24)
+    }
+
+    for zone in GestureColorZones {
+        form.colors[zone[2]] := []
+        _AddFormGestureZoneEditor(zone[2], zone[1], y + h + 10)
+    }
+
+    _FormSelectGestureColorZone(form.selected_color_zone)
+    ToggleVisibility(is_visible, form.color_controls)
+    for key, arr in form.colors {
+        ToggleVisibility(is_visible && key == form.selected_color_zone, arr)
+    }
+}
+
+
+_AddFormGestureZoneButton(key, text, x, y, w, h) {
+    btn := form.Add("Button", "x" . x . " y" . y . " w" . w . " h" . h
+        . " vFormColorZone" . key, text)
+    btn.OnEvent("Click", _FormSelectGestureColorZone.Bind(key))
+    form.color_buttons.Push(btn)
+    form.color_controls.Push(btn)
+}
+
+
+_AddFormGestureZoneEditor(key, label, y) {
+    group := form.colors[key]
+    suffix := "Pool" . key
+    group.Push(form.Add("Text", "x10 y" . y . " w150 h20", "Gesture colors:"))
+    group.Push(form.Add("Edit", "Center x+0 yp0 w130 h20 vColorInp" . suffix))
+    group.Push(form.Add("Button", "x+0 yp+0 w20 h20 vColor" . suffix . "Pick", "🎨"))
+    group.Push(form.Add("Text", "x10 y+5 w150 h20", "Gradient cycle length:"))
+    group.Push(form.Add("Edit", "Center x+0 yp0 w150 h20 vGradLenInp" . suffix))
+    group.Push(form.Add("CheckBox", "x10 y+5 w300 vGradCycle" . suffix, "Gradient cycling"))
+
+    SendMessage(0x1501, true, StrPtr(CONF.gest_zone_colors[key].v),
+        form["ColorInp" . suffix].Hwnd)
+    SendMessage(0x1501, true, StrPtr("" . CONF.gest_zone_grad_len[key].v),
+        form["GradLenInp" . suffix].Hwnd)
+    form["Color" . suffix . "Pick"].OnEvent(
+        "Click", PasteColorFromPick.Bind(form.Hwnd, form["ColorInp" . suffix], true)
+    )
+    ToggleVisibility(0, group)
+}
+
+
+_FormSelectGestureColorZone(key, *) {
+    if !_FormGestureColorZoneVisible(key) {
+        key := _FormDefaultGestureColorZone()
+    }
+    form.selected_color_zone := key
+    for zone in GestureColorZones {
+        k := zone[2]
+        try form["FormColorZone" . k].Enabled := k != key
+        if form.colors.Has(k) {
+            ToggleVisibility(k == key, form.colors[k])
+        }
+    }
+}
+
+
+_FormDefaultGestureColorZone() {
+    return CONF.gest_center_mode.v == "Single" ? "C" : "CA"
+}
+
+
+_FormGestureColorZoneVisible(key) {
+    return SubStr(key, 1, 1) !== "C"
+        || CONF.gest_center_mode.v == "Single" && key == "C"
+        || CONF.gest_center_mode.v != "Single" && key != "C"
+}
+
+
+_BuildFormGestureOverlayOpts(live_hint) {
+    gest_opts := (live_hint ? live_hint : "") . ";"
+    for zone in GestureColorZones {
+        suffix := "Pool" . zone[2]
+        for name in ["ColorInp", "GradLenInp", "GradCycle"] {
+            val := ""
+            try val := name == "GradCycle"
+                ? form[name . suffix].Value
+                : form[name . suffix].Text
+            gest_opts .= (val ? val : "") . ";"
+        }
+    }
+    return gest_opts
+}
+
+
+_LoadFormGestureOverlayOpts(opts_str) {
+    opts := StrSplit(opts_str, ";")
+    if opts.Has(1) && opts[1] {
+        form["LiveHint"].Value := opts[1]
+    }
+
+    for zone in GestureColorZones {
+        key := zone[2]
+        suffix := "Pool" . key
+        for j, name in ["ColorInp", "GradLenInp", "GradCycle"] {
+            zi := GetGestureZoneOverrideIndex(key, j - 1)
+            val := opts.Has(zi) && opts[zi] ? opts[zi] : ""
+            if val {
+                try form[name . suffix].Value := val
+            }
+        }
     }
 }
 
@@ -550,7 +651,8 @@ ShowGesture(entries, *) {
     vals := StrSplit(node_obj.gesture_opts, ";")
     for i, name in ["pool", "rotate", "scaling", "dirs", "closed", "len"] {
         try {
-            node_obj.opts.%name% := name == "scaling" ? Float(vals[i]) : Integer(vals[i])
+            node_obj.opts.%name% := name == "pool" ? ParseGesturePool(vals[i])
+                : name == "scaling" ? Float(vals[i]) : Integer(vals[i])
         } catch {
             node_obj.opts.%name% := default_opts.%name%
         }
@@ -622,20 +724,7 @@ ChangeFormPlaceholder(unode, paired, layers, save_type:=0, is_up:=0, is_layer_ed
                     form["Phase"].Enabled := true
                 }
             } else if val.gesture_opts {
-                opts := StrSplit(val.gesture_opts, ";")
-                for i, name in [
-                    "LiveHint", "ColorInp", "GradLenInp", "GradCycle",
-                    "ColorInpEdges", "GradLenInpEdges", "GradCycleEdges",
-                    "ColorInpCorners", "GradLenInpCorners", "GradCycleCorners",
-                ] {
-                    if i > opts.Length {
-                        break
-                    }
-                    if !opts[i] {
-                        continue
-                    }
-                    form[name].Value := opts[i]
-                }
+                _LoadFormGestureOverlayOpts(val.gesture_opts)
             }
 
             try form["CustomLP"].Text := val.custom_lp_time || ""
@@ -671,20 +760,7 @@ ChangeFormPlaceholder(unode, paired, layers, save_type:=0, is_up:=0, is_layer_ed
         && paired.layers.Has(layer) && paired.layers[layer][0] {
         p := paired.layers[layer][0]
         try form["CustomLP"].Text := p.custom_lp_time || ""
-        opts := StrSplit(p.gesture_opts, ";")
-        for i, name in [
-            "LiveHint", "ColorInp", "GradLenInp", "GradCycle",
-            "ColorInpEdges", "GradLenInpEdges", "GradCycleEdges",
-            "ColorInpCorners", "GradLenInpCorners", "GradCycleCorners",
-        ] {
-            if i > opts.Length {
-                break
-            }
-            if !opts[i] {
-                continue
-            }
-            form[name].Value := opts[i]
-        }
+        _LoadFormGestureOverlayOpts(p.gesture_opts)
     }
 
     if !is_up && prev_layer !== layer {
@@ -952,15 +1028,13 @@ WriteValue(is_hold, custom_path:=false, paired:=false, *) {
     vals := Map()
     for name in [
         "LayersDDL", "TypeDDL", "ValInp", "UpTypeDDL", "UpValInp", "CustomLP", "CustomNK",
-        "Shortname", "WindowRule", "ColorInp", "ColorInpEdges", "ColorInpCorners",
-        "GradLenInp", "GradLenInpEdges", "GradLenInpCorners",
+        "Shortname", "WindowRule",
     ] {
         vals[name] := false
         try vals[name] := form[name].Text
     }
     for name in [
         "CBIrrevocable", "CBInstant", "ChildBehaviorDDL", "LiveHint",
-        "GradCycle", "GradCycleEdges", "GradCycleCorners",
     ] {
         vals[name] := false
         try vals[name] := form[name].Value
@@ -996,14 +1070,7 @@ WriteValue(is_hold, custom_path:=false, paired:=false, *) {
         }
     }
     layers := GetLayerList()
-    gest_opts := ""
-    for name in [
-        "LiveHint", "ColorInp", "GradLenInp", "GradCycle",
-        "ColorInpEdges", "GradLenInpEdges", "GradCycleEdges",
-        "ColorInpCorners", "GradLenInpCorners", "GradCycleCorners",
-    ] {
-        gest_opts .= (vals[name] ? vals[name] : "") . ";"
-    }
+    gest_opts := _BuildFormGestureOverlayOpts(vals["LiveHint"])
 
     CloseForm()
 

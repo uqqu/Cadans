@@ -21,6 +21,7 @@ CONF := {
     Main: [],
     GUI: [],
     Gestures: [],
+    GestureZones: [],
     GestureDefaults: [],
     Colors: [],
     UserDefined: Map(),
@@ -60,6 +61,11 @@ ONLY_BASE_SCS := Map()
 SC_STR := Map()
 unstable_sc := Map()
 manual_hold := Map()
+
+GestureColorZones := [
+    [1, "TL"], [2, "T"], [3, "TR"], [4, "L"], [5, "C"], [6, "R"], [7, "BL"],
+    [8, "B"], [9, "BR"], ["a", "CA"], ["b", "CB"], ["c", "CC"], ["d", "CD"]
+]
 
 for name in ["Volume_Mute", "Volume_Down", "Volume_Up", "Media_Next", "Media_Prev", "Media_Stop",
     "Media_Play_Pause", "Browser_Back", "Browser_Forward", "Browser_Refresh", "Browser_Stop",
@@ -157,6 +163,7 @@ CheckConfig() {
             . "ChosenTags=Active, Inactive`r`n"
             . "`r`n[GUI]`r`n"
             . "`r`n[Gestures]`r`n"
+            . "`r`n[GestureZones]`r`n"
             . "`r`n[GestureDefaults]`r`n"
             . "`r`n[Colors]`r`n"
             . "`r`n[UserDefined]`r`n"
@@ -244,12 +251,30 @@ CheckConfig() {
         "Hide warnings about changes in &aliased layouts", 0)
 
     CONF.gest_color_mode := ConfValue("Gestures", "ColorMode", "ddl", "str",
-        "&Color mode:", "HSV", , , [["RGB", "Gamma-correct", "HSV"], true])
-    CONF.edge_gestures := ConfValue("Gestures", "EdgeGestures", "ddl", "int",
-        "Enable &edge gestures:", 4, , ,
-        [["No", "With edges", "With corners", "With edges and corners"], false])
-    CONF.edge_size := ConfValue("Gestures", "EdgeSize", "str", "int",
-        "Edge detection &width (px):", 128, true)
+        "Color &mode:", "HSV", , , [["RGB", "Gamma-correct", "HSV"], true])
+
+    CONF.gest_center_mode := ConfValue("GestureZones", "CenterMode", "ddl", "str",
+        "Center zone &mode:", "Single", , ,
+        [["Single", "Grid", "Diagonal"], true])
+    CONF.gest_zone_t := ConfValue("GestureZones", "Top", "str", "int",
+        "&Top edge size (px):", 128, true)
+    CONF.gest_zone_r := ConfValue("GestureZones", "Right", "str", "int",
+        "&Right edge size (px):", 128, true)
+    CONF.gest_zone_b := ConfValue("GestureZones", "Bottom", "str", "int",
+        "&Bottom edge size (px):", 128, true)
+    CONF.gest_zone_l := ConfValue("GestureZones", "Left", "str", "int",
+        "&Left edge size (px):", 128, true)
+    CONF.gest_zone_tl := ConfValue("GestureZones", "TopLeft", "str", "int",
+        "Top-&left corner size (px):", 128, true)
+    CONF.gest_zone_tr := ConfValue("GestureZones", "TopRight", "str", "int",
+        "Top-&right corner size (px):", 128, true)
+    CONF.gest_zone_br := ConfValue("GestureZones", "BottomRight", "str", "int",
+        "Bottom-r&ight corner size (px):", 128, true)
+    CONF.gest_zone_bl := ConfValue("GestureZones", "BottomLeft", "str", "int",
+        "Bottom-l&eft corner size (px):", 128, true)
+    CONF.gest_zone_preview_color := ConfValue("GestureZones", "PreviewColor", "color", "str",
+        "Zone preview color:", "00F4FF")
+
     CONF.min_gesture_len := ConfValue("Gestures", "MinGestureLen", "str", "int",
         "Minimum gesture &length (px):", 150, true)
     CONF.min_cos_similarity := ConfValue("Gestures", "MinCosSimilarity", "str", "float",
@@ -258,8 +283,14 @@ CheckConfig() {
         "Overlay &opacity (up to 255):", 200, true)
     CONF.font_size_lh := ConfValue("Gestures", "LHSize", "str", "int",
         "Live &hint font size:", 32, true)
+    CONF.gest_thumbnail_color := ConfValue("Gestures", "ThumbnailColor", "color", "str",
+        "Gesture list &thumbnail color:", "")
+    CONF.gest_pool_marker_color := ConfValue("Gestures", "PoolMarkerColor", "color", "str",
+        "Pool &marker color:", "2EAD64")
     CONF.live_hint_extended := ConfValue("Gestures", "LiveHintExtended", "checkbox", "int",
         "Show &unrecognized gestures in the live hint", 1)
+    CONF.show_unavailable_gestures := ConfValue("Gestures", "ShowUnavailableGestures", "checkbox", "int",
+        "Show gestures from unavailable &pools", 1)
 
     CONF.gest_rotate := ConfValue("GestureDefaults", "Rotate", "ddl", "int",
         "&Rotation:", 1, , , [["None", "Reduce orientation noise", "Rotation invariant"], false])
@@ -269,33 +300,28 @@ CheckConfig() {
         "&Live recognition hint position:", 1, , ,
         [["Top", "Center", "Bottom", "Disabled"], false])
 
-    CONF.gest_colors := [
-        ConfValue("GestureDefaults", "GestureColors", "color", "str",
-            "Ges&ture colors`n(use multiple values for a gradient):",
-            "random(3)", , true),
-        ConfValue("GestureDefaults", "GestureColorsEdges", "color", "str",
-            "Ges&ture colors`n(use multiple values for a gradient):",
-            "4FC3F7,9575CD,F06292", , true),
-        ConfValue("GestureDefaults", "GestureColorsCorners", "color", "str",
-            "Ges&ture colors`n(use multiple values for a gradient):",
-            "66BB6A,26C6DA,FBC02D", , true),
-    ]
-    CONF.grad_len := [
-        ConfValue("GestureDefaults", "GradientLength", "str", "int",
-            "&Full gradient cycle length (px):", 1000, true),
-        ConfValue("GestureDefaults", "GradientLengthEdges", "str", "int",
-            "&Full gradient cycle length (px):", 1000, true),
-        ConfValue("GestureDefaults", "GradientLengthCorners", "str", "int",
-            "&Full gradient cycle length (px):", 1000, true),
-    ]
-    CONF.grad_loop := [
-        ConfValue("GestureDefaults", "GradientLoop", "checkbox", "int",
-            "Gra&dient cycling", 1),
-        ConfValue("GestureDefaults", "GradientLoopEdges", "checkbox", "int",
-            "Gra&dient cycling", 1),
-        ConfValue("GestureDefaults", "GradientLoopCorners", "checkbox", "int",
-            "Gra&dient cycling", 1),
-    ]
+    CONF.gest_zone_colors := Map()
+    CONF.gest_zone_grad_len := Map()
+    CONF.gest_zone_grad_loop := Map()
+    for zone in GestureColorZones {
+        if zone[1] == 5 || zone[1] ~= "^[a-d]$" {
+            defaults := {colors: "random(3)", grad_len: 1000, grad_loop: 1}
+        } else if zone[1] == 2 || zone[1] == 4 || zone[1] == 6 || zone[1] == 8 {
+            defaults := {colors: "4FC3F7,9575CD,F06292", grad_len: 1000, grad_loop: 1}
+        } else {
+            defaults := {colors: "66BB6A,26C6DA,FBC02D", grad_len: 1000, grad_loop: 1}
+        }
+        CONF.gest_zone_colors[zone[2]] := ConfValue("GestureDefaults",
+            "GestureColorsPool" . zone[2], "m_color", "str",
+            "Ges&ture colors`n(more than one for gradient):",
+            defaults.colors, , true)
+        CONF.gest_zone_grad_len[zone[2]] := ConfValue("GestureDefaults",
+            "GradientLengthPool" . zone[2], "str", "int",
+            "&Full gradient cycle length (px):", defaults.grad_len, true)
+        CONF.gest_zone_grad_loop[zone[2]] := ConfValue("GestureDefaults",
+            "GradientLoopPool" . zone[2], "checkbox", "int",
+            "G&radient cycling", defaults.grad_loop)
+    }
 
     CONF.default_assigned_color := ConfValue("Colors", "DefaultAssigned", "color", "str",
         "Default &assigned:", "Silver")
@@ -433,6 +459,17 @@ ShowSettings(*) {
     s_gui.UserDefined := []
     s_gui.ProcessGroups := []
     s_gui.LayoutAliases := []
+    s_gui.GestureGeneral := []
+    s_gui.GestureDefaults := []
+    s_gui.GestureColors := []
+    s_gui.GestureColorFixed := []
+    s_gui.GestureColorMapButtons := []
+    s_gui.GestureZones := []
+    s_gui.GestureColorGroups := Map()
+    s_gui.SelectedGestureColorZone := "C"
+    s_gui.GestureColorMapMode := ""
+    s_gui.ZonePreviewMode := "Blink"
+    s_gui.CurrentGroup := false
 
     s_gui.Add("Button", "Center x299 y0 w60 h18 vCancel", "❌ Cancel")
         .OnEvent("Click", CloseSettingsEvent)
@@ -440,7 +477,7 @@ ShowSettings(*) {
         .OnEvent("Click", SaveConfig)
 
     tabs := s_gui.Add("Tab3", "x0 y0 w422 h666",
-        ["Main", "GUI", "Gestures", "Gesture defaults", "Colors", "User"])
+        ["Main", "GUI", "Gestures", "Colors", "User"])
 
     tabs.UseTab("Main")
     for c in CONF.Main {
@@ -468,57 +505,104 @@ ShowSettings(*) {
     }
 
     tabs.UseTab("Gestures")
+    s_gui.Add("Button", "vToggleGestureGeneral x15 y34 h20 w97 Disabled", "&General")
+        .OnEvent("Click", ToggleGestureSettingsSubtab.Bind(1))
+    s_gui.Add("Button", "vToggleGestureDefaults x112 yp0 h20 w97", "&Defaults")
+        .OnEvent("Click", ToggleGestureSettingsSubtab.Bind(2))
+    s_gui.Add("Button", "vToggleGestureColors x209 yp0 h20 w98", "&Colors")
+        .OnEvent("Click", ToggleGestureSettingsSubtab.Bind(3))
+    s_gui.Add("Button", "vToggleGestureZones x307 yp0 h20 w98", "&Zones")
+        .OnEvent("Click", ToggleGestureSettingsSubtab.Bind(4))
+
+    s_gui.CurrentGroup := s_gui.GestureGeneral
+    b := true
     for c in CONF.Gestures {
-        _AddElems(c.form_type, A_Index == 1 ? 40 : "", , [
+        if c.ini_name == CONF.gest_color_mode.ini_name {
+            continue
+        }
+        _AddElems(c.form_type, b ? 75 : "", , [
             c.double_height, c.ini_name . (c.is_num ? " Number" : ""),
             c.descr, c.v, c.extra_params*
         ])
+        b := false
     }
+    SendMessage(0x1501, true, StrPtr("Empty – own gesture color"), s_gui["ThumbnailColor"].Hwnd)
 
-    tabs.UseTab("Gesture defaults")
-    s_gui.Add("Text", "x20 w380 y34 h34 Center",
-        "Default gesture matching and color settings`n(can be overridden for each assignment)")
-    s_gui.Add("Text", "x20 w380 y+8 h1 0x10")
+    s_gui.CurrentGroup := s_gui.GestureDefaults
+    RegisterSettingsCtrl(s_gui.Add("Text", "x20 w380 y68 h34 Center",
+        "Default gesture matching and color settings`n(can be overridden for each assignment)"))
+    RegisterSettingsCtrl(s_gui.Add("Text", "x20 w380 y+8 h1 0x10"))
 
     for c in CONF.GestureDefaults {
         if A_Index == 4 {
             break
         }
-        _AddElems(c.form_type, A_Index == 1 ? 90 : "", , [
+        _AddElems(c.form_type, A_Index == 1 ? 124 : "", , [
             c.double_height, c.ini_name . (c.is_num ? " Number" : ""),
             c.descr, c.v, c.extra_params*
         ])
     }
     SendMessage(0x1501, true, StrPtr("0–0.99 (0 – size-independent)"), s_gui["Scaling"].Hwnd)
 
-    s_gui.Add("Text", "x85 w250 y+10 h1 0x10")
-
-    s_gui.Add("Button", "vToggleColors x15 y+10 h20 w130 Disabled", "&General")
-        .OnEvent("Click", _ToggleColors.Bind(1))
-    s_gui.Add("Button", "vToggleColorsEdges x145 yp0 h20 w131", "&Edges")
-        .OnEvent("Click", _ToggleColors.Bind(2))
-    s_gui.Add("Button", "vToggleColorsCorners x275 yp0 h20 w130", "&Corners")
-        .OnEvent("Click", _ToggleColors.Bind(3))
-
-    for i, name in ["", "Edges", "Corners"] {
-        _AddElems("m_color", 215, , [
-            1, "GestureColors" . name,
-            "Ges&ture colors`n(more than one for gradient):", CONF.gest_colors[i].v
-        ])
-        _AddElems("str", , , [
-            0, "GradientLength" . name . " Number",
-            "&Full gradient cycle length (px):", CONF.grad_len[i].v
-        ])
-        _AddElems("checkbox", , , [
-            0, "GradientLoop" . name, "Gra&dient cycling", CONF.grad_loop[i].v
-        ])
-        if i > 1 {
-            s_gui["GestureColors" . name].Visible := false
-            s_gui["GradientLength" . name].Visible := false
-            s_gui["GradientLoop" . name].Visible := false
-        }
+    s_gui.CurrentGroup := s_gui.GestureColors
+    _RegisterGestureColorFixed(s_gui.Add("Text", "x20 w380 y68 h34 Center",
+        "Default gesture colors`n(can be overridden for each assignment)"))
+    _RegisterGestureColorFixed(s_gui.Add("Text", "x20 w380 y+8 h1 0x10"))
+    c := CONF.gest_color_mode
+    _RegisterGestureColorFixed(s_gui.Add("Text", "x15 y124 h20 w185", c.descr))
+    elem := _RegisterGestureColorFixed(
+        s_gui.Add("DropDownList", "x210 yp-2 w195 v" . c.ini_name, c.extra_params[1])
+    )
+    elem.Text := c.v
+    _AddGestureColorMap()
+    for zone in GestureColorZones {
+        key := zone[2]
+        s_gui.GestureColorGroups[key] := []
+        _AddGestureColorEditor(key, zone[1],
+            CONF.gest_zone_colors[key],
+            CONF.gest_zone_grad_len[key],
+            CONF.gest_zone_grad_loop[key])
     }
+    ToggleGestureColorZone("C")
 
+    s_gui.CurrentGroup := s_gui.GestureZones
+    RegisterSettingsCtrl(s_gui.Add("Text", "x20 w380 y60 h28 Center",
+        "Gesture zones are resolved from corners through edges to the remaining center."))
+    c := CONF.gest_center_mode
+    RegisterSettingsCtrl(s_gui.Add("Text", "x15 y96 h20 w185", c.descr))
+    elem := RegisterSettingsCtrl(
+        s_gui.Add("DropDownList", "x210 yp-2 w195 v" . c.ini_name, c.extra_params[1])
+    )
+    elem.Text := c.v
+    s_gui["CenterMode"].OnEvent("Change", RefreshSettingsGestureZonePreview)
+    s_gui["CenterMode"].OnEvent("Change", RefreshSettingsGestureColorMap)
+    _AddGestureZoneGroup("Edges", 15, 128, 196, [
+        ["Top", CONF.gest_zone_t],
+        ["Right", CONF.gest_zone_r],
+        ["Bottom", CONF.gest_zone_b],
+        ["Left", CONF.gest_zone_l],
+    ])
+    _AddGestureZoneGroup("Corners", 210, 128, 195, [
+        ["Top left", CONF.gest_zone_tl],
+        ["Top right", CONF.gest_zone_tr],
+        ["Bottom right", CONF.gest_zone_br],
+        ["Bottom left", CONF.gest_zone_bl],
+    ])
+    RegisterSettingsCtrl(s_gui.Add("Text", "x15 y286 w195 h48 0x200", "Zone preview:"))
+    RegisterSettingsCtrl(s_gui.Add("Button", "x210 y284 w65 h20 vZonePreviewOff", "Off"))
+        .OnEvent("Click", ShowSettingsGestureZonePreview.Bind("Off"))
+    RegisterSettingsCtrl(s_gui.Add("Button", "x+0 yp+0 w65 h20 vZonePreviewBlink Disabled", "Blink"))
+        .OnEvent("Click", ShowSettingsGestureZonePreview.Bind("Blink"))
+    RegisterSettingsCtrl(s_gui.Add("Button", "x+0 yp+0 w65 h20 vZonePreviewOn", "On"))
+        .OnEvent("Click", ShowSettingsGestureZonePreview.Bind("On"))
+    c := CONF.gest_zone_preview_color
+    elem := RegisterSettingsCtrl(s_gui.Add("Edit", "Center x210 y310 h20 w174 v" . c.ini_name, c.v))
+    elem.OnEvent("Change", RefreshSettingsGestureZonePreview)
+    RegisterSettingsCtrl(s_gui.Add("Button", "x+1 yp+0 h20 w20 v" . c.ini_name . "Pick", "🎨"))
+        .OnEvent("Click", PickSettingsGestureZonePreviewColor)
+
+    s_gui.CurrentGroup := false
+    ToggleGestureSettingsSubtab(1)
     tabs.UseTab("Colors")
     s_gui.Add("Text", "x20 w380 y30 h34 Center", "Button border colors:")
     loop 7 {
@@ -559,22 +643,190 @@ ShowSettings(*) {
     }
     _ToggleUserValues(1)
 
-    tabs.OnEvent("Change", (*) => DllCall("SetFocus", "ptr", s_gui.Hwnd))
-
+    tabs.OnEvent("Change", SettingsTabChanged)
+    SettingsTabChanged(tabs)
 
     s_gui.Show("w420 h505")
 }
 
 
-_ToggleColors(trg, *) {
-    for i, name in ["", "Edges", "Corners"] {
-        t := i == trg
-        s_gui["GestureColors" . name].Visible := t
-        s_gui["GestureColors" . name . "Pick"].Visible := t
-        s_gui["GradientLength" . name].Visible := t
-        s_gui["GradientLoop" . name].Visible := t
-        s_gui["ToggleColors" . name].Enabled := !t
+SettingsTabChanged(obj, *) {
+    show_gestures := obj.Text == "Gestures"
+    if !show_gestures {
+        HideGestureZonePreview()
     }
+    DllCall("SetFocus", "ptr", s_gui.Hwnd)
+}
+
+
+ToggleGestureSettingsSubtab(trg, *) {
+    for i, group in [
+        ["General", s_gui.GestureGeneral],
+        ["Defaults", s_gui.GestureDefaults],
+        ["Colors", s_gui.GestureColors],
+        ["Zones", s_gui.GestureZones],
+    ] {
+        t := i == trg
+        if group[1] == "Colors" && t {
+            for obj in group[2] {
+                obj.Visible := false
+            }
+            s_gui["ToggleGesture" . group[1]].Enabled := false
+            continue
+        }
+        for obj in group[2] {
+            obj.Visible := t
+        }
+        s_gui["ToggleGesture" . group[1]].Enabled := !t
+    }
+
+    if trg !== 4 {
+        HideGestureZonePreview()
+    }
+    if trg == 3 {
+        mode := GetSettingsCenterMode()
+        if s_gui.GestureColorMapMode !== mode {
+            b := 0
+            s_gui.GestureColorMapMode := mode
+            if mode == "Single" {
+                s_gui["GestureColorMapC"].Move(110, 230, 200, 85)
+                b := 1
+            } else if mode == "Grid" {
+                s_gui["GestureColorMapCA"].Move(110, 230, 100, 42)
+                s_gui["GestureColorMapCB"].Move(210, 230, 100, 42)
+                s_gui["GestureColorMapCD"].Move(110, 272, 100, 42)
+                s_gui["GestureColorMapCC"].Move(210, 272, 100, 42)
+            } else {
+                s_gui["GestureColorMapCA"].Move(167, 230, 86, 26)
+                s_gui["GestureColorMapCD"].Move(110, 260, 100, 26)
+                s_gui["GestureColorMapCB"].Move(210, 260, 100, 26)
+                s_gui["GestureColorMapCC"].Move(167, 289, 86, 26)
+            }
+            ToggleVisibility(b, s_gui["GestureColorMapC"])
+            ToggleVisibility(!b, s_gui["GestureColorMapCA"], s_gui["GestureColorMapCB"],
+                s_gui["GestureColorMapCC"], s_gui["GestureColorMapCD"])
+        }
+        for obj in s_gui.GestureColorFixed {
+            obj.Visible := true
+        }
+        for zone in GestureColorZones {
+            key := zone[2]
+            s_gui["GestureColorMap" . key].Visible := SubStr(key, 1, 1) !== "C"
+                || GestureColorMapKeyVisible(key)
+        }
+        ToggleGestureColorZone(s_gui.SelectedGestureColorZone)
+    } else if trg == 4 {
+        ToggleSettingsZonePreviewMode(s_gui.ZonePreviewMode)
+        if s_gui.ZonePreviewMode == "On" {
+            ShowGestureZonePreview(GetSettingsGestureZoneOpts(), "On")
+        }
+    }
+}
+
+
+GetGestureColorKey(pool) {
+    for zone in GestureColorZones {
+        if zone[1] == pool {
+            return zone[2]
+        }
+    }
+
+    return "C"
+}
+
+
+_AddGestureColorMap() {
+    _RegisterGestureColorFixed(s_gui.Add("Text", "x20 y167 w380 h20 Center",
+        "Default colors by gesture pool:"))
+
+    x := 60
+    y := 188
+    w := 300
+    h := 169
+    bw := 50
+    th := 42
+    cw := w - bw * 2
+    ch := h - th * 2
+    hw := cw // 2
+    hh := ch // 2
+
+    _AddGestureColorMapBtn("TL", "TL", x, y, bw, th)
+    _AddGestureColorMapBtn("T", "T", x + bw, y, cw, th)
+    _AddGestureColorMapBtn("TR", "TR", x + bw + cw, y, bw, th)
+    _AddGestureColorMapBtn("L", "L", x, y + th, bw, ch)
+    _AddGestureColorMapBtn("R", "R", x + bw + cw, y + th, bw, ch)
+    _AddGestureColorMapBtn("BL", "BL", x, y + th + ch, bw, th)
+    _AddGestureColorMapBtn("B", "B", x + bw, y + th + ch, cw, th)
+    _AddGestureColorMapBtn("BR", "BR", x + bw + cw, y + th + ch, bw, th)
+
+    _AddGestureColorMapBtn("CA", "a", x + bw, y + th, hw, hh)
+    _AddGestureColorMapBtn("CB", "b", x + bw + hw, y + th, cw - hw, hh)
+    _AddGestureColorMapBtn("CD", "d", x + bw, y + th + hh, hw, ch - hh)
+    _AddGestureColorMapBtn("CC", "c", x + bw + hw, y + th + hh, cw - hw, ch - hh)
+    _AddGestureColorMapBtn("C", "C", x + bw, y + th, cw, ch)
+}
+
+
+_AddGestureColorMapBtn(key, txt, x, y, w, h) {
+    btn := RegisterSettingsCtrl(s_gui.Add("Button", "x" . x . " y" . y . " w" . w . " h" . h
+        . " vGestureColorMap" . key, txt))
+    s_gui.GestureColorMapButtons.Push(btn)
+    btn.OnEvent("Click", ToggleGestureColorZone.Bind(key))
+}
+
+
+_AddGestureColorEditor(key, label, color_conf, len_conf, loop_conf) {
+    group := s_gui.GestureColorGroups[key]
+    group.Push(RegisterSettingsCtrl(s_gui.Add("Text", "x15 y366 h40 w200",
+        color_conf.descr)))
+    group.Push(RegisterSettingsCtrl(s_gui.Add("Edit", "Center x+0 yp+8 h20 w170 v"
+        . color_conf.ini_name, color_conf.v)))
+    group.Push(RegisterSettingsCtrl(s_gui.Add("Button", "x+1 yp+0 h20 w20 v"
+        . color_conf.ini_name . "Pick", "🎨")))
+    group[-1].OnEvent("Click", PasteColorFromPick.Bind(s_gui.Hwnd, s_gui[color_conf.ini_name], true))
+    group.Push(RegisterSettingsCtrl(s_gui.Add("Text", "x15 y408 h20 w200",
+        len_conf.descr)))
+    group.Push(RegisterSettingsCtrl(s_gui.Add("Edit", "Center x+0 yp-2 h20 w190 Number v"
+        . len_conf.ini_name, len_conf.v)))
+    group.Push(RegisterSettingsCtrl(s_gui.Add("CheckBox", "x15 y434 h20 w380 v"
+        . loop_conf.ini_name, loop_conf.descr)))
+    group[-1].Value := loop_conf.v
+}
+
+
+ToggleGestureColorZone(key, *) {
+    if !GestureColorMapKeyVisible(key) {
+        key := GetSettingsCenterMode() == "Single" ? "C" : "CA"
+    }
+    s_gui.SelectedGestureColorZone := key
+    for zone in GestureColorZones {
+        t := zone[2] == key
+        for obj in s_gui.GestureColorGroups[zone[2]] {
+            obj.Visible := t
+        }
+        s_gui["GestureColorMap" . zone[2]].Enabled := !t
+    }
+}
+
+
+_RegisterGestureColorFixed(obj) {
+    RegisterSettingsCtrl(obj)
+    s_gui.GestureColorFixed.Push(obj)
+    return obj
+}
+
+
+GestureColorMapKeyVisible(key) {
+    if SubStr(key, 1, 1) !== "C" {
+        return true
+    }
+    return GetSettingsCenterMode() == "Single" ? key == "C" : key !== "C"
+}
+
+
+GetSettingsCenterMode() {
+    try return s_gui["CenterMode"].Text
+    return CONF.gest_center_mode.v
 }
 
 
@@ -597,6 +849,111 @@ _ToggleUserValues(trg, *) {
 }
 
 
+_AddGestureZoneGroup(title, x, y, w, zones) {
+    RegisterSettingsCtrl(s_gui.Add("GroupBox", "x" . x . " y" . y . " w" . w . " h140", title))
+    y += 26
+    inner_x := x + Round((w - 177) / 2)
+
+    for zone in zones {
+        name := zone[2].ini_name
+        en := RegisterSettingsCtrl(s_gui.Add("CheckBox", "x" . inner_x . " y" . y
+            . " w94 h20 vZoneEnabled" . name, zone[1]))
+        en.Value := zone[2].v > 0
+
+        field := RegisterSettingsCtrl(s_gui.Add("Edit", "Center x+8 yp-2 w48 h20 Number v" . name,
+            zone[2].v ? zone[2].v : 128))
+        field.Enabled := en.Value
+        field.OnEvent("Change", RefreshSettingsGestureZonePreview)
+        RegisterSettingsCtrl(s_gui.Add("Text", "x+4 yp+3 w18 h20", "px"))
+        en.OnEvent("Click", ToggleGestureZoneEdit.Bind(field))
+        y += 28
+    }
+}
+
+
+ToggleGestureZoneEdit(field, obj, *) {
+    field.Enabled := obj.Value
+    RefreshSettingsGestureZonePreview()
+}
+
+
+ShowSettingsGestureZonePreview(mode, *) {
+    s_gui.ZonePreviewMode := mode
+    ToggleSettingsZonePreviewMode(mode)
+    ShowGestureZonePreview(GetSettingsGestureZoneOpts(), mode)
+}
+
+
+PickSettingsGestureZonePreviewColor(*) {
+    PasteColorFromPick(s_gui.Hwnd, s_gui["PreviewColor"], false)
+    RefreshSettingsGestureZonePreview()
+}
+
+
+RefreshSettingsGestureZonePreview(*) {
+    if s_gui.ZonePreviewMode !== "Off" {
+        ShowGestureZonePreview(GetSettingsGestureZoneOpts(), s_gui.ZonePreviewMode)
+    }
+}
+
+
+RestoreSettingsGestureZonePreview(*) {
+    try {
+        if s_gui && s_gui.ZonePreviewMode == "On" && !s_gui["ToggleGestureZones"].Enabled {
+            ShowGestureZonePreview(GetSettingsGestureZoneOpts(), "On")
+        }
+    }
+}
+
+
+ToggleSettingsZonePreviewMode(mode) {
+    for name in ["Off", "Blink", "On"] {
+        try s_gui["ZonePreview" . name].Enabled := name !== mode
+    }
+}
+
+
+RefreshSettingsGestureColorMap(*) {
+    try {
+        if !s_gui["ToggleGestureColors"].Enabled {
+            ToggleGestureColorZone(s_gui.SelectedGestureColorZone)
+        }
+    }
+}
+
+
+GetSettingsGestureZoneOpts() {
+    return {
+        center_mode: s_gui["CenterMode"].Text,
+        t: GetSettingsGestureZoneSize("Top"),
+        r: GetSettingsGestureZoneSize("Right"),
+        b: GetSettingsGestureZoneSize("Bottom"),
+        l: GetSettingsGestureZoneSize("Left"),
+        tl: GetSettingsGestureZoneSize("TopLeft"),
+        tr: GetSettingsGestureZoneSize("TopRight"),
+        br: GetSettingsGestureZoneSize("BottomRight"),
+        bl: GetSettingsGestureZoneSize("BottomLeft"),
+        color: GetSettingsGestureZonePreviewColor(),
+    }
+}
+
+
+GetSettingsGestureZoneSize(name) {
+    if !s_gui["ZoneEnabled" . name].Value {
+        return 0
+    }
+
+    try return Integer(s_gui[name].Text)
+    return 0
+}
+
+
+GetSettingsGestureZonePreviewColor() {
+    try return ParseAhkColor(s_gui["PreviewColor"].Text)
+    return ParseAhkColor(CONF.gest_zone_preview_color.v)
+}
+
+
 _AddUserLine(*) {
     for name in ["UserDefined", "ProcessGroups", "LayoutAliases"] {
         if !s_gui["Toggle" . name].Enabled {
@@ -607,6 +964,15 @@ _AddUserLine(*) {
     s_gui.%_group%[-1][-1].GetPos(, &y)
     _AddElems("user", y + 28, _group, [false, "", "", ""])
 
+}
+
+
+RegisterSettingsCtrl(obj) {
+    if s_gui.CurrentGroup {
+        s_gui.CurrentGroup.Push(obj)
+    }
+
+    return obj
 }
 
 
@@ -624,33 +990,44 @@ _AddElems(elem_type, y:=false, _group:=false, data*) {
         name := arr[2]
         switch elem_type {
             case "ddl":
-                s_gui.Add("Text", "x15 y" . cur_h . " h" . h . " w190", arr[3])
-                elem := s_gui.Add("DropDownList", "x+10 yp" . ysh . " w190 v" . name, arr[5])
+                RegisterSettingsCtrl(s_gui.Add("Text", "x15 y" . cur_h . " h" . h . " w190", arr[3]))
+                elem := RegisterSettingsCtrl(
+                    s_gui.Add("DropDownList", "x+10 yp" . ysh . " w190 v" . name, arr[5])
+                )
                 if arr[6] {
                     elem.Text := arr[4]
                 } else {
                     elem.Value := arr[4]
                 }
             case "str":
-                s_gui.Add("Text", "x15 y" . cur_h . " h" . h . " w200", arr[3])
-                s_gui.Add("Edit", "Center x+0 yp" . ysh . " h20 w190 v" . name, arr[4])
+                RegisterSettingsCtrl(s_gui.Add("Text", "x15 y" . cur_h . " h" . h . " w200", arr[3]))
+                RegisterSettingsCtrl(
+                    s_gui.Add("Edit", "Center x+0 yp" . ysh . " h20 w190 v" . name, arr[4])
+                )
             case "checkbox":
-                s_gui.Add("CheckBox", "x15 y" . cur_h . " h" . h . " w380 v" . name, arr[3])
-                    .Value := arr[4]
+                RegisterSettingsCtrl(
+                    s_gui.Add("CheckBox", "x15 y" . cur_h . " h" . h . " w380 v" . name, arr[3])
+                ).Value := arr[4]
             case "h_checkbox":
                 fn := MsgBox.Bind(arr[5], arr[6], "IconI")
-                s_gui.Add("Button", "x11 y" . cur_h . " h20 w20", "?")
+                RegisterSettingsCtrl(s_gui.Add("Button", "x11 y" . cur_h . " h20 w20", "?"))
                     .OnEvent("Click", (*) => fn.Call())
-                s_gui.Add("CheckBox", "x+3 w350 yp+0 h20 v" . name, arr[3]).Value := arr[4]
+                RegisterSettingsCtrl(
+                    s_gui.Add("CheckBox", "x+3 w350 yp+0 h20 v" . name, arr[3])
+                ).Value := arr[4]
             case "color":
-                s_gui.Add("Text", "x15 y" . cur_h . " h" . h . " w200", arr[3])
-                s_gui.Add("Edit", "Center x+0 yp" . ysh . " h20 w170 v" . name, arr[4])
-                s_gui.Add("Button", "x+1 yp+0 h20 w20 v" . name . "Pick", "🎨")
+                RegisterSettingsCtrl(s_gui.Add("Text", "x15 y" . cur_h . " h" . h . " w200", arr[3]))
+                RegisterSettingsCtrl(
+                    s_gui.Add("Edit", "Center x+0 yp" . ysh . " h20 w170 v" . name, arr[4])
+                )
+                RegisterSettingsCtrl(s_gui.Add("Button", "x+1 yp+0 h20 w20 v" . name . "Pick", "🎨"))
                     .OnEvent("Click", PasteColorFromPick.Bind(s_gui.Hwnd, s_gui[name], false))
             case "m_color":
-                s_gui.Add("Text", "x15 y" . cur_h . " h" . h . " w200", arr[3])
-                s_gui.Add("Edit", "Center x+0 yp" . ysh . " h20 w170 v" . name, arr[4])
-                s_gui.Add("Button", "x+1 yp+0 h20 w20 v" . name . "Pick", "🎨")
+                RegisterSettingsCtrl(s_gui.Add("Text", "x15 y" . cur_h . " h" . h . " w200", arr[3]))
+                RegisterSettingsCtrl(
+                    s_gui.Add("Edit", "Center x+0 yp" . ysh . " h20 w170 v" . name, arr[4])
+                )
+                RegisterSettingsCtrl(s_gui.Add("Button", "x+1 yp+0 h20 w20 v" . name . "Pick", "🎨"))
                     .OnEvent("Click", PasteColorFromPick.Bind(s_gui.Hwnd, s_gui[name], true))
             case "user":
                 k := s_gui.Add("Edit", "Center x15 y" . cur_h . " h" . h . " w190", arr[3])
@@ -708,19 +1085,18 @@ SaveConfig(*) {
             ToggleStartup(s_gui["Autostart"].Value)
         }
 
-        for name in ["Main", "GUI", "Gestures", "GestureDefaults", "Colors"] {
+        for name in ["Main", "GUI", "Gestures", "GestureDefaults", "GestureZones", "Colors"] {
             for elem in CONF.%name% {
-                val := elem.form_type == "color" || elem.form_type == "m_color"
-                    || elem.form_type == "str"
-                    || elem.form_type == "ddl" && elem.val_type == "str"
-                        ? s_gui[elem.ini_name].Text : s_gui[elem.ini_name].Value
+                val := GetSettingsValue(name, elem)
                 IniWrite(val, "config.ini", name, elem.ini_name)
                 elem.v := elem.val_type == "int" ? Integer(val)
                     : elem.val_type == "float" ? Round(Float(val), 2) : val
             }
         }
         for name in ["UserDefined", "ProcessGroups", "LayoutAliases"] {
-            IniDelete("config.ini", name)
+            for key, _ in CONF.%name% {
+                IniDelete("config.ini", name, key)
+            }
             for arr in s_gui.%name% {
                 key := arr[1].Text
                 value := arr[3].Text
@@ -753,15 +1129,12 @@ SaveConfig(*) {
 
 
 CheckChanges(strict:=false, selected:=false, *) {
-    for name in ["Main", "GUI", "Gestures", "GestureDefaults", "Colors"] {
+    for name in ["Main", "GUI", "Gestures", "GestureDefaults", "GestureZones", "Colors"] {
         if selected && !selected.Has(name) {
             continue
         }
         for elem in CONF.%name% {
-            val := elem.form_type == "color" || elem.form_type == "m_color"
-                || elem.form_type == "str"
-                || elem.form_type == "ddl" && elem.val_type == "str"
-                    ? s_gui[elem.ini_name].Text : s_gui[elem.ini_name].Value
+            val := GetSettingsValue(name, elem)
             if val != elem.v {
                 return true
             }
@@ -807,6 +1180,27 @@ CheckChanges(strict:=false, selected:=false, *) {
 }
 
 
+GetSettingsValue(sect, elem) {
+    if sect == "GestureZones" && IsGestureZoneSizeSetting(elem.ini_name)
+        && !s_gui["ZoneEnabled" . elem.ini_name].Value {
+        return 0
+    }
+
+    return elem.form_type == "color" || elem.form_type == "m_color" || elem.form_type == "str"
+        || elem.form_type == "ddl" && elem.val_type == "str"
+            ? s_gui[elem.ini_name].Text : s_gui[elem.ini_name].Value
+}
+
+
+IsGestureZoneSizeSetting(name) {
+    static zone_sizes:=Map(
+        "Top", true, "Right", true, "Bottom", true, "Left", true,
+        "TopLeft", true, "TopRight", true, "BottomRight", true, "BottomLeft", true
+    )
+    return zone_sizes.Has(name)
+}
+
+
 EscSettingsEvent(*) {
     t := s_gui.FocusedCtrl.Type
     if t == "Edit" || t == "DDL" || t == "CheckBox" {
@@ -825,6 +1219,7 @@ CloseSettingsEvent(strict:=true, *) {
         "Confirmation", "YesNo Icon?") == "No" {
         return true
     }
+    HideGestureZonePreview()
     try s_gui.Destroy()
     s_gui := false
 }

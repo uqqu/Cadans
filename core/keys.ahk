@@ -83,7 +83,7 @@ CheckMouse(sc, *) {
     }
 
     if active_hwnd == UI.Hwnd || s_gui && s_gui.Hwnd && active_hwnd == s_gui.Hwnd {
-        if gest_overlay {  ;NTT
+        if gest_overlay && zone_preview_mode == "Off" {  ;NTT
             DestroyGestOverlay()
         }
         return false

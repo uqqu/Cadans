@@ -8,7 +8,7 @@ LVGestureClick(lv, row) {
         selected_gesture := ""
         ToggleEnabled(0, UI.gest_toggles)
     } else {
-        selected_gesture := lv.GetText(row, 6)
+        selected_gesture := lv.GetText(row, 8)
         ToggleEnabled(1, UI.gest_toggles)
     }
 }
@@ -22,7 +22,7 @@ LVGestureDoubleClick(lv, row, from_selected:=false) {
     }
 
     if lv.GetText(0, 1) == "Has nested gestures" {
-        t := StrSplit(lv.GetText(row, 6), ";")
+        t := StrSplit(lv.GetText(row, 8), ";")
         if t.Length > 1 {
             gui_mod_val := Integer(t[2])
         }
@@ -33,7 +33,7 @@ LVGestureDoubleClick(lv, row, from_selected:=false) {
         }
     } else {
         ResetHold()
-        OneNodeDeeper(lv.GetText(row, 6), gui_mod_val, false, lv.GetText(row, 1))
+        OneNodeDeeper(lv.GetText(row, 8), gui_mod_val, false, lv.GetText(row, 2))
     }
 }
 
