@@ -840,7 +840,10 @@ _GesturePoolSortIndex(pool) {
 _GetGestureThumbnailColors(pool, parent_opts, cache) {
     colour := Trim(CONF.gest_thumbnail_color.v)
     if colour {
-        try return [ParseAhkColor(colour)]
+        colors := ParseAhkColorList(colour)
+        if colors.Length {
+            return colors
+        }
         return [0x202020]
     }
 

@@ -262,44 +262,94 @@ Recognize(raw_pts, gestures) {
     best_gesture := ""
     best_score := -1
     for gesture in gestures {
-        cur_pts := pts
-
-        loop 2 {
-            dir_i := A_Index - 1
-            if !(closed && _GetFin(gesture).opts.closed) {
-                score := _ScoreAtPhase(0, _GetFin(gesture), cur_pts, closed, dir_i)
-            } else {
-                best_phase := 0
-                score := -1
-
-                for step in [16, 4, 1] {  ; 64/4, 16/4, 4/4
-                    for delta in [(A_Index == 1 ? 0 : -2*step), -step, step, 2*step] {
-                        phase := Mod(best_phase + delta + 64, 64) + 1
-                        s := _ScoreAtPhase(phase, _GetFin(gesture), cur_pts, closed, dir_i)
-                        if s > score {
-                            score := s
-                            best_phase := phase
-                        }
-                    }
-                }
-            }
-
+        score := ScoreGestureCandidate(gesture, pts, closed)
             if score > best_score {
                 best_score := score
                 best_gesture := gesture
             }
-
-            if !_GetFin(gesture).opts.dirs || A_Index == 2 {
-                break
-            }
-            cur_pts := []
-            loop 64 {
-                cur_pts.Push(pts[-A_Index])
-            }
-        }
     }
 
     return [best_score, best_gesture]
+}
+
+
+RankGestures(raw_pts, gestures, limit, min_score:=0) {
+    global gest_cache, temp_opt, temp_pts
+
+    out := []
+    if !limit {
+        return out
+    }
+
+    res := Resample(raw_pts)
+    pts := res[1]
+    closed := Sqrt((pts[1][1]-pts[-1][1])**2 + (pts[1][2]-pts[-1][2])**2) < (res[2] / 10)
+    gest_cache := Map()
+    gest_cache[1] := Map()
+    for gesture in gestures {
+        score := ScoreGestureCandidate(gesture, pts, closed)
+        if score < min_score {
+            continue
+        }
+        InsertGestureCandidate(out, {gesture: gesture, score: score}, limit)
+    }
+    return out
+}
+
+
+ScoreGestureCandidate(gesture, pts, closed) {
+    fin := _GetFin(gesture)
+    best_score := -1
+    cur_pts := pts
+
+    loop 2 {
+        dir_i := A_Index - 1
+        if !(closed && fin.opts.closed) {
+            score := _ScoreAtPhase(0, fin, cur_pts, closed, dir_i)
+        } else {
+            best_phase := 0
+            score := -1
+
+            for step in [16, 4, 1] {  ; 64/4, 16/4, 4/4
+                for delta in [(A_Index == 1 ? 0 : -2*step), -step, step, 2*step] {
+                    phase := Mod(best_phase + delta + 64, 64) + 1
+                    s := _ScoreAtPhase(phase, fin, cur_pts, closed, dir_i)
+                    if s > score {
+                        score := s
+                        best_phase := phase
+                    }
+                }
+            }
+        }
+
+        if score > best_score {
+            best_score := score
+        }
+
+        if !fin.opts.dirs || A_Index == 2 {
+            break
+        }
+        cur_pts := []
+        loop 64 {
+            cur_pts.Push(pts[-A_Index])
+        }
+    }
+    return best_score
+}
+
+
+InsertGestureCandidate(arr, candidate, limit) {
+    pos := arr.Length + 1
+    for i, item in arr {
+        if candidate.score > item.score {
+            pos := i
+            break
+        }
+    }
+    arr.InsertAt(pos, candidate)
+    if arr.Length > limit {
+        arr.RemoveAt(arr.Length)
+    }
 }
 
 

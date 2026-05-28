@@ -802,10 +802,6 @@ _GetNodeExtraInfo(node, is_gesture:=false) {
             }
         } else {
             custom := ""
-            p := vals.Get(1, CONF.gest_live_hint.v + 2)
-            if p && p !== CONF.gest_live_hint.v + 2 {
-                custom .= "`nLive hints position – " . ["top", "center", "bottom", "disabled"][p-1]
-            }
             for zone in GestureColorZones {
                 color_key := zone[2]
                 colors := GetGestureOverlayOption(vals, color_key, 0)

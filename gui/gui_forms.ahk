@@ -93,9 +93,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
 
     ;LMB/RMB
     if save_type < 2 && CheckLRMB(_current_path) {
-        form.Add("Text", "x10 y+10 w150 vLHText", "Live hint position:")
-        form.Add("DDL", "x+0 yp-3 w150 Choose1 vLiveHint",
-            ["Follow global setting", "Top", "Center", "Bottom", "Disabled"])
+        form.Add("Text", "x10 y+10 w0 h0 vGestureOverlayAnchor").Visible := false
         _AddFormGestureOverlay(1)
         form.Add("Text", "x10 y+14 w65", "Window rule:")
         form.Add("Edit", "x+0 yp-2 w211 vWindowRule")
@@ -194,7 +192,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
                 .OnEvent("Click", ShowHideButtons)
             form.Add("Button", "x+0 yp0 w100 vUpToggle", "Add. key-up action")
                 .OnEvent("Click", ShowHideButtons)
-            form.Add("Button", "x+0 yp0 w100 vColorToggle", "Gesture overlay")
+            form.Add("Button", "x+0 yp0 w100 vColorToggle", "Gesture colors")
                 .OnEvent("Click", ShowHideButtons)
         }
         form["InChainToggle"].GetPos(, &y, , &h)
@@ -209,11 +207,8 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         ]
         ToggleVisibility(0, form.up_fields)
 
-
-        form.Add("Text", "x10 y" . (13 + y + h) . " w150 vLHText", "Live hint position:")
+        form.Add("Text", "x10 y" . (13 + y + h) . " w0 h0 vGestureOverlayAnchor")
             .Visible := false
-        form.Add("DDL", "x+0 yp-3 w150 Choose1 vLiveHint",
-            ["Follow global setting", "Top", "Center", "Bottom", "Disabled"]).Visible := false
         _AddFormGestureOverlay(0)
 
         form["UpTypeDDL"]
@@ -365,13 +360,13 @@ ShowHideButtons(obj, *) {
     try form["ColorToggle"].Enabled := true
     obj.Enabled := false
     if obj.Name == "InChainToggle" {
-        ToggleVisibility(0, form["LiveHint"], form["LHText"], form.color_controls)
+        ToggleVisibility(0, form.color_controls)
         _FormHideGestureColorEditors()
         ToggleVisibility(0, form.up_fields)
         ToggleVisibility(1, form.chain_options)
         form["CBIrrevocable"].GetPos(, &sh)
     } else if obj.Name == "UpToggle" {
-        ToggleVisibility(0, form["LiveHint"], form["LHText"], form.color_controls)
+        ToggleVisibility(0, form.color_controls)
         _FormHideGestureColorEditors()
         ToggleVisibility(1, form.up_fields)
         if form["UpTypeDDL"].Value < 3 {
@@ -380,7 +375,7 @@ ShowHideButtons(obj, *) {
         ToggleVisibility(0, form.chain_options)
         form["UpValInp"].GetPos(, &sh)
     } else {
-        ToggleVisibility(1, form["LiveHint"], form["LHText"], form.color_controls)
+        ToggleVisibility(1, form.color_controls)
         ToggleVisibility(0, form.up_fields)
         ToggleVisibility(0, form.chain_options)
         _FormSelectGestureColorZone(form.selected_color_zone)
@@ -436,11 +431,13 @@ _AddFormGestureOverlay(is_visible:=0) {
     form.selected_color_zone := _FormDefaultGestureColorZone()
 
     x := 32
-    y := 0
-    form["LiveHint"].GetPos(, &y, , &h)
-    y += h + 8
+    y := 13
+    try {
+        form["GestureOverlayAnchor"].GetPos(, &y, , &anchor_h)
+        y += anchor_h - 3
+    }
     w := 256
-    h := 144
+    h := 140
     bw := 42
     th := 34
     cw := w - bw * 2
@@ -541,8 +538,8 @@ _FormGestureColorZoneVisible(key) {
 }
 
 
-_BuildFormGestureOverlayOpts(live_hint) {
-    gest_opts := (live_hint ? live_hint : "") . ";"
+_BuildFormGestureOverlayOpts() {
+    gest_opts := ";"
     for zone in GestureColorZones {
         suffix := "Pool" . zone[2]
         for name in ["ColorInp", "GradLenInp", "GradCycle"] {
@@ -559,9 +556,6 @@ _BuildFormGestureOverlayOpts(live_hint) {
 
 _LoadFormGestureOverlayOpts(opts_str) {
     opts := StrSplit(opts_str, ";")
-    if opts.Has(1) && opts[1] {
-        form["LiveHint"].Value := opts[1]
-    }
 
     for zone in GestureColorZones {
         key := zone[2]
@@ -1034,13 +1028,12 @@ WriteValue(is_hold, custom_path:=false, paired:=false, *) {
         try vals[name] := form[name].Text
     }
     for name in [
-        "CBIrrevocable", "CBInstant", "ChildBehaviorDDL", "LiveHint",
+        "CBIrrevocable", "CBInstant", "ChildBehaviorDDL",
     ] {
         vals[name] := false
         try vals[name] := form[name].Value
     }
     vals["TypeDDL"] := vals["TypeDDL"] || "Modifier"
-    vals["LiveHint"] := vals["LiveHint"] == 1 ? "" : vals["LiveHint"]
 
     if vals["CBIrrevocable"] && vals["ChildBehaviorDDL"] == 5
         && MsgBox("You set irrevocable option with ignoring unassigned children.`n"
@@ -1070,7 +1063,7 @@ WriteValue(is_hold, custom_path:=false, paired:=false, *) {
         }
     }
     layers := GetLayerList()
-    gest_opts := _BuildFormGestureOverlayOpts(vals["LiveHint"])
+    gest_opts := _BuildFormGestureOverlayOpts()
 
     CloseForm()
 

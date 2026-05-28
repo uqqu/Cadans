@@ -136,6 +136,7 @@ GetRowIconIndex(lv, row) {
 
 
 GetColumnAtCursor(lv, with_row:=false) {
+    ctrl_hwnd := ""
     MouseGetPos(&mx, &my, , &ctrl_hwnd)
 
     row := 0

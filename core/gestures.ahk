@@ -1,6 +1,7 @@
 #Include "_grad_colors.ahk"
 
 track_period := 8
+live_hint_period := 40
 w_max := 20
 
 gdip_token := 0
@@ -17,6 +18,13 @@ pool_gestures := false
 is_drawing := false
 overlay_opts := false
 zone_preview_mode := "Off"
+live_hint_bbox := false
+live_hint_start_shown := false
+live_hint_last_tick := 0
+live_hint_last_len := 0.0
+live_hint_icon_cache := Map()
+live_hint_draw_sig := ""
+live_hint_res := false
 points := []
 prev_x := 0
 prev_y := 0
@@ -180,7 +188,7 @@ PresentOverlay(opacity:=false) {
         last_h := g_overlay_h
     }
 
-    opacity := opacity || CONF.overlay_opacity.v
+    opacity := opacity == false ? 255 : _ClampAlpha(opacity)
     if !blend || (last_opacity !== opacity) {
         blend := Buffer(4, 0)
         NumPut("UChar", 0, blend, 0)
@@ -203,6 +211,8 @@ DestroyGestOverlay() {
     SetTimer(TrackMouse, 0)
     SetTimer(DestroyGestOverlay, 0)
 
+    ClearLiveHintIconCache()
+    ClearLiveHintResources()
     GetOverlayGraphics(true)
 
     if gest_overlay {
@@ -242,7 +252,8 @@ CollectPool(gestures) {
 
 
 StartDraw(gestures:=false, *) {
-    global is_drawing, prev_x, prev_y, points, cum_len, prev_width, cur_grad_len
+    global is_drawing, prev_x, prev_y, points, cum_len, prev_width, cur_grad_len, pool_gestures,
+        live_hint_start_shown, live_hint_last_tick, live_hint_last_len, live_hint_draw_sig
 
     if is_drawing {
         return
@@ -286,6 +297,19 @@ StartDraw(gestures:=false, *) {
     cum_len := 0.0
     cur_grad_len := 0.0
     prev_width := 0
+    live_hint_start_shown := false
+    live_hint_last_tick := 0
+    live_hint_last_len := 0.0
+    live_hint_draw_sig := ""
+    if !GetLiveHintStartMove() {
+        ShowStartLiveHint(pool_gestures, prev_x, prev_y)
+        live_hint_start_shown := true
+    }
+}
+
+
+_ClampAlpha(value) {
+    return Max(0, Min(255, Integer(value)))
 }
 
 
@@ -294,10 +318,7 @@ SetOverlayOpts(opts, pool) {
 
     vals := StrSplit(opts, ";")
     color_key := GetGestureColorKey(pool)
-    overlay_opts := {pool: pool, live_hints: (vals.Length && vals[1]
-        ? (vals[1] == 1 ? CONF.gest_live_hint.v : vals[1] - 1)
-        : CONF.gest_live_hint.v)
-    }
+    overlay_opts := {pool: pool}
     for arr in [
         ["gest_colors", "gest_zone_colors", 0],
         ["grad_len", "gest_zone_grad_len", 1],
@@ -320,9 +341,7 @@ SetOverlayOpts(opts, pool) {
                     )
                 }
             } else {
-                for colour in StrSplit(v, ",") {
-                    overlay_opts.%arr[1]%.Push(ParseAhkColor(colour))
-                }
+                overlay_opts.%arr[1]% := ParseAhkColorList(v)
             }
             if !overlay_opts.%arr[1]%.Length {
                 overlay_opts.%arr[1]% := [0xFF0000]
@@ -389,6 +408,15 @@ ParseAhkColor(colour) {
 }
 
 
+ParseAhkColorList(colors) {
+    out := []
+    for colour in StrSplit(colors, ",") {
+        try out.Push(ParseAhkColor(colour))
+    }
+    return out
+}
+
+
 DrawLine(x1, y1, x2, y2, width) {
     global cur_grad_len
     static pen:=0
@@ -406,7 +434,7 @@ DrawLine(x1, y1, x2, y2, width) {
 
     if !pen {
         if DllCall("gdiplus\GdipCreatePen1",
-            "uint", (255<<24)|0, "float", width, "int", 2, "ptr*", &pen:=0) {
+            "uint", (_ClampAlpha(CONF.gest_opacity.v)<<24)|0, "float", width, "int", 2, "ptr*", &pen:=0) {
             return
         }
         DllCall("gdiplus\GdipSetPenLineJoin", "ptr", pen, "int", 2)
@@ -428,7 +456,7 @@ DrawLine(x1, y1, x2, y2, width) {
             mid := (A_Index - 0.5) / parts
 
             colour := ColorAtProgress((cur_grad_len + seg_len * mid) / overlay_opts.grad_len)
-            DllCall("gdiplus\GdipSetPenColor", "ptr", pen, "uint", (255<<24)|colour)
+            DllCall("gdiplus\GdipSetPenColor", "ptr", pen, "uint", (_ClampAlpha(CONF.gest_opacity.v)<<24)|colour)
 
             xa := x1 + dx * t0
             ya := y1 + dy * t0
@@ -444,7 +472,7 @@ DrawLine(x1, y1, x2, y2, width) {
 
 
 TrackMouse() {
-    global prev_x, prev_y, cum_len, prev_width
+    global prev_x, prev_y, cum_len, prev_width, live_hint_start_shown, live_hint_last_tick, live_hint_last_len
 
     if !is_drawing {
         SetTimer(TrackMouse, 0)
@@ -471,13 +499,34 @@ TrackMouse() {
         prev_width := width
         points.Push([x, y])
 
-        if pool_gestures && cum_len > Max(CONF.min_gesture_len.v, 10)
-            && overlay_opts.live_hints !== 4 {
-            SetTimer(LiveHint.Bind(points, pool_gestures), -1)
-        } else {
-            PresentOverlay()
+        if pool_gestures && CONF.live_hint_enabled.v {
+            if cum_len > Max(CONF.min_gesture_len.v, 10) {
+                live_hint_start_shown := true
+                if CONF.live_hint_move_count.v && ShouldRefreshLiveHint(cum_len) {
+                    live_hint_last_tick := A_TickCount
+                    live_hint_last_len := cum_len
+                    SetTimer(LiveHint.Bind(points, pool_gestures, points[1][1], points[1][2]), -1)
+                    return
+                }
+            } else if !live_hint_start_shown && cum_len >= GetLiveHintStartMove() {
+                ShowStartLiveHint(pool_gestures, points[1][1], points[1][2])
+                live_hint_start_shown := true
+                return
+            }
         }
+        PresentOverlay()
     }
+}
+
+
+ShouldRefreshLiveHint(len) {
+    global live_hint_last_tick, live_hint_last_len, live_hint_period
+
+    if !live_hint_last_tick {
+        return true
+    }
+    return A_TickCount - live_hint_last_tick >= live_hint_period
+        || len - live_hint_last_len >= 60
 }
 
 
@@ -491,146 +540,503 @@ BrushWidth(len) {
 }
 
 
-LiveHint(pts, gestures) {
-    global g_bits
-    static busy:=false, inited:=false, fam:=0, fnt:=0, fmt:=0,
-        brush_bg:=0, brush_fg:=0, brush_shad:=0, brush_clear:=0,
-        last_sig:="", lbbox:=0, lbx:=-1.0, lby:=-1.0, lbw:=-1.0, lbh:=-1.0, last_fs:=-1.0
+LiveHint(pts, gestures, hint_x:=0, hint_y:=0) {
+    static busy:=false
+    global live_hint_draw_sig, live_hint_bbox
 
-    if busy || overlay_opts.live_hints == 4 {
+    if busy || !CONF.live_hint_enabled.v {
         return
     }
 
     busy := true
 
-    res := Recognize(pts, gestures)
-
-    txt := ""
-    try {
-        if res[1] < CONF.min_cos_similarity.v {
-            txt := !CONF.live_hint_extended.v ? "" : ("Not recognized. Best match: '"
-                . _GetFin(res[2]).gui_shortname . "' " . Round(res[1], 2))
-        } else {
-            txt := _GetFin(res[2]).gui_shortname
-        }
-    }
-
-    if !inited {
-        if DllCall("gdiplus\GdipCreateFontFamilyFromName",
-            "wstr", "Segoe UI", "ptr", 0, "ptr*", &fam:=0) {
-            busy := false
-            return
-        }
-        if DllCall("gdiplus\GdipCreateFont",
-            "ptr", fam, "float", CONF.font_size_lh.v, "int", 1, "int", 2, "ptr*", &fnt:=0) {
-            busy := false
-            return
-        }
-
-        DllCall("gdiplus\GdipStringFormatGetGenericDefault", "ptr*", &fmt:=0)
-        DllCall("gdiplus\GdipSetStringFormatAlign", "ptr", fmt, "int", 1)
-        DllCall("gdiplus\GdipSetStringFormatLineAlign", "ptr", fmt, "int", 1)
-
-        bg := (215 << 24) | (0x22 << 16) | (0x22 << 8) | 0x22
-        DllCall("gdiplus\GdipCreateSolidFill", "uint", bg, "ptr*", &brush_bg:=0)
-        DllCall("gdiplus\GdipCreateSolidFill", "uint", (255<<24)|0x000000, "ptr*", &brush_shad:=0)
-        DllCall("gdiplus\GdipCreateSolidFill", "uint", (255<<24)|0xFFFFFF, "ptr*", &brush_fg:=0)
-        DllCall("gdiplus\GdipCreateSolidFill", "uint", 0x00000000, "ptr*", &brush_clear:=0)
-        inited := true
-        last_fs := CONF.font_size_lh.v
-    }
-
-    g := GetOverlayGraphics()
-    if !g {
+    items := GetLiveHintMovingItems(pts, gestures)
+    if !items.Length {
+        ClearLiveHintBox()
         busy := false
         return
     }
+    sig := GetLiveHintDrawSignature(items, 0)
+    if live_hint_bbox && sig == live_hint_draw_sig {
+        PresentOverlay()
+        busy := false
+        return
+    }
+    DrawLiveHintList(items, 0, hint_x, hint_y)
+    live_hint_draw_sig := sig
+    busy := false
+}
+
+
+GetLiveHintMovingItems(pts, gestures) {
+    res := []
+    if !CONF.live_hint_move_count.v {
+        return res
+    }
+
+    for candidate in RankGestures(pts, gestures, CONF.live_hint_move_count.v, CONF.live_hint_min_score.v) {
+        node := _GetFin(candidate.gesture)
+        if node {
+            res.Push({
+                node: node,
+                name: node.gui_shortname,
+                score: Round(candidate.score, 2),
+            })
+        }
+    }
+    return res
+}
+
+
+ShowStartLiveHint(gestures, start_x, start_y) {
+    global live_hint_draw_sig
+
+    if !CONF.live_hint_enabled.v || !CONF.live_hint_start_count.v || !gestures || !gestures.Length {
+        return
+    }
+
+    items := []
+    for gesture in gestures {
+        node := _GetFin(gesture)
+        if !node {
+            continue
+        }
+        items.Push({node: node, name: node.gui_shortname})
+        if items.Length >= CONF.live_hint_start_count.v {
+            break
+        }
+    }
+    if !items.Length {
+        return
+    }
+
+    more := gestures.Length - items.Length
+    live_hint_draw_sig := GetLiveHintDrawSignature(items, more)
+    DrawLiveHintList(items, more, start_x, start_y)
+}
+
+
+GetLiveHintDrawSignature(items, more_count) {
+    sig := more_count . "|"
+    for item in items {
+        sig .= ObjPtr(item.node) . ":"
+        sig .= item.HasProp("score") ? Format("{:.2f}", item.score) : ""
+        sig .= ";"
+    }
+    return sig
+}
+
+
+GetLiveHintStartMove() {
+    try return Max(0, CONF.live_hint_start_move.v)
+    return 0
+}
+
+
+DrawLiveHintList(items, more_count, start_x, start_y) {
+    global live_hint_bbox, g_mem_dc
+
+    g := GetOverlayGraphics()
+    if !g {
+        return
+    }
+
+    _ClearLiveHintBox(g)
 
     fs := CONF.font_size_lh.v
-    if fs !== last_fs {
-        if fnt {
-            DllCall("gdiplus\GdipDeleteFont", "ptr", fnt)
+    preview_w := Round(Max(fs * 2.18, 44))
+    preview_h := Round(Max(fs * 1.15, 23))
+    gap := Round(Max(fs * 0.40, 8))
+    score_w := HasLiveHintScores(items) ? Round(Max(fs * 2.48, 53)) : 0
+    pad_x := Round(Max(fs * 0.55, 10))
+    pad_y := Round(Max(fs * 0.35, 7))
+    row_h := Max(preview_h, Round(fs * 1.36))
+    footer_h := more_count > 0 ? Round(fs * 1.12) : 0
+
+    res := GetLiveHintResources(fs)
+    if !res {
+        return
+    }
+    fnt := res.fnt
+    fnt_bold := res.fnt_bold
+    fmt := res.fmt
+    brush_fg := res.brush_fg
+    single_item := items.Length == 1
+    DllCall("gdiplus\GdipSetStringFormatAlign", "ptr", fmt, "int", single_item ? 1 : 0)
+    DllCall("gdiplus\GdipSetStringFormatLineAlign", "ptr", fmt, "int", 1)
+    DllCall("gdiplus\GdipSetStringFormatTrimming", "ptr", fmt, "int", 3)
+
+    text_w := GetLiveHintTextWidth(g, fnt, fnt_bold, fmt, items, more_count)
+    try {
+        fixed_w := Max(0, Integer(CONF.live_hint_box_width.v))
+    } catch {
+        fixed_w := 0
+    }
+    if fixed_w {
+        try {
+            box_w := Max(Integer(fixed_w), preview_w + score_w + gap * 2 + pad_x * 2 + 40)
+        } catch {
+            box_w := preview_w + score_w + gap * 2 + text_w + pad_x * 2
         }
-        if DllCall("gdiplus\GdipCreateFont", "ptr", fam,
-            "float", fs, "int", 1, "int", 2, "ptr*", &fnt:=0) {
-            busy := false
-            return
+    } else {
+        box_w := preview_w + score_w + gap * (score_w ? 2 : 1) + text_w + pad_x * 2
+    }
+    max_text_w := Max(box_w - preview_w - score_w - gap * (score_w ? 2 : 1) - pad_x * 2, 20)
+    box_h := items.Length * row_h + footer_h + pad_y * 2
+    box_pt := GetLiveHintBoxPos(box_w, box_h, start_x, start_y)
+    x := box_pt[1]
+    y := box_pt[2]
+
+    bg := Trim(CONF.live_hint_bg_color.v)
+    if bg {
+        try {
+            DllCall("gdiplus\GdipCreateSolidFill",
+                "uint", (_ClampAlpha(CONF.live_hint_opacity.v) << 24) | ParseAhkColor(bg),
+                "ptr*", &brush_bg:=0)
+            FillLiveHintBackground(g, brush_bg, x, y, box_w, box_h)
+            DllCall("gdiplus\GdipDeleteBrush", "ptr", brush_bg)
         }
-        last_fs := fs
-        lbbox := 0
-        last_sig := ""
     }
 
-    DllCall("gdiplus\GdipGetFontHeight", "ptr", fnt, "ptr", g, "float*", &line_h:=0)
+    tx := x + pad_x + preview_w + gap
+    score_x := tx
+    if score_w {
+        tx += score_w + gap
+    }
+    ty := y + pad_y
+    preview_colors := GetLiveHintThumbnailColors()
+    for item in items {
+        text_font := A_Index == 1 && item.HasProp("score") && item.score >= CONF.min_cos_similarity.v
+            ? fnt_bold : fnt
+        icon := GetLiveHintPreviewIcon(item.node, preview_w, preview_h, preview_colors)
+        if icon {
+            DllCall("DrawIconEx", "ptr", g_mem_dc,
+                "int", x + pad_x, "int", ty + (row_h - preview_h) // 2,
+                "ptr", icon, "int", preview_w, "int", preview_h, "uint", 0, "ptr", 0, "uint", 3)
+        }
+        if item.HasProp("score") {
+            score_text := Format("{:.2f}", item.score)
+            rect_score := Buffer(16, 0)
+            NumPut("float", score_x, rect_score, 0)
+            NumPut("float", ty, rect_score, 4)
+            NumPut("float", score_w, rect_score, 8)
+            NumPut("float", row_h, rect_score, 12)
+            DllCall("gdiplus\GdipDrawString", "ptr", g, "wstr", score_text, "int", StrLen(score_text),
+                "ptr", text_font, "ptr", rect_score, "ptr", fmt, "ptr", brush_fg)
+        }
+        rect := Buffer(16, 0)
+        NumPut("float", tx, rect, 0)
+        NumPut("float", ty, rect, 4)
+        NumPut("float", max_text_w, rect, 8)
+        NumPut("float", row_h, rect, 12)
+        DllCall("gdiplus\GdipSetStringFormatAlign", "ptr", fmt, "int", single_item ? 1 : 0)
+        DllCall("gdiplus\GdipDrawString", "ptr", g, "wstr", item.name, "int", StrLen(item.name),
+            "ptr", text_font, "ptr", rect, "ptr", fmt, "ptr", brush_fg)
+        ty += row_h
+    }
+    if more_count > 0 {
+        footer := "...and " . more_count . " more"
+        rect := Buffer(16, 0)
+        NumPut("float", x + pad_x, rect, 0)
+        NumPut("float", ty, rect, 4)
+        NumPut("float", box_w - pad_x * 2, rect, 8)
+        NumPut("float", footer_h, rect, 12)
+        DllCall("gdiplus\GdipSetStringFormatAlign", "ptr", fmt, "int", single_item ? 1 : 0)
+        DllCall("gdiplus\GdipDrawString", "ptr", g, "wstr", footer, "int", StrLen(footer),
+            "ptr", fnt, "ptr", rect, "ptr", fmt, "ptr", brush_fg)
+    }
 
-    pad_x := Round(Max(fs * 0.60, 10.0))
-    pad_y := Round(Max(fs * 0.35,  6.0))
-    margin_y := Round(Max(fs * 0.80, 12.0))
-    shadow_off := Round(Max(fs * 0.06, 1.0))
-    bar_h := line_h + pad_y * 2
+    live_hint_bbox := [x, y, box_w, box_h]
+    PresentOverlay()
+}
+
+
+GetLiveHintResources(fs) {
+    global live_hint_res
 
     try {
-        t := overlay_opts.live_hints
+        fg := ParseAhkColor(CONF.live_hint_text_color.v)
     } catch {
-        t := CONF.gest_live_hint.v
+        fg := 0xFFFFFF
     }
-    y := t == 1 ? margin_y
-        : (t == 2 ? ((A_ScreenHeight - bar_h) / 2.0)
-        : (A_ScreenHeight - bar_h - margin_y))
+    sig := fs . "|" . fg
+    if live_hint_res && live_hint_res.sig == sig {
+        return live_hint_res
+    }
 
+    ClearLiveHintResources()
+    fam := 0
+    fam_bold := 0
+    fnt := 0
+    fnt_bold := 0
+    fmt := 0
+    brush_fg := 0
+    if DllCall("gdiplus\GdipCreateFontFamilyFromName", "wstr", "Segoe UI Semibold", "ptr", 0, "ptr*", &fam:=0) {
+        DllCall("gdiplus\GdipCreateFontFamilyFromName", "wstr", "Segoe UI", "ptr", 0, "ptr*", &fam:=0)
+    }
+    if DllCall("gdiplus\GdipCreateFontFamilyFromName", "wstr", "Segoe UI", "ptr", 0, "ptr*", &fam_bold:=0) {
+        fam_bold := fam
+    }
+    if DllCall("gdiplus\GdipCreateFont", "ptr", fam, "float", fs, "int", 0, "int", 2, "ptr*", &fnt:=0) {
+        ClearLiveHintResourceHandles(fam, fam_bold, fnt, fnt_bold, fmt, brush_fg)
+        return false
+    }
+    if DllCall("gdiplus\GdipCreateFont", "ptr", fam_bold, "float", fs, "int", 1, "int", 2, "ptr*", &fnt_bold:=0) {
+        ClearLiveHintResourceHandles(fam, fam_bold, fnt, fnt_bold, fmt, brush_fg)
+        return false
+    }
+    DllCall("gdiplus\GdipStringFormatGetGenericDefault", "ptr*", &fmt:=0)
+    DllCall("gdiplus\GdipSetStringFormatLineAlign", "ptr", fmt, "int", 1)
+    DllCall("gdiplus\GdipSetStringFormatTrimming", "ptr", fmt, "int", 3)
+    DllCall("gdiplus\GdipCreateSolidFill", "uint", (255 << 24) | fg, "ptr*", &brush_fg:=0)
+
+    live_hint_res := {
+        sig: sig,
+        fam: fam,
+        fam_bold: fam_bold,
+        fnt: fnt,
+        fnt_bold: fnt_bold,
+        fmt: fmt,
+        brush_fg: brush_fg,
+    }
+    return live_hint_res
+}
+
+
+ClearLiveHintResources() {
+    global live_hint_res
+
+    if !live_hint_res {
+        return
+    }
+    ClearLiveHintResourceHandles(
+        live_hint_res.fam,
+        live_hint_res.fam_bold,
+        live_hint_res.fnt,
+        live_hint_res.fnt_bold,
+        live_hint_res.fmt,
+        live_hint_res.brush_fg
+    )
+    live_hint_res := false
+}
+
+
+ClearLiveHintResourceHandles(fam, fam_bold, fnt, fnt_bold, fmt, brush_fg) {
+    if brush_fg {
+        try DllCall("gdiplus\GdipDeleteBrush", "ptr", brush_fg)
+    }
+    if fmt {
+        try DllCall("gdiplus\GdipDeleteStringFormat", "ptr", fmt)
+    }
+    if fnt_bold {
+        try DllCall("gdiplus\GdipDeleteFont", "ptr", fnt_bold)
+    }
+    if fnt {
+        try DllCall("gdiplus\GdipDeleteFont", "ptr", fnt)
+    }
+    if fam_bold && fam_bold != fam {
+        try DllCall("gdiplus\GdipDeleteFontFamily", "ptr", fam_bold)
+    }
+    if fam {
+        try DllCall("gdiplus\GdipDeleteFontFamily", "ptr", fam)
+    }
+}
+
+
+GetLiveHintPreviewIcon(node, w, h, colors) {
+    global live_hint_icon_cache
+
+    key := ObjPtr(node) . "|" . w . "x" . h . "|" . GestureColorSignature(colors)
+    if !live_hint_icon_cache.Has(key) {
+        live_hint_icon_cache[key] := CreateGesturePreviewHIcon(node, w, h, false, false, colors)
+    }
+    return live_hint_icon_cache[key]
+}
+
+
+GestureColorSignature(colors) {
+    if !(colors is Array) {
+        return ""
+    }
+
+    out := ""
+    for clr in colors {
+        out .= Format("{:06X}", clr) . ","
+    }
+    return out
+}
+
+
+ClearLiveHintIconCache() {
+    global live_hint_icon_cache
+
+    for _, icon in live_hint_icon_cache {
+        if icon {
+            DllCall("DestroyIcon", "ptr", icon)
+        }
+    }
+    live_hint_icon_cache := Map()
+}
+
+
+GetLiveHintThumbnailColors() {
+    colour := Trim(CONF.live_hint_thumbnail_color.v)
+    if colour {
+        colors := ParseAhkColorList(colour)
+        if colors.Length {
+            return colors
+        }
+        return [0x202020]
+    }
+
+    return overlay_opts.gest_colors
+}
+
+
+HasLiveHintScores(items) {
+    for item in items {
+        if item.HasProp("score") {
+            return true
+        }
+    }
+    return false
+}
+
+
+GetLiveHintTextWidth(g, fnt, fnt_bold, fmt, items, more_count) {
+    max_w := 0
+    for i, item in items {
+        font := i == 1 && item.HasProp("score") && item.score >= CONF.min_cos_similarity.v
+            ? fnt_bold : fnt
+        max_w := Max(max_w, MeasureLiveHintTextWidth(g, font, fmt, item.name))
+    }
+    if more_count > 0 {
+        max_w := Max(max_w, MeasureLiveHintTextWidth(g, fnt, fmt, "...and " . more_count . " more"))
+    }
+    return Ceil(Max(max_w, 20))
+}
+
+
+FillLiveHintBackground(g, brush, x, y, w, h) {
+    r := Min(10, Floor(Min(w, h) / 3))
+    if r < 2 {
+        DllCall("gdiplus\GdipFillRectangle", "ptr", g, "ptr", brush,
+            "float", x, "float", y, "float", w, "float", h)
+        return
+    }
+
+    tl := x >= 6 && y >= 6
+    tr := x + w <= A_ScreenWidth - 6 && y >= 6
+    br := x + w <= A_ScreenWidth - 6 && y + h <= A_ScreenHeight - 6
+    bl := x >= 6 && y + h <= A_ScreenHeight - 6
+
+    DllCall("gdiplus\GdipCreatePath", "int", 0, "ptr*", &path:=0)
+    DllCall("gdiplus\GdipStartPathFigure", "ptr", path)
+
+    if tl {
+        DllCall("gdiplus\GdipAddPathArc", "ptr", path,
+            "float", x, "float", y, "float", r * 2, "float", r * 2, "float", 180, "float", 90)
+    } else {
+        DllCall("gdiplus\GdipAddPathLine", "ptr", path, "float", x, "float", y, "float", x, "float", y)
+    }
+
+    DllCall("gdiplus\GdipAddPathLine", "ptr", path,
+        "float", x + (tl ? r : 0), "float", y, "float", x + w - (tr ? r : 0), "float", y)
+    if tr {
+        DllCall("gdiplus\GdipAddPathArc", "ptr", path,
+            "float", x + w - r * 2, "float", y, "float", r * 2, "float", r * 2,
+            "float", 270, "float", 90)
+    }
+
+    DllCall("gdiplus\GdipAddPathLine", "ptr", path,
+        "float", x + w, "float", y + (tr ? r : 0), "float", x + w, "float", y + h - (br ? r : 0))
+    if br {
+        DllCall("gdiplus\GdipAddPathArc", "ptr", path,
+            "float", x + w - r * 2, "float", y + h - r * 2, "float", r * 2, "float", r * 2,
+            "float", 0, "float", 90)
+    }
+
+    DllCall("gdiplus\GdipAddPathLine", "ptr", path,
+        "float", x + w - (br ? r : 0), "float", y + h, "float", x + (bl ? r : 0), "float", y + h)
+    if bl {
+        DllCall("gdiplus\GdipAddPathArc", "ptr", path,
+            "float", x, "float", y + h - r * 2, "float", r * 2, "float", r * 2,
+            "float", 90, "float", 90)
+    }
+
+    DllCall("gdiplus\GdipAddPathLine", "ptr", path,
+        "float", x, "float", y + h - (bl ? r : 0), "float", x, "float", y + (tl ? r : 0))
+    DllCall("gdiplus\GdipClosePathFigure", "ptr", path)
+    DllCall("gdiplus\GdipFillPath", "ptr", g, "ptr", brush, "ptr", path)
+    DllCall("gdiplus\GdipDeletePath", "ptr", path)
+}
+
+
+MeasureLiveHintTextWidth(g, fnt, fmt, text) {
     rect := Buffer(16, 0)
-    NumPut("float", 0.0, rect, 0)
-    NumPut("float", y, rect, 4)
-    NumPut("float", A_ScreenWidth*1.0, rect, 8)
-    NumPut("float", bar_h, rect, 12)
+    NumPut("float", 0, rect, 0)
+    NumPut("float", 0, rect, 4)
+    NumPut("float", 2000, rect, 8)
+    NumPut("float", 200, rect, 12)
+    bbox := Buffer(16, 0)
+    DllCall("gdiplus\GdipMeasureString", "ptr", g, "wstr", text, "int", StrLen(text),
+        "ptr", fnt, "ptr", rect, "ptr", fmt, "ptr", bbox, "uint*", &cp:=0, "uint*", &lns:=0)
+    return NumGet(bbox, 8, "float")
+}
 
-    sig := txt . "|" . fs
-    if sig !== last_sig || !lbbox {
-        lbbox := Buffer(16, 0)
-        DllCall("gdiplus\GdipMeasureString", "ptr", g, "wstr", txt, "int", StrLen(txt),
-            "ptr", fnt, "ptr", rect, "ptr", fmt, "ptr", lbbox, "uint*", &cp:=0, "uint*", &lns:=0)
-        last_sig := sig
+
+GetLiveHintBoxPos(w, h, start_x, start_y) {
+    primary_i := CONF.gest_live_hint.v
+    start_pool := GetCoarseLiveHintPool(GetPool(start_x, start_y))
+    if start_pool == GetCoarseLiveHintPool(primary_i) {
+        return GetLiveHintBoxPosByIndex(CONF.live_hint_alt.v, w, h)
     }
+    return GetLiveHintBoxPosByIndex(primary_i, w, h)
+}
 
-    tx := NumGet(lbbox, 0, "float")
-    ty := NumGet(lbbox, 4, "float")
-    tw := NumGet(lbbox, 8, "float")
-    th := NumGet(lbbox, 12, "float")
 
-    bx := Floor(tx - pad_x)
-    by := Floor(ty - pad_y)
-    bw := Ceil(tw + pad_x * 2)
-    bh := Ceil(th + pad_y * 2)
+GetLiveHintBoxPosByIndex(placement_i, w, h) {
+    margin := Max(CONF.live_hint_margin.v, 0)
+    col := Mod(placement_i - 1, 3)
+    row := (placement_i - 1) // 3
+    x := col == 0 ? margin : col == 1 ? (A_ScreenWidth - w) / 2 : A_ScreenWidth - w - margin
+    y := row == 0 ? margin : row == 1 ? (A_ScreenHeight - h) / 2 : A_ScreenHeight - h - margin
+    return [Floor(x), Floor(y), x + w / 2, y + h / 2]
+}
 
-    if lbw > 0 && lbh > 0 {
-        DllCall("gdiplus\GdipSetCompositingMode", "ptr", g, "int", 1)  ; SourceCopy
-        DllCall("gdiplus\GdipFillRectangle", "ptr", g, "ptr", brush_clear,
-            "float", lbx-1, "float", lby-1, "float", lbw+2, "float", lbh+2)
-        DllCall("gdiplus\GdipSetCompositingMode", "ptr", g, "int", 0)  ; SourceOver
+
+GetCoarseLiveHintPool(pool) {
+    pool := ParseGesturePool(pool)
+    return pool ~= "i)^[a-d]$" ? 5 : pool
+}
+
+
+ClearLiveHintBox() {
+    global live_hint_draw_sig
+
+    g := GetOverlayGraphics()
+    if g {
+        _ClearLiveHintBox(g)
+        PresentOverlay()
     }
+    live_hint_draw_sig := ""
+}
 
-    DllCall("gdiplus\GdipFillRectangle", "ptr", g, "ptr", brush_bg,
-        "float", bx, "float", by, "float", bw, "float", bh)  ; NTT
 
-    if shadow_off > 0 {
-        rect_sh := Buffer(16, 0)
-        NumPut("float", 0.0 + shadow_off, rect_sh, 0)
-        NumPut("float", y + shadow_off, rect_sh, 4)
-        NumPut("float", A_ScreenWidth*1.0, rect_sh, 8)
-        NumPut("float", bar_h, rect_sh, 12)
-        try DllCall("gdiplus\GdipDrawString", "ptr", g, "wstr", txt, "int", StrLen(txt),
-            "ptr", fnt, "ptr", rect_sh, "ptr", fmt, "ptr", brush_shad)  ; TODO
+_ClearLiveHintBox(g) {
+    global live_hint_bbox
+
+    if !live_hint_bbox {
+        return
     }
-
-    try DllCall("gdiplus\GdipDrawString", "ptr", g, "wstr", txt, "int", StrLen(txt),
-        "ptr", fnt, "ptr", rect, "ptr", fmt, "ptr", brush_fg)
-
-    lbx := bx
-    lby := by
-    lbw := bw
-    lbh := bh
-    PresentOverlay()
-    busy := false
+    DllCall("gdiplus\GdipCreateSolidFill", "uint", 0x00000000, "ptr*", &brush_clear:=0)
+    DllCall("gdiplus\GdipSetCompositingMode", "ptr", g, "int", 1)  ; SourceCopy
+    DllCall("gdiplus\GdipFillRectangle", "ptr", g, "ptr", brush_clear,
+        "float", live_hint_bbox[1] - 1, "float", live_hint_bbox[2] - 1,
+        "float", live_hint_bbox[3] + 2, "float", live_hint_bbox[4] + 2)
+    DllCall("gdiplus\GdipSetCompositingMode", "ptr", g, "int", 0)  ; SourceOver
+    DllCall("gdiplus\GdipDeleteBrush", "ptr", brush_clear)
+    live_hint_bbox := false
 }
 
 
@@ -790,7 +1196,7 @@ FadeGestureOverlayStep(timer_fn, finish_fn, reset:=false) {
     }
 
     steps_by_timer[key] := step
-    PresentOverlay(Round(CONF.overlay_opacity.v * (steps - step) / steps))
+    PresentOverlay(Round(255 * (steps - step) / steps))
     SetTimer(timer_fn, -50)
 }
 
@@ -834,7 +1240,7 @@ CreateGesturePreviewHIcon(gesture_obj, w:=58, h:=34, show_pool:=false, bottom_ru
         i += 2
     }
 
-    margin := Max(Round(5 * CONF.gui_scale.v), 3)
+    margin := Max(Round(3.5 * CONF.gui_scale.v), 2)
     span_x := Max(max_x - min_x, 0.001)
     span_y := Max(max_y - min_y, 0.001)
     scale := Min((w - margin * 2) / span_x, (h - margin * 2) / span_y)
@@ -854,16 +1260,9 @@ CreateGesturePreviewHIcon(gesture_obj, w:=58, h:=34, show_pool:=false, bottom_ru
         y := map_y(vec[i + 1])
         t := (segment_i - 0.5) / total_segments
         smooth_t := t * t * (3 - 2 * t)
-        width := Max((0.75 + 1.25 * smooth_t) * CONF.gui_scale.v, 0.75)
+        width := Max((0.75 + 1.75 * smooth_t) * CONF.gui_scale.v, 0.75)
         line_color := GesturePreviewStrokeColor(stroke_colors, t)
-        DllCall("gdiplus\GdipCreatePen1", "uint", line_color,
-            "float", width, "int", 2, "ptr*", &pen:=0)
-        DllCall("gdiplus\GdipSetPenStartCap", "ptr", pen, "int", 2)
-        DllCall("gdiplus\GdipSetPenEndCap", "ptr", pen, "int", 2)
-        DllCall("gdiplus\GdipSetPenLineJoin", "ptr", pen, "int", 2)
-        DllCall("gdiplus\GdipDrawLine", "ptr", g, "ptr", pen,
-            "float", prev_x, "float", prev_y, "float", x, "float", y)
-        DllCall("gdiplus\GdipDeletePen", "ptr", pen)
+        DrawGesturePreviewSoftLine(g, prev_x, prev_y, x, y, width, line_color)
         prev_x := x
         prev_y := y
         segment_i += 1
@@ -882,6 +1281,36 @@ CreateGesturePreviewHIcon(gesture_obj, w:=58, h:=34, show_pool:=false, bottom_ru
     DllCall("gdiplus\GdipDeleteGraphics", "ptr", g)
     DllCall("gdiplus\GdipDisposeImage", "ptr", bmp)
     return hicon
+}
+
+
+DrawGesturePreviewSoftLine(g, x1, y1, x2, y2, width, argb) {
+    opacity := (argb >> 24) & 0xFF
+    rgb := argb & 0xFFFFFF
+    soft_argb := (Round(opacity * 0.3) << 24) | rgb
+    dx := x2 - x1
+    dy := y2 - y1
+    len := Sqrt(dx * dx + dy * dy)
+    if len {
+        ox := -dy / len
+        oy := dx / len
+    } else {
+        ox := 0
+        oy := 0
+    }
+
+    for shift in [0, 1] {
+        sx := ox * shift
+        sy := oy * shift
+        DllCall("gdiplus\GdipCreatePen1", "uint", soft_argb,
+            "float", width, "int", 2, "ptr*", &pen:=0)
+        DllCall("gdiplus\GdipSetPenStartCap", "ptr", pen, "int", 2)
+        DllCall("gdiplus\GdipSetPenEndCap", "ptr", pen, "int", 2)
+        DllCall("gdiplus\GdipSetPenLineJoin", "ptr", pen, "int", 2)
+        DllCall("gdiplus\GdipDrawLine", "ptr", g, "ptr", pen,
+            "float", x1 + sx, "float", y1 + sy, "float", x2 + sx, "float", y2 + sy)
+        DllCall("gdiplus\GdipDeletePen", "ptr", pen)
+    }
 }
 
 
@@ -915,12 +1344,12 @@ DrawGesturePreviewPoolMarker(g, pool, w, h) {
     }
 
     r := Max(3 * CONF.gui_scale.v, 2.5)
-    pos := GesturePreviewPoolMarkerPos(pool, w, h, r)
+    marker_pt := GesturePreviewPoolMarkerPos(pool, w, h, r)
     pts := Buffer(4 * 2 * 4, 0)
-    NumPut("Float", pos[1], "Float", pos[2] - r, pts, 0)
-    NumPut("Float", pos[1] + r, "Float", pos[2], pts, 8)
-    NumPut("Float", pos[1], "Float", pos[2] + r, pts, 16)
-    NumPut("Float", pos[1] - r, "Float", pos[2], pts, 24)
+    NumPut("Float", marker_pt[1], "Float", marker_pt[2] - r, pts, 0)
+    NumPut("Float", marker_pt[1] + r, "Float", marker_pt[2], pts, 8)
+    NumPut("Float", marker_pt[1], "Float", marker_pt[2] + r, pts, 16)
+    NumPut("Float", marker_pt[1] - r, "Float", marker_pt[2], pts, 24)
     try {
         marker_color := ParseAhkColor(CONF.gest_pool_marker_color.v)
     } catch {
@@ -938,13 +1367,13 @@ DrawGesturePreviewBottomRule(g, w, h) {
     loop w {
         x := A_Index - 1
         t := x / Max(w - 1, 1)
-        alpha := t < 0.4 ? Round(peak_alpha * t / 0.4)
+        opacity := t < 0.4 ? Round(peak_alpha * t / 0.4)
             : t < 0.6 ? peak_alpha
             : Round(peak_alpha * (1 - t) / 0.4)
-        if !alpha {
+        if !opacity {
             continue
         }
-        DllCall("gdiplus\GdipCreatePen1", "uint", (alpha << 24) | 0x777777,
+        DllCall("gdiplus\GdipCreatePen1", "uint", (opacity << 24) | 0x777777,
             "float", 1, "int", 2, "ptr*", &pen:=0)
         DllCall("gdiplus\GdipDrawLine", "ptr", g, "ptr", pen,
             "float", x, "float", y, "float", x + 1, "float", y)
@@ -957,7 +1386,7 @@ GesturePreviewPoolMarkerPos(pool, w, h, r) {
     if pool ~= "i)^[a-d]$" {
         pool := StrLower(pool)
         switch CONF.gest_center_mode.v {
-            case "Grid":
+            case "Grid", "Single":
                 switch pool {
                     case "a":
                         return [r, r]
@@ -1033,7 +1462,7 @@ _RotateVecStart(vec, point_shift) {
 
 
 GetGestureZoneOverrideIndex(key, offset) {
-    first_zone_opt_i := 2  ; live-hint position
+    first_zone_opt_i := 2  ; first field is reserved for pre-0.82 live-hint overrides
     fields_per_zone := 3  ; colors, gradient length, gradient loop
     fallback_zone_i := 5  ; C
 
@@ -1383,7 +1812,7 @@ DrawGesturePreviewLine(x1, y1, x2, y2, is_enabled, colour) {
             pen := 0
         }
         if DllCall("gdiplus\GdipCreatePen1",
-            "uint", (235 << 24) | colour, "float", 2, "int", 2, "ptr*", &pen:=0) {
+            "uint", (150 << 24) | colour, "float", 2, "int", 2, "ptr*", &pen:=0) {
             return
         }
         last_color := colour

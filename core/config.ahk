@@ -6,6 +6,8 @@ version := 0
 s_gui := false
 is_updating := false
 pending_event := false
+settings_int_stepper_vals := Map()
+settings_int_stepper_guards := Map()
 
 static_lang_names := Map(
     67699721, "qwerty en",
@@ -21,6 +23,9 @@ CONF := {
     Main: [],
     GUI: [],
     Gestures: [],
+    GestureGeneral: [],
+    GestureLiveHint: [],
+    GestureColorSettings: [],
     GestureZones: [],
     GestureDefaults: [],
     Colors: [],
@@ -65,6 +70,9 @@ manual_hold := Map()
 GestureColorZones := [
     [1, "TL"], [2, "T"], [3, "TR"], [4, "L"], [5, "C"], [6, "R"], [7, "BL"],
     [8, "B"], [9, "BR"], ["a", "CA"], ["b", "CB"], ["c", "CC"], ["d", "CD"]
+]
+LiveHintPositionChoices := [
+    "Top left", "Top", "Top right", "Left", "Center", "Right", "Bottom left", "Bottom", "Bottom right"
 ]
 
 for name in ["Volume_Mute", "Volume_Down", "Volume_Up", "Media_Next", "Media_Prev", "Media_Stop",
@@ -131,13 +139,14 @@ ErrorHandler(err, mode) {
 class ConfValue {
     __New(
         sect, ini_name, form_type, val_type, descr, default_val,
-        is_num:=false, double_height:=false, extra:=false
+        placeholder:=false, is_num:=false, double_height:=false, extra:=false, ui_group:=false
     ) {
         this.ini_name := ini_name
         this.form_type := form_type
         this.val_type := val_type
         this.default := default_val
         this.descr := descr
+        this.placeholder := placeholder || ""
         this.is_num := is_num
         this.double_height := double_height
         this.extra_params := extra || []
@@ -150,6 +159,9 @@ class ConfValue {
             this.v := Round(Float(this.v), 2)
         }
         CONF.%sect%.Push(this)
+        if ui_group {
+            CONF.%ui_group%.Push(this)
+        }
     }
 }
 
@@ -163,6 +175,7 @@ CheckConfig() {
             . "ChosenTags=Active, Inactive`r`n"
             . "`r`n[GUI]`r`n"
             . "`r`n[Gestures]`r`n"
+            . "`r`n[GestureLiveHint]`r`n"
             . "`r`n[GestureZones]`r`n"
             . "`r`n[GestureDefaults]`r`n"
             . "`r`n[Colors]`r`n"
@@ -186,29 +199,29 @@ CheckConfig() {
     DirCreate("layers")
 
 
-    CONF.MS_LP := ConfValue("Main", "LongPressDuration", "str", "int",
-        "&Hold threshold (ms):", 150, true)
-    CONF.MS_NK := ConfValue("Main", "NextKeyWaitDuration", "str", "int",
-        "&Nested event timeout (ms):", 300, true)
+    CONF.MS_LP := ConfValue("Main", "LongPressDuration", "num_step", "int",
+        "&Hold threshold (ms):", 150, , true, , [0, 9999, 1, 5])
+    CONF.MS_NK := ConfValue("Main", "NextKeyWaitDuration", "num_step", "int",
+        "&Nested event timeout (ms):", 300, , true, , [0, 9999, 1, 5])
 
     CONF.T := "T" . CONF.MS_LP.v / 1000
 
     CONF.layout_format := ConfValue("Main", "LayoutFormat", "ddl", "str",
-        "&Layout format:", "ANSI", , , [["ANSI", "ISO"], true])
+        "&Layout format:", "ANSI", , , , [["ANSI", "ISO"], true])
     CONF.interruption_behavior := ConfValue("Main", "InterruptionBehavior", "ddl", "int",
-        "Tap/hold &interruption behavior:", 1, , ,
-        [["Ordered / await result", "Send tap", "Send hold"], false])
+        "&Tap/hold interruption behavior:", 1, , ,
+        , [["Ordered / await result", "Send tap", "Send hold"], false])
     CONF.dual_numpad := ConfValue("Main", "DualNumpad", "checkbox", "int",
-        "Split Num&Pad keys", 0)
+        "&Split NumPad keys", 0)
     CONF.extra_f_row := ConfValue("Main", "ExtraFRow", "checkbox", "int",
         "Use extra &f-row (F13-F24)", 0)
     CONF.extra_k_row := ConfValue("Main", "ExtraKRow", "checkbox", "int",
-        "Use &special keys (media, browser, app keys)", 0)
+        "&Use special keys (media, browser, app keys)", 0)
     CONF.unfam_layouts := ConfValue("Main", "CollectUnfamiliarLayouts", "checkbox", "int",
         "&Collect unknown keyboard layouts from layers", 1)
     CONF.sendtext_output := ConfValue("Main", "UseSendTextOutput", "h_checkbox", "int",
-        "Use Send&Text mode", 0, , ,
-        ["Temporary test option."
+        "Use S&endText mode", 0, , ,
+        , ["Temporary test option."
             . "`nTo minimize bugs with sticking and inputting unwanted characters "
             . "when over-holding a hotkey with long text assignment, the SendInput {Raw} is "
             . "currently in test use. If this leads to undesirable consequences, turn on this "
@@ -216,8 +229,8 @@ CheckConfig() {
             . "Don't turn it on unless you're sure you need it.", "Use SendText mode"
         ])
     CONF.ignore_inactive := ConfValue("Main", "IgnoreInactiveLayers", "h_checkbox", "int",
-        "I&gnore inactive layers", 0, , ,
-        ["With this option enabled, inactive layers are not parsed`ninto the core data structure."
+        "&Ignore inactive layers", 0, , ,
+        , ["With this option enabled, inactive layers are not parsed`ninto the core data structure."
             . "`nDisable it temporarily when using the GUI to view assignments`nacross all layers."
             . "`nRe-enable it after adjusting the layers, to speed up the tree recalculation,"
             . " if you have a lot of layers.", "Ignore inactive layers"
@@ -229,18 +242,18 @@ CheckConfig() {
 
     CONF.keyname_type := ConfValue("GUI", "KeynameType", "ddl", "int",
         "&Keyname type:", 1, , ,
-        [["Always use keynames", "Always use scancodes", "Scancodes on empty keys"], false])
+        , [["Always use keynames", "Always use scancodes", "Scancodes on empty keys"], false])
     CONF.overlay_type := ConfValue("GUI", "OverlayType", "ddl", "int",
         "&Overlay indicator type:", 3, , ,
-        [["Disabled", "Indicators only", "With counters"], false])
-    CONF.gui_scale := ConfValue("GUI", "GuiScale", "str", "float",
-        "&Gui scale:", A_ScreenWidth * 0.8 / 1294)
-    CONF.font_scale := ConfValue("GUI", "FontScale", "str", "float",
-        "&Font scale:", CONF.gui_scale.v / 2 + 0.5)
+        , [["Disabled", "Indicators only", "With counters"], false])
     CONF.font_name := ConfValue("GUI", "FontName", "str", "str",
         "Font &name:", "Segoe UI")
-    CONF.ref_height := ConfValue("GUI", "ReferenceHeight", "str", "int",
-        "&Reference height:", 314, true)
+    CONF.ref_height := ConfValue("GUI", "ReferenceHeight", "num_step", "int",
+        "&Reference height:", 314, , true, , [0, 9999, 1])
+    CONF.gui_scale := ConfValue("GUI", "GuiScale", "num_step", "float",
+        "&Gui scale:", A_ScreenWidth * 0.8 / 1294, , , , [0, 999, 100])
+    CONF.font_scale := ConfValue("GUI", "FontScale", "num_step", "float",
+        "&Font scale:", CONF.gui_scale.v / 2 + 0.5, , , , [0, 999, 100])
     CONF.gui_back_sc := ConfValue("GUI", "GuiBackEdit", "str", "str",
         "GUI hotkey for '&Back':", "nSub")
     CONF.gui_set_sc := ConfValue("GUI", "GuiSetEdit", "str", "str",
@@ -248,76 +261,106 @@ CheckConfig() {
     CONF.gui_set_hold_sc := ConfValue("GUI", "GuiSetHoldEdit", "str", "str",
         "GUI hotkey for 'Set &hold':", "nEnter")
     CONF.hide_alias_warnings := ConfValue("GUI", "HideAliasWarnings", "checkbox", "int",
-        "Hide warnings about changes in &aliased layouts", 0)
+        "Hide &warnings about changes in aliased layouts", 0)
 
     CONF.gest_color_mode := ConfValue("Gestures", "ColorMode", "ddl", "str",
-        "Color &mode:", "HSV", , , [["RGB", "Gamma-correct", "HSV"], true])
+        "Color &mode:", "HSV", , , , [["RGB", "Gamma-correct", "HSV"], true], "GestureColorSettings")
 
     CONF.gest_center_mode := ConfValue("GestureZones", "CenterMode", "ddl", "str",
         "Center zone &mode:", "Single", , ,
-        [["Single", "Grid", "Diagonal"], true])
+        , [["Single", "Grid", "Diagonal"], true])
     CONF.gest_zone_t := ConfValue("GestureZones", "Top", "str", "int",
-        "&Top edge size (px):", 128, true)
+        "&Top edge size (px):", 100, , true)
     CONF.gest_zone_r := ConfValue("GestureZones", "Right", "str", "int",
-        "&Right edge size (px):", 128, true)
+        "&Right edge size (px):", 100, , true)
     CONF.gest_zone_b := ConfValue("GestureZones", "Bottom", "str", "int",
-        "&Bottom edge size (px):", 128, true)
+        "&Bottom edge size (px):", 128, , true)
     CONF.gest_zone_l := ConfValue("GestureZones", "Left", "str", "int",
-        "&Left edge size (px):", 128, true)
+        "&Left edge size (px):", 100, , true)
     CONF.gest_zone_tl := ConfValue("GestureZones", "TopLeft", "str", "int",
-        "Top-&left corner size (px):", 128, true)
+        "Top-&left corner size (px):", 150, , true)
     CONF.gest_zone_tr := ConfValue("GestureZones", "TopRight", "str", "int",
-        "Top-&right corner size (px):", 128, true)
+        "Top-&right corner size (px):", 150, , true)
     CONF.gest_zone_br := ConfValue("GestureZones", "BottomRight", "str", "int",
-        "Bottom-r&ight corner size (px):", 128, true)
+        "Bottom-r&ight corner size (px):", 150, , true)
     CONF.gest_zone_bl := ConfValue("GestureZones", "BottomLeft", "str", "int",
-        "Bottom-l&eft corner size (px):", 128, true)
+        "Bottom-l&eft corner size (px):", 150, , true)
     CONF.gest_zone_preview_color := ConfValue("GestureZones", "PreviewColor", "color", "str",
-        "Zone preview color:", "00F4FF")
+        "Zone preview color:", "00F4AA")
 
-    CONF.min_gesture_len := ConfValue("Gestures", "MinGestureLen", "str", "int",
-        "Minimum gesture &length (px):", 150, true)
-    CONF.min_cos_similarity := ConfValue("Gestures", "MinCosSimilarity", "str", "float",
-        "Minimum gesture &similarity:", 0.90)
-    CONF.overlay_opacity := ConfValue("Gestures", "OverlayOpacity", "str", "int",
-        "Overlay &opacity (up to 255):", 200, true)
-    CONF.font_size_lh := ConfValue("Gestures", "LHSize", "str", "int",
-        "Live &hint font size:", 32, true)
-    CONF.gest_thumbnail_color := ConfValue("Gestures", "ThumbnailColor", "color", "str",
-        "Gesture list &thumbnail color:", "")
+    CONF.min_gesture_len := ConfValue("Gestures", "MinGestureLen", "num_step", "int",
+        "Mi&nimum gesture length (px):", 150, , true, , [0, 9999, 1], "GestureGeneral")
+    CONF.min_cos_similarity := ConfValue("Gestures", "MinCosSimilarity", "num_step", "float",
+        "Minimum gesture &similarity:", 0.90, , , , [0, 100, 100], "GestureGeneral")
+    CONF.gest_opacity := ConfValue("Gestures", "GestureOpacity", "num_step", "int",
+        "Gesture &opacity (cumulative):", 50, , true, , [0, 9999, 1], "GestureGeneral")
+    CONF.live_hint_enabled := ConfValue("GestureLiveHint", "LiveHintEnabled", "checkbox", "int",
+        "&Enable live hint", 1)
+    CONF.gest_live_hint := ConfValue("GestureLiveHint", "LiveHint", "ddl", "int",
+        "Live recognition hint &position:", 5, , ,
+        , [LiveHintPositionChoices, false])
+    CONF.live_hint_alt := ConfValue("GestureLiveHint", "LiveHintAlt", "ddl", "int",
+        "&Alternative live hint position:", 9, , , , [LiveHintPositionChoices, false])
+    CONF.font_size_lh := ConfValue("GestureLiveHint", "LHSize", "num_step", "int",
+        "Live hint &font size:", 32, , true, , [0, 999, 1])
+    CONF.live_hint_start_count := ConfValue("GestureLiveHint", "LiveHintStartCount", "num_step", "int",
+        "Start hint &items:", 9, "0 – hide start hints", true, , [0, 999, 1])
+    CONF.live_hint_start_move := ConfValue("GestureLiveHint", "LiveHintStartMove", "num_step", "int",
+        "Start hint minimum &movement (px):", 1, "0 – show immediately", true, , [0, 999, 1])
+    CONF.live_hint_move_count := ConfValue("GestureLiveHint", "LiveHintMoveCount", "num_step", "int",
+        "Moving hint max i&tems:", 6, "0 – hide moving hints", true, , [0, 999, 1])
+    CONF.live_hint_min_score := ConfValue("GestureLiveHint", "LiveHintMinScore", "num_step", "float",
+        "Mo&ving hint minimum match:", 0.50, "0–1", , , [0, 100, 100])
+    CONF.live_hint_opacity := ConfValue("GestureLiveHint", "LiveHintOpacity", "num_step", "int",
+        "Live hint background &opacity:", 222, , true, , [0, 255, 1])
+    CONF.live_hint_box_width := ConfValue("GestureLiveHint", "LiveHintBoxWidth", "num_step", "str",
+        "Live hint box &width (px):", "0", "0 – adaptive width", true, , [0, 999, 1])
+    CONF.live_hint_margin := ConfValue("GestureLiveHint", "LiveHintMargin", "num_step", "int",
+        "Live hint edge ma&rgin (px):", 0, , true, , [0, 999, 1])
+    CONF.live_hint_bg_color := ConfValue("GestureLiveHint", "LiveHintBgColor", "color", "str",
+        "Live hint &background:", "222222", "Empty – no background")
+    CONF.live_hint_text_color := ConfValue("GestureLiveHint", "LiveHintTextColor", "color", "str",
+        "Live hint te&xt color:", "D8D8D8")
+    CONF.live_hint_thumbnail_color := ConfValue("GestureLiveHint", "LiveHintThumbnailColor", "m_color", "str",
+        "Live hint t&humbnail color:", "", "Empty – own gesture color")
+    CONF.gest_thumbnail_color := ConfValue("Gestures", "ThumbnailColor", "m_color", "str",
+        "Gesture list &thumbnail color:", "", "Empty – own gesture color", , , , "GestureGeneral")
     CONF.gest_pool_marker_color := ConfValue("Gestures", "PoolMarkerColor", "color", "str",
-        "Pool &marker color:", "2EAD64")
-    CONF.live_hint_extended := ConfValue("Gestures", "LiveHintExtended", "checkbox", "int",
-        "Show &unrecognized gestures in the live hint", 1)
+        "Pool &marker color:", "47CD7C", , , , , "GestureGeneral")
     CONF.show_unavailable_gestures := ConfValue("Gestures", "ShowUnavailableGestures", "checkbox", "int",
-        "Show gestures from unavailable &pools", 1)
+        "Show gestures from unavailable &pools in the list", 1, , , , , "GestureGeneral")
 
     CONF.gest_rotate := ConfValue("GestureDefaults", "Rotate", "ddl", "int",
-        "&Rotation:", 1, , , [["None", "Reduce orientation noise", "Rotation invariant"], false])
-    CONF.scale_impact := ConfValue("GestureDefaults", "Scaling", "str", "float",
-        "&Scale impact:", 0)
-    CONF.gest_live_hint := ConfValue("GestureDefaults", "LiveHint", "ddl", "int",
-        "&Live recognition hint position:", 1, , ,
-        [["Top", "Center", "Bottom", "Disabled"], false])
-
+        "&Rotation:", 1, , , , [["None", "Reduce orientation noise", "Rotation invariant"], false])
+    CONF.scale_impact := ConfValue("GestureDefaults", "Scaling", "num_step", "float",
+        "Scale &impact:", 0, "0–0.99 (0 – size-independent)", , , [0, 99, 100])
     CONF.gest_zone_colors := Map()
     CONF.gest_zone_grad_len := Map()
     CONF.gest_zone_grad_loop := Map()
+    gesture_color_defaults := Map(
+        1, {colors: "7B1FA2,00E5FF", grad_len: 640, grad_loop: 1},
+        2, {colors: "00BCD4,8BC34A,FFEB3B", grad_len: 820, grad_loop: 1},
+        3, {colors: "D500F9,FFEA00", grad_len: 640, grad_loop: 1},
+        4, {colors: "651FFF,00E5FF,00C853", grad_len: 820, grad_loop: 1},
+        5, {colors: "random(3)", grad_len: 950, grad_loop: 0},
+        6, {colors: "FFEA00,FF6D00,D50000", grad_len: 820, grad_loop: 1},
+        7, {colors: "304FFE,FF1744", grad_len: 640, grad_loop: 1},
+        8, {colors: "3F51B5,9C27B0,F44336", grad_len: 820, grad_loop: 1},
+        9, {colors: "00C853,FF1744", grad_len: 640, grad_loop: 1},
+        "a", {colors: "00ACC1", grad_len: 600, grad_loop: 0},
+        "b", {colors: "FDD835", grad_len: 600, grad_loop: 0},
+        "c", {colors: "E53935", grad_len: 600, grad_loop: 0},
+        "d", {colors: "5E35B1", grad_len: 600, grad_loop: 0},
+    )
     for zone in GestureColorZones {
-        if zone[1] == 5 || zone[1] ~= "^[a-d]$" {
-            defaults := {colors: "random(3)", grad_len: 1000, grad_loop: 1}
-        } else if zone[1] == 2 || zone[1] == 4 || zone[1] == 6 || zone[1] == 8 {
-            defaults := {colors: "4FC3F7,9575CD,F06292", grad_len: 1000, grad_loop: 1}
-        } else {
-            defaults := {colors: "66BB6A,26C6DA,FBC02D", grad_len: 1000, grad_loop: 1}
-        }
+        defaults := gesture_color_defaults[zone[1]]
         CONF.gest_zone_colors[zone[2]] := ConfValue("GestureDefaults",
             "GestureColorsPool" . zone[2], "m_color", "str",
             "Ges&ture colors`n(more than one for gradient):",
-            defaults.colors, , true)
+            defaults.colors, , , true)
         CONF.gest_zone_grad_len[zone[2]] := ConfValue("GestureDefaults",
             "GradientLengthPool" . zone[2], "str", "int",
-            "&Full gradient cycle length (px):", defaults.grad_len, true)
+            "&Full gradient cycle length (px):", defaults.grad_len, , true)
         CONF.gest_zone_grad_loop[zone[2]] := ConfValue("GestureDefaults",
             "GradientLoopPool" . zone[2], "checkbox", "int",
             "G&radient cycling", defaults.grad_loop)
@@ -460,7 +503,7 @@ ShowSettings(*) {
     s_gui.ProcessGroups := []
     s_gui.LayoutAliases := []
     s_gui.GestureGeneral := []
-    s_gui.GestureDefaults := []
+    s_gui.GestureLiveHint := []
     s_gui.GestureColors := []
     s_gui.GestureColorFixed := []
     s_gui.GestureColorMapButtons := []
@@ -481,10 +524,7 @@ ShowSettings(*) {
 
     tabs.UseTab("Main")
     for c in CONF.Main {
-        _AddElems(c.form_type, A_Index == 1 ? 40 : "", , [
-            c.double_height, c.ini_name . (c.is_num ? " Number" : ""),
-            c.descr, c.v, c.extra_params*
-        ])
+        _AddConfElem(c, A_Index == 1 ? 40 : "")
     }
     is_startup := IsInStartup()
     s_gui["Autostart"].Value := is_startup
@@ -498,16 +538,13 @@ ShowSettings(*) {
 
     tabs.UseTab("GUI")
     for c in CONF.GUI {
-        _AddElems(c.form_type, A_Index == 1 ? 40 : "", , [
-            c.double_height, c.ini_name . (c.is_num ? " Number" : ""),
-            c.descr, c.v, c.extra_params*
-        ])
+        _AddConfElem(c, A_Index == 1 ? 40 : "")
     }
 
     tabs.UseTab("Gestures")
     s_gui.Add("Button", "vToggleGestureGeneral x15 y34 h20 w97 Disabled", "&General")
         .OnEvent("Click", ToggleGestureSettingsSubtab.Bind(1))
-    s_gui.Add("Button", "vToggleGestureDefaults x112 yp0 h20 w97", "&Defaults")
+    s_gui.Add("Button", "vToggleGestureLiveHint x112 yp0 h20 w97", "&Live hint")
         .OnEvent("Click", ToggleGestureSettingsSubtab.Bind(2))
     s_gui.Add("Button", "vToggleGestureColors x209 yp0 h20 w98", "&Colors")
         .OnEvent("Click", ToggleGestureSettingsSubtab.Bind(3))
@@ -516,40 +553,27 @@ ShowSettings(*) {
 
     s_gui.CurrentGroup := s_gui.GestureGeneral
     b := true
-    for c in CONF.Gestures {
-        if c.ini_name == CONF.gest_color_mode.ini_name {
-            continue
-        }
-        _AddElems(c.form_type, b ? 75 : "", , [
-            c.double_height, c.ini_name . (c.is_num ? " Number" : ""),
-            c.descr, c.v, c.extra_params*
-        ])
+    for c in CONF.GestureGeneral {
+        _AddConfElem(c, b ? 75 : "")
         b := false
     }
-    SendMessage(0x1501, true, StrPtr("Empty – own gesture color"), s_gui["ThumbnailColor"].Hwnd)
+    RegisterSettingsCtrl(s_gui.Add("Text", "x20 w380 y260 h30 Center",
+        "Default gesture matching settings`n(can be overridden for each assignment)"))
+    _AddConfElem(CONF.gest_rotate, 300)
+    _AddConfElem(CONF.scale_impact)
 
-    s_gui.CurrentGroup := s_gui.GestureDefaults
-    RegisterSettingsCtrl(s_gui.Add("Text", "x20 w380 y68 h34 Center",
-        "Default gesture matching and color settings`n(can be overridden for each assignment)"))
-    RegisterSettingsCtrl(s_gui.Add("Text", "x20 w380 y+8 h1 0x10"))
-
-    for c in CONF.GestureDefaults {
-        if A_Index == 4 {
-            break
-        }
-        _AddElems(c.form_type, A_Index == 1 ? 124 : "", , [
-            c.double_height, c.ini_name . (c.is_num ? " Number" : ""),
-            c.descr, c.v, c.extra_params*
-        ])
+    s_gui.CurrentGroup := s_gui.GestureLiveHint
+    for c in CONF.GestureLiveHint {
+        _AddConfElem(c, A_Index == 1 ? 75 : "")
     }
-    SendMessage(0x1501, true, StrPtr("0–0.99 (0 – size-independent)"), s_gui["Scaling"].Hwnd)
+    s_gui["LiveHintEnabled"].OnEvent("Click", ToggleSettingsLiveHintFields)
+    ToggleSettingsLiveHintFields()
 
     s_gui.CurrentGroup := s_gui.GestureColors
     _RegisterGestureColorFixed(s_gui.Add("Text", "x20 w380 y68 h34 Center",
         "Default gesture colors`n(can be overridden for each assignment)"))
-    _RegisterGestureColorFixed(s_gui.Add("Text", "x20 w380 y+8 h1 0x10"))
-    c := CONF.gest_color_mode
-    _RegisterGestureColorFixed(s_gui.Add("Text", "x15 y124 h20 w185", c.descr))
+    c := CONF.GestureColorSettings[1]
+    _RegisterGestureColorFixed(s_gui.Add("Text", "x15 y116 h20 w185", c.descr))
     elem := _RegisterGestureColorFixed(
         s_gui.Add("DropDownList", "x210 yp-2 w195 v" . c.ini_name, c.extra_params[1])
     )
@@ -589,11 +613,11 @@ ShowSettings(*) {
         ["Bottom left", CONF.gest_zone_bl],
     ])
     RegisterSettingsCtrl(s_gui.Add("Text", "x15 y286 w195 h48 0x200", "Zone preview:"))
-    RegisterSettingsCtrl(s_gui.Add("Button", "x210 y284 w65 h20 vZonePreviewOff", "Off"))
+    RegisterSettingsCtrl(s_gui.Add("Button", "x210 y284 w65 h20 vZonePreviewOff", "O&ff"))
         .OnEvent("Click", ShowSettingsGestureZonePreview.Bind("Off"))
-    RegisterSettingsCtrl(s_gui.Add("Button", "x+0 yp+0 w65 h20 vZonePreviewBlink Disabled", "Blink"))
+    RegisterSettingsCtrl(s_gui.Add("Button", "x+0 yp+0 w65 h20 vZonePreviewBlink Disabled", "&Blink"))
         .OnEvent("Click", ShowSettingsGestureZonePreview.Bind("Blink"))
-    RegisterSettingsCtrl(s_gui.Add("Button", "x+0 yp+0 w65 h20 vZonePreviewOn", "On"))
+    RegisterSettingsCtrl(s_gui.Add("Button", "x+0 yp+0 w65 h20 vZonePreviewOn", "O&n"))
         .OnEvent("Click", ShowSettingsGestureZonePreview.Bind("On"))
     c := CONF.gest_zone_preview_color
     elem := RegisterSettingsCtrl(s_gui.Add("Edit", "Center x210 y310 h20 w174 v" . c.ini_name, c.v))
@@ -607,24 +631,18 @@ ShowSettings(*) {
     s_gui.Add("Text", "x20 w380 y30 h34 Center", "Button border colors:")
     loop 7 {
         c := CONF.Colors[A_Index]
-        _AddElems(c.form_type, A_Index == 1 ? 55 : "", , [
-            c.double_height, c.ini_name . (c.is_num ? " Number" : ""),
-            c.descr, c.v, c.extra_params*
-        ])
+        _AddConfElem(c, A_Index == 1 ? 55 : "")
     }
     s_gui.Add("Text", "x20 w380 y+8 h1 0x10")
     s_gui.Add("Text", "x20 w380 y+10 h34 Center", "Button indicator colors:")
     loop 8 {
         c := CONF.Colors[A_Index + 7]
-        _AddElems(c.form_type, A_Index == 1 ? 285 : "", , [
-            c.double_height, c.ini_name . (c.is_num ? " Number" : ""),
-            c.descr, c.v, c.extra_params*
-        ])
+        _AddConfElem(c, A_Index == 1 ? 285 : "")
     }
 
     tabs.UseTab("User")
 
-    s_gui.Add("Button", "vToggleUserDefined x15 y+10 h20 w130 Disabled", "&User defined")
+    s_gui.Add("Button", "vToggleUserDefined x15 y34 h20 w130 Disabled", "&User defined")
         .OnEvent("Click", _ToggleUserValues.Bind(1))
     s_gui.Add("Button", "vToggleProcessGroups x145 yp0 h20 w131", "&Process groups")
         .OnEvent("Click", _ToggleUserValues.Bind(2))
@@ -654,6 +672,8 @@ SettingsTabChanged(obj, *) {
     show_gestures := obj.Text == "Gestures"
     if !show_gestures {
         HideGestureZonePreview()
+    } else {
+        RestoreSettingsGestureZonePreview()
     }
     DllCall("SetFocus", "ptr", s_gui.Hwnd)
 }
@@ -662,7 +682,7 @@ SettingsTabChanged(obj, *) {
 ToggleGestureSettingsSubtab(trg, *) {
     for i, group in [
         ["General", s_gui.GestureGeneral],
-        ["Defaults", s_gui.GestureDefaults],
+        ["LiveHint", s_gui.GestureLiveHint],
         ["Colors", s_gui.GestureColors],
         ["Zones", s_gui.GestureZones],
     ] {
@@ -720,6 +740,22 @@ ToggleGestureSettingsSubtab(trg, *) {
         if s_gui.ZonePreviewMode == "On" {
             ShowGestureZonePreview(GetSettingsGestureZoneOpts(), "On")
         }
+    }
+}
+
+
+ToggleSettingsLiveHintFields(*) {
+    enabled := s_gui["LiveHintEnabled"].Value
+    for name in [
+        "LiveHint", "LiveHintAlt", "LHSize", "LiveHintStartCount", "LiveHintStartMove", "LiveHintMoveCount",
+        "LiveHintMinScore", "LiveHintBgColor", "LiveHintBgColorPick", "LiveHintOpacity",
+        "LiveHintTextColor",
+        "LiveHintTextColorPick", "LiveHintThumbnailColor", "LiveHintThumbnailColorPick",
+        "LiveHintBoxWidth", "LiveHintMargin",
+        "LHSizeStep", "LiveHintStartCountStep", "LiveHintStartMoveStep", "LiveHintMoveCountStep",
+        "LiveHintMinScoreStep", "LiveHintOpacityStep", "LiveHintBoxWidthStep", "LiveHintMarginStep"
+    ] {
+        try s_gui[name].Enabled := enabled
     }
 }
 
@@ -788,6 +824,8 @@ _AddGestureColorEditor(key, label, color_conf, len_conf, loop_conf) {
         len_conf.descr)))
     group.Push(RegisterSettingsCtrl(s_gui.Add("Edit", "Center x+0 yp-2 h20 w190 Number v"
         . len_conf.ini_name, len_conf.v)))
+    group.Push(RegisterSettingsCtrl(s_gui.Add("UpDown", "v" . len_conf.ini_name . "Step Range0-99999",
+        len_conf.v)))
     group.Push(RegisterSettingsCtrl(s_gui.Add("CheckBox", "x15 y434 h20 w380 v"
         . loop_conf.ini_name, loop_conf.descr)))
     group[-1].Value := loop_conf.v
@@ -862,17 +900,21 @@ _AddGestureZoneGroup(title, x, y, w, zones) {
 
         field := RegisterSettingsCtrl(s_gui.Add("Edit", "Center x+8 yp-2 w48 h20 Number v" . name,
             zone[2].v ? zone[2].v : 128))
+        stepper := RegisterSettingsCtrl(s_gui.Add("UpDown", "Range0-999", zone[2].v ? zone[2].v : 128))
         field.Enabled := en.Value
+        stepper.Enabled := en.Value
         field.OnEvent("Change", RefreshSettingsGestureZonePreview)
+        stepper.OnEvent("Change", RefreshSettingsGestureZonePreview)
         RegisterSettingsCtrl(s_gui.Add("Text", "x+4 yp+3 w18 h20", "px"))
-        en.OnEvent("Click", ToggleGestureZoneEdit.Bind(field))
+        en.OnEvent("Click", ToggleGestureZoneEdit.Bind(field, stepper))
         y += 28
     }
 }
 
 
-ToggleGestureZoneEdit(field, obj, *) {
+ToggleGestureZoneEdit(field, stepper, obj, *) {
     field.Enabled := obj.Value
+    stepper.Enabled := obj.Value
     RefreshSettingsGestureZonePreview()
 }
 
@@ -976,6 +1018,60 @@ RegisterSettingsCtrl(obj) {
 }
 
 
+_AddConfElem(conf, y:=false, group:=false) {
+    name := conf.ini_name . (conf.form_type != "num_step" && conf.is_num ? " Number" : "")
+    _AddElems(conf.form_type, y, group, [
+        conf.double_height, name, conf.descr, conf.v, conf.placeholder, conf.extra_params*
+    ])
+}
+
+
+_SetSettingsPlaceholder(input, placeholder) {
+    if placeholder {
+        SendMessage(0x1501, true, StrPtr(placeholder), input.Hwnd)
+    }
+    return input
+}
+
+
+_SyncSettingsFloatStepper(input, stepper, scale, range_min, range_max, *) {
+    try stepper.Value := Max(range_min, Min(range_max, Round(Float(input.Text) * scale)))
+}
+
+
+_ApplySettingsFloatStepper(input, stepper, scale, *) {
+    input.Text := Format("{:.2f}", stepper.Value / scale)
+}
+
+
+_ApplySettingsIntStepper(input, stepper, step, range_min, range_max, *) {
+    global settings_int_stepper_vals, settings_int_stepper_guards
+
+    hwnd := stepper.Hwnd
+    if settings_int_stepper_guards.Has(hwnd) {
+        return
+    }
+    try {
+        prev_val := settings_int_stepper_vals.Has(hwnd) ? settings_int_stepper_vals[hwnd] : Integer(input.Text)
+    } catch {
+        prev_val := stepper.Value
+    }
+
+    new_val := stepper.Value
+    if Abs(new_val - prev_val) == 1 {
+        new_val := Max(range_min, Min(range_max, prev_val + (new_val > prev_val ? step : -step)))
+    }
+
+    if new_val != stepper.Value {
+        settings_int_stepper_guards[hwnd] := true
+        stepper.Value := new_val
+        input.Text := new_val
+        settings_int_stepper_guards.Delete(hwnd)
+    }
+    settings_int_stepper_vals[hwnd] := new_val
+}
+
+
 _AddElems(elem_type, y:=false, _group:=false, data*) {
     static cur_h:=0, _shift:=8
 
@@ -988,28 +1084,59 @@ _AddElems(elem_type, y:=false, _group:=false, data*) {
         h := arr[1] ? 40 : 20
         ysh := arr[1] ? 8 : -2
         name := arr[2]
+        placeholder := arr.Length >= 5 ? arr[5] : ""
         switch elem_type {
             case "ddl":
                 RegisterSettingsCtrl(s_gui.Add("Text", "x15 y" . cur_h . " h" . h . " w190", arr[3]))
                 elem := RegisterSettingsCtrl(
-                    s_gui.Add("DropDownList", "x+10 yp" . ysh . " w190 v" . name, arr[5])
+                    s_gui.Add("DropDownList", "x+10 yp" . ysh . " w190 v" . name, arr[6])
                 )
-                if arr[6] {
+                if arr[7] {
                     elem.Text := arr[4]
                 } else {
                     elem.Value := arr[4]
                 }
             case "str":
                 RegisterSettingsCtrl(s_gui.Add("Text", "x15 y" . cur_h . " h" . h . " w200", arr[3]))
-                RegisterSettingsCtrl(
-                    s_gui.Add("Edit", "Center x+0 yp" . ysh . " h20 w190 v" . name, arr[4])
+                _SetSettingsPlaceholder(
+                    RegisterSettingsCtrl(
+                        s_gui.Add("Edit", "Center x+0 yp" . ysh . " h20 w190 v" . name, arr[4])
+                    ),
+                    placeholder
                 )
+            case "num_step":
+                range_min := arr[6], range_max := arr[7], scale := arr[8]
+                step := arr.Length >= 9 ? arr[9] : 1
+                try {
+                    step_val := scale == 1 ? Integer(arr[4]) : Round(Float(arr[4]) * scale)
+                } catch {
+                    step_val := 0
+                }
+                val := scale == 1 ? step_val : Format("{:.2f}", step_val / scale)
+                RegisterSettingsCtrl(s_gui.Add("Text", "x15 y" . cur_h . " h" . h . " w200", arr[3]))
+                input := _SetSettingsPlaceholder(
+                    RegisterSettingsCtrl(s_gui.Add("Edit", "Center x+0 yp" . ysh . " h20 w190"
+                        . (scale == 1 ? " Number" : "") . " v" . name, val)),
+                    placeholder
+                )
+                stepper_opts := "v" . name . "Step Range" . range_min . "-" . range_max
+                    . (scale == 1 ? "" : " -0x2")
+                stepper := RegisterSettingsCtrl(s_gui.Add("UpDown", stepper_opts, step_val))
+                if scale != 1 {
+                    input.OnEvent("Change", _SyncSettingsFloatStepper.Bind(input, stepper, scale,
+                        range_min, range_max))
+                    stepper.OnEvent("Change", _ApplySettingsFloatStepper.Bind(input, stepper, scale))
+                } else if step != 1 {
+                    settings_int_stepper_vals[stepper.Hwnd] := step_val
+                    stepper.OnEvent("Change", _ApplySettingsIntStepper.Bind(input, stepper, step,
+                        range_min, range_max))
+                }
             case "checkbox":
                 RegisterSettingsCtrl(
                     s_gui.Add("CheckBox", "x15 y" . cur_h . " h" . h . " w380 v" . name, arr[3])
                 ).Value := arr[4]
             case "h_checkbox":
-                fn := MsgBox.Bind(arr[5], arr[6], "IconI")
+                fn := MsgBox.Bind(arr[6], arr[7], "IconI")
                 RegisterSettingsCtrl(s_gui.Add("Button", "x11 y" . cur_h . " h20 w20", "?"))
                     .OnEvent("Click", (*) => fn.Call())
                 RegisterSettingsCtrl(
@@ -1017,15 +1144,21 @@ _AddElems(elem_type, y:=false, _group:=false, data*) {
                 ).Value := arr[4]
             case "color":
                 RegisterSettingsCtrl(s_gui.Add("Text", "x15 y" . cur_h . " h" . h . " w200", arr[3]))
-                RegisterSettingsCtrl(
-                    s_gui.Add("Edit", "Center x+0 yp" . ysh . " h20 w170 v" . name, arr[4])
+                _SetSettingsPlaceholder(
+                    RegisterSettingsCtrl(
+                        s_gui.Add("Edit", "Center x+0 yp" . ysh . " h20 w170 v" . name, arr[4])
+                    ),
+                    placeholder
                 )
                 RegisterSettingsCtrl(s_gui.Add("Button", "x+1 yp+0 h20 w20 v" . name . "Pick", "🎨"))
                     .OnEvent("Click", PasteColorFromPick.Bind(s_gui.Hwnd, s_gui[name], false))
             case "m_color":
                 RegisterSettingsCtrl(s_gui.Add("Text", "x15 y" . cur_h . " h" . h . " w200", arr[3]))
-                RegisterSettingsCtrl(
-                    s_gui.Add("Edit", "Center x+0 yp" . ysh . " h20 w170 v" . name, arr[4])
+                _SetSettingsPlaceholder(
+                    RegisterSettingsCtrl(
+                        s_gui.Add("Edit", "Center x+0 yp" . ysh . " h20 w170 v" . name, arr[4])
+                    ),
+                    placeholder
                 )
                 RegisterSettingsCtrl(s_gui.Add("Button", "x+1 yp+0 h20 w20 v" . name . "Pick", "🎨"))
                     .OnEvent("Click", PasteColorFromPick.Bind(s_gui.Hwnd, s_gui[name], true))
@@ -1085,7 +1218,7 @@ SaveConfig(*) {
             ToggleStartup(s_gui["Autostart"].Value)
         }
 
-        for name in ["Main", "GUI", "Gestures", "GestureDefaults", "GestureZones", "Colors"] {
+        for name in ["Main", "GUI", "Gestures", "GestureLiveHint", "GestureDefaults", "GestureZones", "Colors"] {
             for elem in CONF.%name% {
                 val := GetSettingsValue(name, elem)
                 IniWrite(val, "config.ini", name, elem.ini_name)
@@ -1129,7 +1262,7 @@ SaveConfig(*) {
 
 
 CheckChanges(strict:=false, selected:=false, *) {
-    for name in ["Main", "GUI", "Gestures", "GestureDefaults", "GestureZones", "Colors"] {
+    for name in ["Main", "GUI", "Gestures", "GestureLiveHint", "GestureDefaults", "GestureZones", "Colors"] {
         if selected && !selected.Has(name) {
             continue
         }
@@ -1186,9 +1319,23 @@ GetSettingsValue(sect, elem) {
         return 0
     }
 
-    return elem.form_type == "color" || elem.form_type == "m_color" || elem.form_type == "str"
+    val := elem.form_type == "color" || elem.form_type == "m_color" || elem.form_type == "str"
+        || elem.form_type == "num_step"
         || elem.form_type == "ddl" && elem.val_type == "str"
             ? s_gui[elem.ini_name].Text : s_gui[elem.ini_name].Value
+    if elem.val_type == "int" || elem.val_type == "str" && elem.is_num {
+        val := NormalizeSettingsIntegerText(val)
+    }
+    return val
+}
+
+
+NormalizeSettingsIntegerText(val) {
+    val := Trim(val)
+    for sep in [".", ",", " "] {
+        val := StrReplace(val, sep)
+    }
+    return val
 }
 
 
