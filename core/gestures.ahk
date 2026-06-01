@@ -32,6 +32,8 @@ live_hint_icon_cache := Map()
 live_hint_draw_sig := ""
 live_hint_res := false
 live_hint_chain_text := ""
+live_hint_origin_x := 0
+live_hint_origin_y := 0
 gesture_cancelled := false
 gesture_last_move_tick := 0
 gesture_segments := []
@@ -566,7 +568,7 @@ StartDraw(gestures:=false, *) {
     global is_drawing, prev_x, prev_y, points, cum_len, prev_width, cur_grad_len, pool_gestures,
         live_hint_start_shown, live_hint_last_tick, live_hint_last_len, live_hint_draw_sig,
         live_hint_chain_text, gesture_cancelled, gesture_last_move_tick, gesture_segments,
-        gesture_opacity_factor, gesture_waiting_first_move
+        gesture_opacity_factor, gesture_waiting_first_move, live_hint_origin_x, live_hint_origin_y
 
     if is_drawing {
         return
@@ -581,6 +583,8 @@ StartDraw(gestures:=false, *) {
     PresentOverlay()
     gest_overlay.Show("NA")
     MouseGetPos(&prev_x, &prev_y)
+    live_hint_origin_x := prev_x
+    live_hint_origin_y := prev_y
     g_opts := ""
 
     if init_drawing {
@@ -623,7 +627,7 @@ StartDraw(gestures:=false, *) {
     ResetShakeCancel(prev_x, prev_y)
     SetTimer(CheckGestureIdlePause, -track_period)
     if !GetLiveHintStartMove() {
-        ShowStartLiveHint(pool_gestures, prev_x, prev_y)
+        ShowStartLiveHint(pool_gestures, live_hint_origin_x, live_hint_origin_y)
         live_hint_start_shown := true
     }
 }
@@ -903,11 +907,12 @@ TrackMouse() {
                 if CONF.live_hint_move_count.v && ShouldRefreshLiveHint(cum_len) {
                     live_hint_last_tick := A_TickCount
                     live_hint_last_len := cum_len
-                    SetTimer(LiveHint.Bind(points, pool_gestures, points[1][1], points[1][2]), -1)
+                    SetTimer(LiveHint.Bind(points, pool_gestures,
+                        live_hint_origin_x, live_hint_origin_y), -1)
                     return
                 }
             } else if !live_hint_start_shown && cum_len >= GetLiveHintStartMove() {
-                ShowStartLiveHint(pool_gestures, points[1][1], points[1][2])
+                ShowStartLiveHint(pool_gestures, live_hint_origin_x, live_hint_origin_y)
                 live_hint_start_shown := true
                 return
             }
@@ -1057,7 +1062,7 @@ ConfirmGestureIdleTransition(gesture) {
     global await_gest, prev_x, prev_y, points, cum_len, prev_width, cur_grad_len,
         live_hint_start_shown, live_hint_last_tick, live_hint_last_len, live_hint_draw_sig,
         live_hint_chain_text, gesture_last_move_tick, overlay_opts, pool_gestures,
-        gesture_waiting_first_move
+        gesture_waiting_first_move, live_hint_origin_x, live_hint_origin_y
 
     node := _GetFin(gesture)
     if !node || !GestureHasChildGestures(gesture) {
@@ -1094,11 +1099,9 @@ ConfirmGestureIdleTransition(gesture) {
     gesture_waiting_first_move := true
     ResetShakeCancel(prev_x, prev_y)
     ClearLiveHintBox()
-    if CONF.live_hint_enabled.v && !GetLiveHintStartMove() {
-        ShowStartLiveHint(pool_gestures, prev_x, prev_y)
+    if CONF.live_hint_enabled.v {
+        ShowStartLiveHint(pool_gestures, live_hint_origin_x, live_hint_origin_y)
         live_hint_start_shown := true
-    } else if CONF.live_hint_enabled.v && live_hint_chain_text {
-        DrawLiveHintList([], 0, prev_x, prev_y)
     }
     PresentOverlay()
     return true
