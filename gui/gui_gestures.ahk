@@ -94,7 +94,7 @@ DeleteSelectedGesture(*) {
         path := current_path.Clone()
         path.Length -= 1
         path.Push(
-            current_path[-1][1], current_path[-1][2] & ~1, current_path[-1][3], current_path[-1][4]
+            [current_path[-1][1], current_path[-1][2] & ~1, current_path[-1][3], current_path[-1][4]]
         )
         res := _WalkJson(json_root[gui_lang], path)
     } else {

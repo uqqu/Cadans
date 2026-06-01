@@ -204,7 +204,8 @@ SendAwaiting(order, sc:=0) {
                     if res !== -1 {
                         if res == false || res[2] == "" || res[1] < CONF.min_cos_similarity.v {
                             if t && t[4] && !chord_presses.Has(t[2]) && (!current_mod || sc == t[2]) {
-                                TransitionProcessing(t[1], t[2], t[3])
+                                is_unrecognized := res != false || cum_len > Max(CONF.min_gesture_len.v, 10)
+                                ProcessUnrecognizedGesture(t[1], t[2], t[3], is_unrecognized)
                             }
                         } else {
                             if t {
@@ -226,6 +227,33 @@ SendAwaiting(order, sc:=0) {
                 b := true
             }
         }
+    }
+}
+
+
+ProcessUnrecognizedGesture(node, sc:=0, snapshot:=false, is_unrecognized:=true) {
+    fin := _GetFin(node)
+    if !fin {
+        return
+    }
+
+    ch_bh := is_unrecognized
+        ? GetGestureUnrecognizedBehavior(fin.gesture_opts)
+        : fin.child_behavior || 4
+    if ch_bh == 5 {
+        return
+    }
+    if ch_bh == 2 || ch_bh == 4 {
+        SendKbd(fin.down_type, snapshot && fin.down_type == TYPES.Default ? snapshot : fin.down_val)
+        if up_actions.Has(sc) {
+            SendKbd(up_actions[sc].up_type, up_actions[sc].up_val)
+            up_actions.Delete(sc)
+        }
+    }
+    if ch_bh < 3 {
+        StepBack()
+    } else {
+        ToRoot()
     }
 }
 

@@ -2,6 +2,7 @@
 
 track_period := 8
 live_hint_period := 40
+idle_feedback_delay := 100
 w_max := 20
 
 gdip_token := 0
@@ -13,6 +14,11 @@ g_bits := 0
 g_overlay_w := 0
 g_overlay_h := 0
 g_overlay_bottom_gap := 0
+idle_feedback_overlay := false
+idle_fb_mem_dc := 0
+idle_fb_hbm := 0
+idle_fb_bits := 0
+idle_fb_size := 0
 
 pool_gestures := false
 is_drawing := false
@@ -25,6 +31,13 @@ live_hint_last_len := 0.0
 live_hint_icon_cache := Map()
 live_hint_draw_sig := ""
 live_hint_res := false
+live_hint_chain_text := ""
+gesture_cancelled := false
+gesture_last_move_tick := 0
+gesture_segments := []
+gesture_opacity_factor := 1.0
+shake_cancel_points := []
+gesture_waiting_first_move := false
 points := []
 prev_x := 0
 prev_y := 0
@@ -164,6 +177,7 @@ GetOverlayGraphics(reset:=false) {
         DllCall("gdiplus\GdipSetCompositingMode", "ptr", g, "int", 0)  ; SourceOver
         DllCall("gdiplus\GdipSetCompositingQuality", "ptr", g, "int", 4)  ; HighQuality
         DllCall("gdiplus\GdipSetSmoothingMode", "ptr", g, "int", 4)  ; AntiAlias
+        DllCall("gdiplus\GdipSetTextRenderingHint", "ptr", g, "int", 4)  ; AntiAliasGridFit
         DllCall("gdiplus\GdipSetPixelOffsetMode", "ptr", g, "int", 3)  ; Half
 
         cached_bits := g_bits
@@ -209,8 +223,10 @@ DestroyGestOverlay() {
     global gest_overlay, g_mem_dc, g_hbm, g_bits, g_overlay_w, g_overlay_h, g_overlay_bottom_gap
 
     SetTimer(TrackMouse, 0)
+    SetTimer(CheckGestureIdlePause, 0)
     SetTimer(DestroyGestOverlay, 0)
 
+    DestroyIdleFeedbackOverlay()
     ClearLiveHintIconCache()
     ClearLiveHintResources()
     GetOverlayGraphics(true)
@@ -237,6 +253,282 @@ DestroyGestOverlay() {
 }
 
 
+CreateIdleFeedbackOverlay(size:=72) {
+    global idle_feedback_overlay, idle_fb_mem_dc, idle_fb_hbm, idle_fb_bits, idle_fb_size
+
+    if idle_feedback_overlay && idle_fb_size == size {
+        return true
+    }
+
+    DestroyIdleFeedbackOverlay()
+    if !GdipStartup() {
+        return false
+    }
+
+    idle_fb_size := size
+    idle_feedback_overlay := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x80020 -DPIScale")
+    idle_feedback_overlay.Show("Hide x0 y0 w" . size . " h" . size)
+
+    hdc := DllCall("GetDC", "ptr", 0, "ptr")
+    idle_fb_mem_dc := DllCall("gdi32\CreateCompatibleDC", "ptr", hdc, "ptr")
+    DllCall("ReleaseDC", "ptr", 0, "ptr", hdc)
+
+    bi := Buffer(40, 0)
+    NumPut("UInt", 40, bi, 0)
+    NumPut("Int", size, bi, 4)
+    NumPut("Int", -size, bi, 8)
+    NumPut("UShort", 1, bi, 12)
+    NumPut("UShort", 32, bi, 14)
+    NumPut("UInt", 0, bi, 16)
+
+    idle_fb_hbm := DllCall("gdi32\CreateDIBSection",
+        "ptr", 0, "ptr", bi, "UInt", 0, "ptr*", &idle_fb_bits:=0, "ptr", 0, "UInt", 0, "ptr")
+    if !idle_fb_hbm {
+        DestroyIdleFeedbackOverlay()
+        return false
+    }
+    DllCall("gdi32\SelectObject", "ptr", idle_fb_mem_dc, "ptr", idle_fb_hbm, "ptr")
+    return true
+}
+
+
+DestroyIdleFeedbackOverlay() {
+    global idle_feedback_overlay, idle_fb_mem_dc, idle_fb_hbm, idle_fb_bits, idle_fb_size
+
+    GetIdleFeedbackGraphics(true)
+    if idle_feedback_overlay {
+        try idle_feedback_overlay.Destroy()
+        idle_feedback_overlay := false
+    }
+    idle_fb_bits := 0
+    idle_fb_size := 0
+    if idle_fb_hbm {
+        DllCall("gdi32\DeleteObject", "ptr", idle_fb_hbm)
+        idle_fb_hbm := 0
+    }
+    if idle_fb_mem_dc {
+        DllCall("gdi32\DeleteDC", "ptr", idle_fb_mem_dc)
+        idle_fb_mem_dc := 0
+    }
+}
+
+
+GetIdleFeedbackGraphics(reset:=false) {
+    global idle_fb_bits, idle_fb_size
+    static bmp:=0, g:=0, cached_bits:=0
+
+    if reset {
+        if g {
+            DllCall("gdiplus\GdipDeleteGraphics", "ptr", g)
+            g := 0
+        }
+        if bmp {
+            DllCall("gdiplus\GdipDisposeImage", "ptr", bmp)
+            bmp := 0
+        }
+        cached_bits := 0
+        return 0
+    }
+
+    if !idle_fb_bits {
+        return 0
+    }
+
+    if idle_fb_bits !== cached_bits || !g {
+        if g {
+            DllCall("gdiplus\GdipDeleteGraphics", "ptr", g)
+            g := 0
+        }
+        if bmp {
+            DllCall("gdiplus\GdipDisposeImage", "ptr", bmp)
+            bmp := 0
+        }
+        if DllCall(
+            "gdiplus\GdipCreateBitmapFromScan0", "int", idle_fb_size, "int", idle_fb_size,
+            "int", idle_fb_size * 4, "int", 0xE200B, "ptr", idle_fb_bits, "ptr*", &bmp:=0
+        ) {
+            return 0
+        }
+        if DllCall("gdiplus\GdipGetImageGraphicsContext", "ptr", bmp, "ptr*", &g:=0) {
+            DllCall("gdiplus\GdipDisposeImage", "ptr", bmp)
+            bmp := 0
+            return 0
+        }
+        DllCall("gdiplus\GdipSetCompositingMode", "ptr", g, "int", 0)
+        DllCall("gdiplus\GdipSetCompositingQuality", "ptr", g, "int", 4)
+        DllCall("gdiplus\GdipSetSmoothingMode", "ptr", g, "int", 4)
+        DllCall("gdiplus\GdipSetPixelOffsetMode", "ptr", g, "int", 3)
+        cached_bits := idle_fb_bits
+    }
+    return g
+}
+
+
+DrawIdleFeedback(kind, progress) {
+    global idle_feedback_overlay, idle_fb_mem_dc, idle_fb_bits, idle_fb_size
+
+    mode := GetIdleFeedbackMode(kind)
+    if mode == 1 {
+        HideIdleFeedback()
+        return
+    }
+
+    try {
+        size := Max(24, Integer(CONF.gesture_idle_feedback_size.v))
+    } catch {
+        size := 72
+    }
+    if !CreateIdleFeedbackOverlay(size) || !idle_fb_bits {
+        return
+    }
+
+    DllCall("msvcrt\memset", "ptr", idle_fb_bits, "int", 0, "uptr", size * size * 4)
+    g := GetIdleFeedbackGraphics()
+    if !g {
+        return
+    }
+
+    feedback_rgb := GetIdleFeedbackColor(kind)
+    cx := size / 2
+    cy := size / 2
+    radius := Max(8, size * 0.32)
+    pen_w := Max(2.0, size * 0.055)
+
+    if mode == 2 {
+        DrawIdleFeedbackBackground(g, cx, cy, radius, pen_w)
+        DrawIdleFeedbackRing(g, cx, cy, radius, pen_w, feedback_rgb, progress)
+    } else if mode == 3 {
+        DrawIdleFeedbackBackground(g, cx, cy, radius, pen_w)
+        DrawIdleFeedbackPie(g, cx, cy, radius, feedback_rgb, progress)
+    } else if mode == 4 {
+        DrawIdleFeedbackShrink(g, cx, cy, radius, feedback_rgb, progress)
+    } else {
+        DrawIdleFeedbackBar(g, cx, cy, size, pen_w, feedback_rgb, progress)
+    }
+
+    MouseGetPos(&mx, &my)
+    dst := Buffer(8, 0)
+    NumPut("Int", Round(mx - cx), dst, 0)
+    NumPut("Int", Round(my - cy), dst, 4)
+    dims := Buffer(8, 0)
+    NumPut("Int", size, dims, 0)
+    NumPut("Int", size, dims, 4)
+    src := Buffer(8, 0)
+    overlay_opacity := _ClampAlpha(255 * Max(0, Min(1, progress)))
+    blend := Buffer(4, 0)
+    NumPut("UChar", 0, blend, 0)
+    NumPut("UChar", 0, blend, 1)
+    NumPut("UChar", overlay_opacity, blend, 2)
+    NumPut("UChar", 1, blend, 3)
+
+    idle_feedback_overlay.Show("NA")
+    DllCall(
+        "user32\UpdateLayeredWindow", "ptr", idle_feedback_overlay.Hwnd, "ptr", 0,
+        "ptr", dst, "ptr", dims, "ptr", idle_fb_mem_dc, "ptr", src,
+        "UInt", 0, "ptr", blend, "UInt", 2
+    )
+}
+
+
+GetIdleFeedbackMode(kind) {
+    try return kind == "confirm" ? CONF.gesture_idle_confirm_mode.v : CONF.gesture_idle_cancel_mode.v
+    return 2
+}
+
+
+GetIdleFeedbackColor(kind) {
+    try {
+        colour := kind == "confirm" ? CONF.gesture_idle_confirm_color.v : CONF.gesture_idle_cancel_color.v
+        colors := ParseAhkColorList(colour)
+        if colors.Length {
+            return colors[1]
+        }
+    }
+    return kind == "confirm" ? 0x47CD7C : 0xEF6868
+}
+
+
+DrawIdleFeedbackBackground(g, cx, cy, radius, pen_w) {
+    if !DllCall("gdiplus\GdipCreatePen1", "uint", 0x44303030,
+        "float", pen_w, "int", 2, "ptr*", &pen_bg:=0) {
+        DllCall("gdiplus\GdipDrawEllipse", "ptr", g, "ptr", pen_bg,
+            "float", cx - radius, "float", cy - radius, "float", radius * 2, "float", radius * 2)
+        DllCall("gdiplus\GdipDeletePen", "ptr", pen_bg)
+    }
+}
+
+
+DrawIdleFeedbackRing(g, cx, cy, radius, pen_w, feedback_rgb, progress) {
+    if !DllCall("gdiplus\GdipCreatePen1", "uint", (210 << 24) | feedback_rgb,
+        "float", pen_w, "int", 2, "ptr*", &pen_fg:=0) {
+        DllCall("gdiplus\GdipSetPenStartCap", "ptr", pen_fg, "int", 2)
+        DllCall("gdiplus\GdipSetPenEndCap", "ptr", pen_fg, "int", 2)
+        DllCall("gdiplus\GdipDrawArc", "ptr", g, "ptr", pen_fg,
+            "float", cx - radius, "float", cy - radius, "float", radius * 2, "float", radius * 2,
+            "float", -90, "float", 360 * Max(0, Min(1, progress)))
+        DllCall("gdiplus\GdipDeletePen", "ptr", pen_fg)
+    }
+}
+
+
+DrawIdleFeedbackPie(g, cx, cy, radius, feedback_rgb, progress) {
+    if !DllCall("gdiplus\GdipCreateSolidFill", "uint", (118 << 24) | feedback_rgb,
+        "ptr*", &brush_fg:=0) {
+        DllCall("gdiplus\GdipFillPie", "ptr", g, "ptr", brush_fg,
+            "float", cx - radius, "float", cy - radius, "float", radius * 2, "float", radius * 2,
+            "float", -90, "float", 360 * Max(0, Min(1, progress)))
+        DllCall("gdiplus\GdipDeleteBrush", "ptr", brush_fg)
+    }
+}
+
+
+DrawIdleFeedbackShrink(g, cx, cy, radius, feedback_rgb, progress) {
+    progress := Max(0, Min(1, progress))
+    cur_radius := Max(3, radius * (1 - progress))
+    if !DllCall("gdiplus\GdipCreateSolidFill", "uint", (132 << 24) | feedback_rgb,
+        "ptr*", &brush_fg:=0) {
+        DllCall("gdiplus\GdipFillEllipse", "ptr", g, "ptr", brush_fg,
+            "float", cx - cur_radius, "float", cy - cur_radius,
+            "float", cur_radius * 2, "float", cur_radius * 2)
+        DllCall("gdiplus\GdipDeleteBrush", "ptr", brush_fg)
+    }
+}
+
+
+DrawIdleFeedbackBar(g, cx, cy, size, pen_w, feedback_rgb, progress) {
+    bar_w := size * 0.70
+    x1 := cx - bar_w / 2
+    x2 := cx + bar_w / 2
+    y := cy + size * 0.23
+    if !DllCall("gdiplus\GdipCreatePen1", "uint", 0x66303030,
+        "float", pen_w, "int", 2, "ptr*", &pen_bg:=0) {
+        DllCall("gdiplus\GdipSetPenStartCap", "ptr", pen_bg, "int", 2)
+        DllCall("gdiplus\GdipSetPenEndCap", "ptr", pen_bg, "int", 2)
+        DllCall("gdiplus\GdipDrawLine", "ptr", g, "ptr", pen_bg,
+            "float", x1, "float", y, "float", x2, "float", y)
+        DllCall("gdiplus\GdipDeletePen", "ptr", pen_bg)
+    }
+    if !DllCall("gdiplus\GdipCreatePen1", "uint", (220 << 24) | feedback_rgb,
+        "float", pen_w, "int", 2, "ptr*", &pen_fg:=0) {
+        DllCall("gdiplus\GdipSetPenStartCap", "ptr", pen_fg, "int", 2)
+        DllCall("gdiplus\GdipSetPenEndCap", "ptr", pen_fg, "int", 2)
+        DllCall("gdiplus\GdipDrawLine", "ptr", g, "ptr", pen_fg,
+            "float", x1, "float", y,
+            "float", x1 + bar_w * Max(0, Min(1, progress)), "float", y)
+        DllCall("gdiplus\GdipDeletePen", "ptr", pen_fg)
+    }
+}
+
+
+HideIdleFeedback() {
+    global idle_feedback_overlay
+
+    if idle_feedback_overlay {
+        try idle_feedback_overlay.Hide()
+    }
+}
+
+
 CollectPool(gestures) {
     global pool_gestures
 
@@ -244,16 +536,37 @@ CollectPool(gestures) {
     pool := GetPool(x, y)
     pool_gestures := []
     for _, mod_mp in gestures {
-        if mod_mp.Has(0) && _GetFin(mod_mp[0]).opts.pool == pool {
+        node := mod_mp.Has(0) ? _GetFin(mod_mp[0]) : false
+        if IsGestureFin(node) && node.opts.pool == pool {
             pool_gestures.Push(mod_mp[0])
         }
     }
 }
 
 
+CollectAllGestures(gestures) {
+    global pool_gestures
+
+    pool_gestures := []
+    for _, mod_mp in gestures {
+        node := mod_mp.Has(0) ? _GetFin(mod_mp[0]) : false
+        if IsGestureFin(node) {
+            pool_gestures.Push(mod_mp[0])
+        }
+    }
+}
+
+
+IsGestureFin(node) {
+    return node is Object && node.HasOwnProp("opts")
+}
+
+
 StartDraw(gestures:=false, *) {
     global is_drawing, prev_x, prev_y, points, cum_len, prev_width, cur_grad_len, pool_gestures,
-        live_hint_start_shown, live_hint_last_tick, live_hint_last_len, live_hint_draw_sig
+        live_hint_start_shown, live_hint_last_tick, live_hint_last_len, live_hint_draw_sig,
+        live_hint_chain_text, gesture_cancelled, gesture_last_move_tick, gesture_segments,
+        gesture_opacity_factor, gesture_waiting_first_move
 
     if is_drawing {
         return
@@ -301,6 +614,14 @@ StartDraw(gestures:=false, *) {
     live_hint_last_tick := 0
     live_hint_last_len := 0.0
     live_hint_draw_sig := ""
+    live_hint_chain_text := ""
+    gesture_cancelled := false
+    gesture_last_move_tick := A_TickCount
+    gesture_segments := []
+    gesture_opacity_factor := 1.0
+    gesture_waiting_first_move := false
+    ResetShakeCancel(prev_x, prev_y)
+    SetTimer(CheckGestureIdlePause, -track_period)
     if !GetLiveHintStartMove() {
         ShowStartLiveHint(pool_gestures, prev_x, prev_y)
         live_hint_start_shown := true
@@ -318,6 +639,7 @@ SetOverlayOpts(opts, pool) {
 
     vals := StrSplit(opts, ";")
     color_key := GetGestureColorKey(pool)
+    base_i := GestureOverlayOptsBaseIndex(vals)
     overlay_opts := {pool: pool}
     for arr in [
         ["gest_colors", "gest_zone_colors", 0],
@@ -325,7 +647,7 @@ SetOverlayOpts(opts, pool) {
         ["grad_loop", "gest_zone_grad_loop", 2],
     ] {
         try {
-            zi := GetGestureZoneOverrideIndex(color_key, arr[3])
+            zi := base_i + GetGestureZoneOverrideIndex(color_key, arr[3])
             overlay_opts.%arr[1]% := vals.Has(zi) && vals[zi] !== "" ? vals[zi]
                 : CONF.%arr[2]%[color_key].v
         } catch {
@@ -351,16 +673,76 @@ SetOverlayOpts(opts, pool) {
 }
 
 
+GestureOverlayOptsBaseIndex(vals) {
+    if vals.Length >= 6 && IsGesturePatternOpts(vals) {
+        return GesturePatternHasUnrecognizedBehavior(vals) ? 6 : 5
+    }
+    return 0
+}
+
+
+IsGesturePatternOpts(vals) {
+    try {
+        ParseGesturePool(vals[1])
+        Integer(vals[2])
+        Float(vals[3])
+        Integer(vals[4])
+        Integer(vals[5])
+        return true
+    }
+    return false
+}
+
+
+GesturePatternHasUnrecognizedBehavior(vals) {
+    return vals.Has(7) && Trim(vals[7]) ~= "^[3-5]$"
+}
+
+
+GetGestureUnrecognizedBehavior(opts, fallback:=5) {
+    vals := StrSplit(opts, ";")
+    if IsGesturePatternOpts(vals) {
+        if GesturePatternHasUnrecognizedBehavior(vals) {
+            return Integer(vals[7])
+        }
+        return fallback || 5
+    }
+    try {
+        behavior := Integer(vals[1])
+        return behavior >= 1 && behavior <= 5 ? behavior : (fallback || 5)
+    }
+    return fallback || 5
+}
+
+
 EndDraw(*) {
-    global is_drawing, init_drawing, points, overlay_opts, pool_gestures, form_points
+    global is_drawing, init_drawing, points, overlay_opts, pool_gestures, form_points,
+        gesture_cancelled, gesture_segments
 
     if !is_drawing {
         return
     }
 
     SetTimer(TrackMouse, 0)
+    SetTimer(CheckGestureIdlePause, 0)
     is_drawing := false
     DestroyGestOverlay()
+
+    if gesture_cancelled {
+        if init_drawing {
+            init_drawing := false
+            form_points := false
+            try form["SetGesture"].Text := "Cancelled"
+            try form["ShowGesture"].Text := "🙈"
+            SetTimer(_ReturnButtonText, -1200)
+            try WinActivate "ahk_id " . form.Hwnd
+            return -1
+        }
+        overlay_opts := false
+        pool_gestures := false
+        SetTimer(RestoreSettingsGestureZonePreview, -50)
+        return -1
+    }
 
     if init_drawing {
         form_points := []
@@ -388,6 +770,7 @@ EndDraw(*) {
     ret := cum_len > Max(CONF.min_gesture_len.v, 10) ? Recognize(points, pool_gestures) : false
     overlay_opts := false
     pool_gestures := false
+    gesture_segments := []
     SetTimer(RestoreSettingsGestureZonePreview, -50)
     return ret
 }
@@ -418,7 +801,7 @@ ParseAhkColorList(colors) {
 
 
 DrawLine(x1, y1, x2, y2, width) {
-    global cur_grad_len
+    global cur_grad_len, gesture_opacity_factor
     static pen:=0
 
     SetTimer(DestroyGestOverlay, 0)
@@ -434,7 +817,8 @@ DrawLine(x1, y1, x2, y2, width) {
 
     if !pen {
         if DllCall("gdiplus\GdipCreatePen1",
-            "uint", (_ClampAlpha(CONF.gest_opacity.v)<<24)|0, "float", width, "int", 2, "ptr*", &pen:=0) {
+            "uint", (_ClampAlpha(CONF.gest_opacity.v * gesture_opacity_factor)<<24)|0,
+            "float", width, "int", 2, "ptr*", &pen:=0) {
             return
         }
         DllCall("gdiplus\GdipSetPenLineJoin", "ptr", pen, "int", 2)
@@ -447,22 +831,25 @@ DrawLine(x1, y1, x2, y2, width) {
     dx := x2 - x1
     dy := y2 - y1
     seg_len := Sqrt(dx*dx + dy*dy)
-    parts := overlay_opts.gest_colors.Length > 1 ? Max(Ceil(seg_len / 3), 1) : 1
+    parts := Max(Ceil(seg_len / 3), 1)
 
     loop parts {
-        try {  ; TODO
+        try {
             t0 := (A_Index - 1) / parts
             t1 := A_Index / parts
             mid := (A_Index - 0.5) / parts
 
-            colour := ColorAtProgress((cur_grad_len + seg_len * mid) / overlay_opts.grad_len)
-            DllCall("gdiplus\GdipSetPenColor", "ptr", pen, "uint", (_ClampAlpha(CONF.gest_opacity.v)<<24)|colour)
+            line_colour := ColorAtProgress((cur_grad_len + seg_len * mid) / overlay_opts.grad_len)
+            DllCall("gdiplus\GdipSetPenColor", "ptr", pen,
+                "uint", (_ClampAlpha(CONF.gest_opacity.v * gesture_opacity_factor)<<24)|line_colour)
 
             xa := x1 + dx * t0
             ya := y1 + dy * t0
             xb := x1 + dx * t1
             yb := y1 + dy * t1
 
+            DllCall("gdiplus\GdipSetPenStartCap", "ptr", pen, "int", 2)
+            DllCall("gdiplus\GdipSetPenEndCap", "ptr", pen, "int", 2)
             DllCall("gdiplus\GdipDrawLine", "ptr", g, "ptr", pen,
                 "float", xa, "float", ya, "float", xb, "float", yb)
         }
@@ -473,18 +860,25 @@ DrawLine(x1, y1, x2, y2, width) {
 
 TrackMouse() {
     global prev_x, prev_y, cum_len, prev_width, live_hint_start_shown, live_hint_last_tick, live_hint_last_len
+        , gesture_last_move_tick, gesture_waiting_first_move
 
     if !is_drawing {
         SetTimer(TrackMouse, 0)
+        SetTimer(CheckGestureIdlePause, 0)
         return
     }
 
     MouseGetPos(&x, &y)
     if x !== prev_x || y !== prev_y {
+        HideIdleFeedback()
         dx := x - prev_x
         dy := y - prev_y
         d := Sqrt(dx*dx + dy*dy)
         cum_len += d
+        if d >= 3 {
+            gesture_last_move_tick := A_TickCount
+            gesture_waiting_first_move := false
+        }
 
         target := BrushWidth(cum_len)
         width := target
@@ -498,6 +892,10 @@ TrackMouse() {
         prev_y := y
         prev_width := width
         points.Push([x, y])
+
+        if CheckShakeCancel(x, y, dx, dy, d) {
+            return
+        }
 
         if pool_gestures && CONF.live_hint_enabled.v {
             if cum_len > Max(CONF.min_gesture_len.v, 10) {
@@ -516,6 +914,268 @@ TrackMouse() {
         }
         PresentOverlay()
     }
+}
+
+
+ResetShakeCancel(x, y) {
+    global shake_cancel_points
+
+    shake_cancel_points := [[x, y, 0, 0, 0.0]]
+}
+
+
+CheckShakeCancel(x, y, dx, dy, seg_len) {
+    global shake_cancel_points, gesture_cancelled
+
+    if !CONF.shake_cancel_enabled.v || gesture_cancelled {
+        return false
+    }
+
+    samples := Max(4, Integer(CONF.shake_cancel_samples.v))
+    shake_cancel_points.Push([x, y, dx, dy, seg_len])
+    while shake_cancel_points.Length > samples {
+        shake_cancel_points.RemoveAt(1)
+    }
+    if shake_cancel_points.Length < samples {
+        return false
+    }
+
+    min_x := max_x := shake_cancel_points[1][1]
+    min_y := max_y := shake_cancel_points[1][2]
+    path_len := 0.0
+    turns := 0
+    prev_vec := false
+    for pt in shake_cancel_points {
+        min_x := Min(min_x, pt[1])
+        max_x := Max(max_x, pt[1])
+        min_y := Min(min_y, pt[2])
+        max_y := Max(max_y, pt[2])
+        path_len += pt[5]
+        if prev_vec && prev_vec[3] >= 3 && pt[5] >= 3 {
+            dot := prev_vec[1] * pt[3] + prev_vec[2] * pt[4]
+            if dot < -prev_vec[3] * pt[5] * 0.35 {
+                turns += 1
+            }
+        }
+        if pt[5] >= 3 {
+            prev_vec := [pt[3], pt[4], pt[5]]
+        }
+    }
+
+    if Max(max_x - min_x, max_y - min_y) <= CONF.shake_cancel_box.v
+        && path_len >= CONF.shake_cancel_len.v
+        && turns >= CONF.shake_cancel_turns.v {
+        CancelCurrentGesture()
+        return true
+    }
+    return false
+}
+
+
+CancelCurrentGesture() {
+    global gesture_cancelled
+
+    gesture_cancelled := true
+    SetTimer(TrackMouse, 0)
+    SetTimer(CheckGestureIdlePause, 0)
+    ClearLiveHintBox()
+    DestroyGestOverlay()
+}
+
+
+CheckGestureIdlePause() {
+    global is_drawing, gesture_cancelled, gesture_last_move_tick, pool_gestures, points, cum_len
+        , gesture_waiting_first_move
+
+    if !is_drawing || gesture_cancelled {
+        HideIdleFeedback()
+        return
+    }
+
+    if gesture_waiting_first_move {
+        HideIdleFeedback()
+        SetTimer(CheckGestureIdlePause, -track_period)
+        return
+    }
+
+    elapsed := A_TickCount - gesture_last_move_tick
+    confirm_ms := Max(0, CONF.gesture_idle_confirm_ms.v)
+    cancel_ms := Max(0, CONF.gesture_idle_cancel_ms.v)
+
+    res := cum_len > Max(CONF.min_gesture_len.v, 10) && pool_gestures
+        ? Recognize(points, pool_gestures)
+        : false
+    recognized := res && res[2] !== "" && res[1] >= CONF.min_cos_similarity.v
+    has_child_gestures := recognized && GestureHasChildGestures(res[2])
+    idle_target_ms := 0
+    idle_kind := ""
+    if has_child_gestures && confirm_ms {
+        idle_target_ms := confirm_ms
+        idle_kind := "confirm"
+    } else if !recognized && cancel_ms {
+        idle_target_ms := cancel_ms
+        idle_kind := "cancel"
+    }
+
+    if idle_target_ms && elapsed >= idle_feedback_delay {
+        visual_ms := Max(1, idle_target_ms - idle_feedback_delay)
+        DrawIdleFeedback(idle_kind, (elapsed - idle_feedback_delay) / visual_ms)
+    } else if idle_target_ms {
+        HideIdleFeedback()
+    } else {
+        HideIdleFeedback()
+        reset_ms := confirm_ms || cancel_ms
+        if recognized && reset_ms && elapsed >= reset_ms {
+            gesture_last_move_tick := A_TickCount
+        }
+    }
+
+    if !idle_target_ms || elapsed < idle_target_ms {
+        SetTimer(CheckGestureIdlePause, -track_period)
+        return
+    }
+
+    if has_child_gestures && idle_kind == "confirm" {
+        HideIdleFeedback()
+        if ConfirmGestureIdleTransition(res[2]) {
+            SetTimer(CheckGestureIdlePause, -track_period)
+            return
+        }
+    } else if !recognized && idle_kind == "cancel" {
+        CancelCurrentGesture()
+        return
+    }
+
+    if recognized && (!has_child_gestures || !confirm_ms || elapsed >= confirm_ms) {
+        gesture_last_move_tick := A_TickCount
+    }
+    SetTimer(CheckGestureIdlePause, -track_period)
+}
+
+
+ConfirmGestureIdleTransition(gesture) {
+    global await_gest, prev_x, prev_y, points, cum_len, prev_width, cur_grad_len,
+        live_hint_start_shown, live_hint_last_tick, live_hint_last_len, live_hint_draw_sig,
+        live_hint_chain_text, gesture_last_move_tick, overlay_opts, pool_gestures,
+        gesture_waiting_first_move
+
+    node := _GetFin(gesture)
+    if !node || !GestureHasChildGestures(gesture) {
+        return false
+    }
+
+    HideIdleFeedback()
+    CollectAllGestures(gesture.gestures)
+    if !pool_gestures.Length {
+        return false
+    }
+    if node.is_instant {
+        snapshot := await_gest ? await_gest[3] : false
+        SendKbd(node.down_type,
+            snapshot && node.down_type == TYPES.Default ? snapshot : node.down_val)
+    }
+
+    if await_gest {
+        await_gest[1] := gesture
+    }
+    FadeGestureSegments()
+    live_hint_chain_text .= node.gui_shortname . " → "
+    SetOverlayOpts(node.gesture_opts, 5)
+    MouseGetPos(&prev_x, &prev_y)
+    points := [[prev_x, prev_y]]
+    cum_len := 0.0
+    cur_grad_len := 0.0
+    prev_width := 0
+    live_hint_start_shown := false
+    live_hint_last_tick := 0
+    live_hint_last_len := 0.0
+    live_hint_draw_sig := ""
+    gesture_last_move_tick := A_TickCount
+    gesture_waiting_first_move := true
+    ResetShakeCancel(prev_x, prev_y)
+    ClearLiveHintBox()
+    if CONF.live_hint_enabled.v && !GetLiveHintStartMove() {
+        ShowStartLiveHint(pool_gestures, prev_x, prev_y)
+        live_hint_start_shown := true
+    } else if CONF.live_hint_enabled.v && live_hint_chain_text {
+        DrawLiveHintList([], 0, prev_x, prev_y)
+    }
+    PresentOverlay()
+    return true
+}
+
+
+FadeGestureSegments() {
+    global gesture_segments, points, overlay_opts, cur_grad_len, prev_width, gesture_opacity_factor
+
+    if points.Length > 1 {
+        gesture_segments.Push({
+            pts: CloneGesturePoints(points),
+            opts: CloneGestureOverlayOpts(overlay_opts),
+            fade: 1.0,
+        })
+    }
+    for segment in gesture_segments {
+        segment.fade *= 0.333
+    }
+
+    ClearOverlay()
+    for segment in gesture_segments {
+        overlay_opts := segment.opts
+        gesture_opacity_factor := segment.fade
+        cur_grad_len := 0.0
+        prev_width := 0
+        seg_len := 0.0
+        for i, pt in segment.pts {
+            if i == 1 {
+                continue
+            }
+            prev_pt := segment.pts[i - 1]
+            dx := pt[1] - prev_pt[1]
+            dy := pt[2] - prev_pt[2]
+            seg_len += Sqrt(dx*dx + dy*dy)
+            target := BrushWidth(seg_len)
+            width := target > prev_width ? Min(target, prev_width + 1) : target
+            DrawLine(prev_pt[1], prev_pt[2], pt[1], pt[2], width)
+            prev_width := width
+        }
+    }
+    gesture_opacity_factor := 1.0
+}
+
+
+CloneGesturePoints(src) {
+    out := []
+    for pt in src {
+        out.Push([pt[1], pt[2]])
+    }
+    return out
+}
+
+
+CloneGestureOverlayOpts(src) {
+    colors := []
+    for item in src.gest_colors {
+        colors.Push(item)
+    }
+    return {
+        pool: src.pool,
+        gest_colors: colors,
+        grad_len: src.grad_len,
+        grad_loop: src.grad_loop,
+    }
+}
+
+
+GestureHasChildGestures(gesture) {
+    try {
+        for _, mod_mp in gesture.gestures {
+            if mod_mp.Has(0) && IsGestureFin(_GetFin(mod_mp[0])) {
+                return true
+            }
+        }
+    }
+    return false
 }
 
 
@@ -542,7 +1202,7 @@ BrushWidth(len) {
 
 LiveHint(pts, gestures, hint_x:=0, hint_y:=0) {
     static busy:=false
-    global live_hint_draw_sig, live_hint_bbox
+    global live_hint_draw_sig, live_hint_bbox, live_hint_chain_text
 
     if busy || !CONF.live_hint_enabled.v {
         return
@@ -551,7 +1211,7 @@ LiveHint(pts, gestures, hint_x:=0, hint_y:=0) {
     busy := true
 
     items := GetLiveHintMovingItems(pts, gestures)
-    if !items.Length {
+    if !items.Length && !live_hint_chain_text {
         ClearLiveHintBox()
         busy := false
         return
@@ -576,10 +1236,10 @@ GetLiveHintMovingItems(pts, gestures) {
 
     for candidate in RankGestures(pts, gestures, CONF.live_hint_move_count.v, CONF.live_hint_min_score.v) {
         node := _GetFin(candidate.gesture)
-        if node {
+        if IsGestureFin(node) {
             res.Push({
                 node: node,
-                name: node.gui_shortname,
+                name: GetLiveHintGestureName(candidate.gesture, node),
                 score: Round(candidate.score, 2),
             })
         }
@@ -598,10 +1258,10 @@ ShowStartLiveHint(gestures, start_x, start_y) {
     items := []
     for gesture in gestures {
         node := _GetFin(gesture)
-        if !node {
+        if !IsGestureFin(node) {
             continue
         }
-        items.Push({node: node, name: node.gui_shortname})
+        items.Push({node: node, name: GetLiveHintGestureName(gesture, node)})
         if items.Length >= CONF.live_hint_start_count.v {
             break
         }
@@ -617,13 +1277,44 @@ ShowStartLiveHint(gestures, start_x, start_y) {
 
 
 GetLiveHintDrawSignature(items, more_count) {
-    sig := more_count . "|"
+    global live_hint_chain_text
+
+    sig := more_count . "|" . live_hint_chain_text . "|"
     for item in items {
         sig .= ObjPtr(item.node) . ":"
         sig .= item.HasProp("score") ? Format("{:.2f}", item.score) : ""
+        sig .= ":" . item.name
         sig .= ";"
     }
     return sig
+}
+
+
+GetLiveHintGestureName(gesture, node:=false) {
+    if !node {
+        node := _GetFin(gesture)
+    }
+    if !node {
+        return ""
+    }
+
+    child_count := GetLiveHintChildGestureCount(gesture)
+    return node.gui_shortname . (child_count ? "  → " . child_count : "")
+}
+
+
+GetLiveHintChildGestureCount(gesture) {
+    cnt := 0
+    try {
+        for _, mod_mp in gesture.gestures {
+            for _, child in mod_mp {
+                if IsGestureFin(_GetFin(child)) {
+                    cnt += 1
+                }
+            }
+        }
+    }
+    return cnt
 }
 
 
@@ -634,7 +1325,7 @@ GetLiveHintStartMove() {
 
 
 DrawLiveHintList(items, more_count, start_x, start_y) {
-    global live_hint_bbox, g_mem_dc
+    global live_hint_bbox, g_mem_dc, live_hint_chain_text
 
     g := GetOverlayGraphics()
     if !g {
@@ -644,13 +1335,15 @@ DrawLiveHintList(items, more_count, start_x, start_y) {
     _ClearLiveHintBox(g)
 
     fs := CONF.font_size_lh.v
-    preview_w := Round(Max(fs * 2.18, 44))
+    has_items := items.Length > 0
+    preview_w := has_items ? Round(Max(fs * 2.18, 44)) : 0
     preview_h := Round(Max(fs * 1.15, 23))
-    gap := Round(Max(fs * 0.40, 8))
+    gap := has_items ? Round(Max(fs * 0.40, 8)) : 0
     score_w := HasLiveHintScores(items) ? Round(Max(fs * 2.48, 53)) : 0
     pad_x := Round(Max(fs * 0.55, 10))
     pad_y := Round(Max(fs * 0.35, 7))
     row_h := Max(preview_h, Round(fs * 1.36))
+    header_h := live_hint_chain_text ? Round(fs * 1.18) : 0
     footer_h := more_count > 0 ? Round(fs * 1.12) : 0
 
     res := GetLiveHintResources(fs)
@@ -666,7 +1359,7 @@ DrawLiveHintList(items, more_count, start_x, start_y) {
     DllCall("gdiplus\GdipSetStringFormatLineAlign", "ptr", fmt, "int", 1)
     DllCall("gdiplus\GdipSetStringFormatTrimming", "ptr", fmt, "int", 3)
 
-    text_w := GetLiveHintTextWidth(g, fnt, fnt_bold, fmt, items, more_count)
+    text_w := GetLiveHintTextWidth(g, fnt, fnt_bold, fmt, items, more_count, live_hint_chain_text)
     try {
         fixed_w := Max(0, Integer(CONF.live_hint_box_width.v))
     } catch {
@@ -682,7 +1375,7 @@ DrawLiveHintList(items, more_count, start_x, start_y) {
         box_w := preview_w + score_w + gap * (score_w ? 2 : 1) + text_w + pad_x * 2
     }
     max_text_w := Max(box_w - preview_w - score_w - gap * (score_w ? 2 : 1) - pad_x * 2, 20)
-    box_h := items.Length * row_h + footer_h + pad_y * 2
+    box_h := header_h + items.Length * row_h + footer_h + pad_y * 2
     box_pt := GetLiveHintBoxPos(box_w, box_h, start_x, start_y)
     x := box_pt[1]
     y := box_pt[2]
@@ -704,6 +1397,18 @@ DrawLiveHintList(items, more_count, start_x, start_y) {
         tx += score_w + gap
     }
     ty := y + pad_y
+    if live_hint_chain_text {
+        rect_header := Buffer(16, 0)
+        NumPut("float", x + pad_x, rect_header, 0)
+        NumPut("float", ty, rect_header, 4)
+        NumPut("float", box_w - pad_x * 2, rect_header, 8)
+        NumPut("float", header_h, rect_header, 12)
+        DllCall("gdiplus\GdipSetStringFormatAlign", "ptr", fmt, "int", 1)
+        DllCall("gdiplus\GdipDrawString", "ptr", g, "wstr", live_hint_chain_text,
+            "int", StrLen(live_hint_chain_text), "ptr", fnt_bold, "ptr", rect_header,
+            "ptr", fmt, "ptr", brush_fg)
+        ty += header_h
+    }
     preview_colors := GetLiveHintThumbnailColors()
     for item in items {
         text_font := A_Index == 1 && item.HasProp("score") && item.score >= CONF.min_cos_similarity.v
@@ -880,6 +1585,8 @@ ClearLiveHintIconCache() {
 
 
 GetLiveHintThumbnailColors() {
+    global overlay_opts
+
     colour := Trim(CONF.live_hint_thumbnail_color.v)
     if colour {
         colors := ParseAhkColorList(colour)
@@ -889,7 +1596,12 @@ GetLiveHintThumbnailColors() {
         return [0x202020]
     }
 
-    return overlay_opts.gest_colors
+    try {
+        if overlay_opts is Object && overlay_opts.HasOwnProp("gest_colors") {
+            return overlay_opts.gest_colors
+        }
+    }
+    return [0x202020]
 }
 
 
@@ -903,8 +1615,11 @@ HasLiveHintScores(items) {
 }
 
 
-GetLiveHintTextWidth(g, fnt, fnt_bold, fmt, items, more_count) {
+GetLiveHintTextWidth(g, fnt, fnt_bold, fmt, items, more_count, chain_text:="") {
     max_w := 0
+    if chain_text {
+        max_w := Max(max_w, MeasureLiveHintTextWidth(g, fnt_bold, fmt, chain_text))
+    }
     for i, item in items {
         font := i == 1 && item.HasProp("score") && item.score >= CONF.min_cos_similarity.v
             ? fnt_bold : fnt
@@ -1322,7 +2037,7 @@ GesturePreviewStrokeColor(colors, t) {
         return 0xDD000000 | colors[1]
     }
 
-    lerp := (CONF.gest_color_mode.v == "HSV"
+    color_lerp_fn := (CONF.gest_color_mode.v == "HSV"
         ? ColorLerpHsv
         : CONF.gest_color_mode.v == "RGB"
             ? ColorLerp
@@ -1333,7 +2048,7 @@ GesturePreviewStrokeColor(colors, t) {
     if seg >= seg_count {
         seg := seg_count - 1
     }
-    return 0xDD000000 | lerp(colors[seg + 1], colors[seg + 2], p - seg)
+    return 0xDD000000 | color_lerp_fn(colors[seg + 1], colors[seg + 2], p - seg)
 }
 
 
@@ -1462,7 +2177,7 @@ _RotateVecStart(vec, point_shift) {
 
 
 GetGestureZoneOverrideIndex(key, offset) {
-    first_zone_opt_i := 2  ; first field is reserved for pre-0.82 live-hint overrides
+    first_zone_opt_i := 2
     fields_per_zone := 3  ; colors, gradient length, gradient loop
     fallback_zone_i := 5  ; C
 

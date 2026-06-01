@@ -71,10 +71,12 @@ OneNodeDeeper(schex, md:=-1, is_chord:=false, is_gesture:=false) {
 }
 
 
-ChangePath(len:=-1, discard_md:=true, *) {
+ChangePath(len:=-1, discard_md:=true, focus_hidden:=true, *) {
     global gui_mod_val, gui_entries, gui_sysmods
 
-    UI["Hidden"].Focus()
+    if focus_hidden {
+        UI["Hidden"].Focus()
+    }
     if temp_chord {
         return
     }

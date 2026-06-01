@@ -433,11 +433,11 @@ CosineSim(vec_a, vec_b, beta:=0, len_a?, len_b?) {
 }
 
 
-GestureToStr(raw_pts, rot, scaling, dirs, phase) {
+GestureToStr(raw_pts, rot, scaling, dirs, phase, pool_override:=false) {
     pts := Resample(raw_pts)[1]
-    pool := GetPool(pts[1][1], pts[1][2])
-    rot1 := rot == 3
-    rot8 := rot == 2
+    pool := pool_override == false ? GetPool(pts[1][1], pts[1][2]) : pool_override
+    rot1 := rot == 2
+    rot8 := rot == 1
 
     if phase {
         pts := _CloseGestureSeamPts(pts, 0.2)
@@ -453,7 +453,7 @@ GestureToStr(raw_pts, rot, scaling, dirs, phase) {
 
     vec := Flatten(pts)
 
-    opt_str := pool . ";" . (rot1 ? 2 : (rot8 ? 1 : 0)) . ";" . Format("{:0.2f}", scaling) . ";"
+    opt_str := pool . ";" . rot . ";" . Format("{:0.2f}", scaling) . ";"
         . Integer(dirs) . ";" . Integer(phase) . ";" . Round(_VecNorm(vec))
 
     vec_str := pool . " "

@@ -7,6 +7,7 @@ gest_as_base := false
 child_behavior_opts := [
     "Backsearch", "Send current + backsearch", "To root", "Send current + to root", "Ignore"
 ]
+unrec_behavior_opts := ["To root", "Send current + to root", "Ignore"]
 
 
 OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
@@ -58,7 +59,9 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         } else {
             gest_as_base := true
             save_type := 3
-            unode := entries.ubase.GetBaseHoldMod(selected_gesture, _gui_mod_val, false, true).ubase
+            unode := entries.ubase.GetBaseHoldMod(
+                _current_path[-1][1], _current_path[-1][2], false, true
+            ).ubase
         }
     } else {
         unode := save_type == 1 ? _gui_entries.uhold : save_type == 2
@@ -93,6 +96,8 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
 
     ;LMB/RMB
     if save_type < 2 && CheckLRMB(_current_path) {
+        form.Add("Text", "x10 y+10 w150", "Unassigned child behavior:")
+        form.Add("DropDownList", "x+0 yp-2 w150 vChildBehaviorDDL Choose4", child_behavior_opts)
         form.Add("Text", "x10 y+10 w0 h0 vGestureOverlayAnchor").Visible := false
         _AddFormGestureOverlay(1)
         form.Add("Text", "x10 y+14 w65", "Window rule:")
@@ -113,7 +118,6 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         form.Add("Edit", "x-1000 y-1000 w0 h0 vCustomNK")
         form.Add("DropDownList", "x-1000 y-1000 w0 h0 vTypeDDL Choose1", ["Default"])
         form.Add("DropDownList", "x-1000 y-1000 w0 h0 vUpTypeDDL Choose1", ["Disabled"])
-        form.Add("DropDownList", "x-1000 y-1000 w0 h0 vChildBehaviorDDL Choose4", child_behavior_opts)
         form.Add("CheckBox", "x-1000 y-1000 w0 h0 vCBInstant")
         form.Add("CheckBox", "x-1000 y-1000 w0 h0 vCBIrrevocable")
 
@@ -140,6 +144,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
     form.Add("Edit", "x+5 yp-2 w235 vValInp")
     form.color_buttons := []
     form.colors := [[]]
+    nested_gesture := save_type == 3 && IsNestedGesturePath(_current_path)
 
     if save_type < 2 {
         form.Add("Text", "x10 y+10 w150", "Tap🡒hold threshold (ms):")
@@ -153,10 +158,15 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
 
     ; gesture
     if save_type == 3 {
-        form.Add("Button", "x10 y+10 w20 vShowGestureZones", "⊞")
-            .OnEvent("Click", ShowFormGestureZonePreview)
-        form.Add("Button", "x+0 yp+0 w260 vSetGesture", "Set gesture pattern")
-            .OnEvent("Click", SetGesture)
+        if nested_gesture {
+            form.Add("Button", "x10 y+10 w280 vSetGesture", "Set gesture pattern")
+                .OnEvent("Click", SetGesture)
+        } else {
+            form.Add("Button", "x10 y+10 w20 vShowGestureZones", "⊞")
+                .OnEvent("Click", ShowFormGestureZonePreview)
+            form.Add("Button", "x+0 yp+0 w260 vSetGesture", "Set gesture pattern")
+                .OnEvent("Click", SetGesture)
+        }
         form.Add("Button", "x+0 yp+0 w20 vShowGesture", "🙈")
             .OnEvent("Click", ShowGesture.Bind(_gui_entries))
 
@@ -164,8 +174,8 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         form.Add("Edit", "x+0 yp-3 w150 vScaling +Center")
         SendMessage(0x1501, true, StrPtr("0–0.99 (0 – size-independent)"), form["Scaling"].Hwnd)
         form.Add("Text", "x10 y+7 w150", "Rotate:")
-        form.Add("DDL", "x+0 yp-3 w150 Choose1 vRotate", 
-            ["Follow global setting", "None", "Reduce orientation noise", "Rotation invariance"])
+        form.Add("DDL", "x+0 yp-3 w150 Choose1 vRotate",
+            ["None", "Reduce orientation noise", "Rotation invariance"])
         form.Add("CheckBox", "x10 y+7 w300 vDirection", "Direction invariance")
         form.Add("CheckBox", "x10 y+7 w300 vPhase",
             "Any start point (for closed figures only)").Enabled := false
@@ -176,11 +186,24 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         }
     }
     if save_type > 1 {
-        form.Add("Button", "x10 y+10 w300 vBtnChainOptions", "In-chain behavior ▾")
-            .OnEvent("Click", ShowChainOptions)
-        form["BtnChainOptions"].GetPos(, &y, , &h)
-        _AddChainOptions(y)
-
+        if save_type == 3 {
+            form.Add("Button", "x10 y+10 w150 vInChainToggle", "In-chain behavior")
+                .OnEvent("Click", ShowHideButtons)
+            form.Add("Button", "x+0 yp0 w150 vColorToggle", "Gesture options")
+                .OnEvent("Click", ShowHideButtons)
+            form["InChainToggle"].GetPos(, &y, , &h)
+            _AddChainOptions(y+h)
+            form.chain_options.RemoveAt(1)
+            form.up_fields := []
+            form.Add("Text", "x10 y" . (13 + y + h) . " w0 h0 vGestureOverlayAnchor")
+                .Visible := false
+            _AddFormNestedGestureOverlay(0)
+        } else {
+            form.Add("Button", "x10 y+10 w300 vBtnChainOptions", "In-chain behavior ▾")
+                .OnEvent("Click", ShowChainOptions)
+            form["BtnChainOptions"].GetPos(, &y, , &h)
+            _AddChainOptions(y)
+        }
     } else {
         if AWMods.Has(_current_path[-1][1]) {
             form.Add("Button", "x10 y+10 w150 vInChainToggle", "In-chain behavior")
@@ -192,7 +215,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
                 .OnEvent("Click", ShowHideButtons)
             form.Add("Button", "x+0 yp0 w100 vUpToggle", "Add. key-up action")
                 .OnEvent("Click", ShowHideButtons)
-            form.Add("Button", "x+0 yp0 w100 vColorToggle", "Gesture colors")
+            form.Add("Button", "x+0 yp0 w100 vColorToggle", "Gesture options")
                 .OnEvent("Click", ShowHideButtons)
         }
         form["InChainToggle"].GetPos(, &y, , &h)
@@ -236,7 +259,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
                 : WriteGesture.Bind(0, _gui_entries, _current_path)) : WriteValue.Bind(save_type, _current_path, paired))
     form.Add("Button", "x10 y" . (8 + y + h) . " w100 h20 vCancel", "❌ Cancel").OnEvent("Click", CloseForm)
     form.Add("Button", "x+0 yp+0 w100 h20 Default vSave", "💾 Save").OnEvent("Click", fn)
-    form.Add("Button", "x+0 yp+0 w100 h20 Default vSaveWithReturn", "↩ Save and back")
+    form.Add("Button", "x+0 yp+0 w100 h20 vSaveWithReturn", "↩ Save and back")
         .OnEvent("Click", (*) => SaveFormWithReturn(fn))
     form.bottom.Push(form["Cancel"], form["Save"], form["SaveWithReturn"])
     if save_type == 3 {
@@ -254,16 +277,25 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
     form.Show("w320 h" . y+h+10)
     ChangeFormPlaceholder(unode, paired, layers, save_type, , , 1)
     if curr_val {
-        if curr_val.custom_nk_time || curr_val.child_behavior !== 4
-            || curr_val.is_instant || curr_val.is_irrevocable {
+        has_chain_options := curr_val.custom_nk_time || curr_val.child_behavior !== 4
+            || curr_val.is_instant || curr_val.is_irrevocable
+        has_gesture_options := save_type < 2 && (
+            curr_val.gesture_opts
+            || GetGestureUnrecognizedBehavior(curr_val.gesture_opts) !== 5
+        )
+        if has_chain_options {
             if save_type > 1 {
-                ShowChainOptions()
+                if save_type == 3 {
+                    ShowHideButtons(form["InChainToggle"])
+                } else {
+                    ShowChainOptions()
+                }
             } else {
                 ShowHideButtons(form["InChainToggle"])
             }
         } else if curr_val.up_type !== TYPES.Disabled {
             ShowHideButtons(form["UpToggle"])
-        } else if save_type < 2 && curr_val.gesture_opts {
+        } else if has_gesture_options {
             ShowHideButtons(form["ColorToggle"])
         }
     }
@@ -356,13 +388,14 @@ ShowChainOptions(*) {
 
 
 ShowHideButtons(obj, *) {
-    ToggleEnabled(1, form["InChainToggle"], form["UpToggle"])
+    ToggleEnabled(1, form["InChainToggle"])
+    try form["UpToggle"].Enabled := true
     try form["ColorToggle"].Enabled := true
     obj.Enabled := false
     if obj.Name == "InChainToggle" {
         ToggleVisibility(0, form.color_controls)
         _FormHideGestureColorEditors()
-        ToggleVisibility(0, form.up_fields)
+        try ToggleVisibility(0, form.up_fields)
         ToggleVisibility(1, form.chain_options)
         form["CBIrrevocable"].GetPos(, &sh)
     } else if obj.Name == "UpToggle" {
@@ -376,10 +409,14 @@ ShowHideButtons(obj, *) {
         form["UpValInp"].GetPos(, &sh)
     } else {
         ToggleVisibility(1, form.color_controls)
-        ToggleVisibility(0, form.up_fields)
+        try ToggleVisibility(0, form.up_fields)
         ToggleVisibility(0, form.chain_options)
         _FormSelectGestureColorZone(form.selected_color_zone)
-        form["GradCyclePool" . form.selected_color_zone].GetPos(, &sh)
+        try {
+            form["GradCyclePool" . form.selected_color_zone].GetPos(, &sh)
+        } catch {
+            form["GradCyclePoolC"].GetPos(, &sh)
+        }
     }
     sh += 30
 
@@ -436,6 +473,11 @@ _AddFormGestureOverlay(is_visible:=0) {
         form["GestureOverlayAnchor"].GetPos(, &y, , &anchor_h)
         y += anchor_h - 3
     }
+    form.color_controls.Push(
+        form.Add("Text", "x10 y" . y . " w150 h20", "Unrecognized gest. behavior:"),
+        form.Add("DropDownList", "x+0 yp-2 w150 vUnrecBehaviorDDL Choose3", unrec_behavior_opts)
+    )
+    y += 25
     w := 256
     h := 140
     bw := 42
@@ -481,6 +523,31 @@ _AddFormGestureOverlay(is_visible:=0) {
 }
 
 
+_AddFormNestedGestureOverlay(is_visible:=0) {
+    form.color_buttons := []
+    form.color_controls := []
+    form.colors := Map()
+    form.selected_color_zone := "C"
+
+    y := 13
+    try {
+        form["GestureOverlayAnchor"].GetPos(, &y, , &anchor_h)
+        y += anchor_h - 3
+    }
+    form.color_controls.Push(
+        form.Add("Text", "x10 y" . y . " w150 h20", "Unrecognized gest. behavior:"),
+        form.Add("DropDownList", "x+0 yp-2 w150 vUnrecBehaviorDDL Choose3", unrec_behavior_opts)
+    )
+    y += 25
+    form.colors["C"] := []
+    _AddFormGestureZoneEditor("C", "Center", y)
+    for obj in form.colors["C"] {
+        form.color_controls.Push(obj)
+    }
+    ToggleVisibility(is_visible, form.color_controls)
+}
+
+
 _AddFormGestureZoneButton(key, text, x, y, w, h) {
     btn := form.Add("Button", "x" . x . " y" . y . " w" . w . " h" . h
         . " vFormColorZone" . key, text)
@@ -512,6 +579,9 @@ _AddFormGestureZoneEditor(key, label, y) {
 
 
 _FormSelectGestureColorZone(key, *) {
+    if !form.color_buttons.Length {
+        key := "C"
+    }
     if !_FormGestureColorZoneVisible(key) {
         key := _FormDefaultGestureColorZone()
     }
@@ -538,8 +608,18 @@ _FormGestureColorZoneVisible(key) {
 }
 
 
-_BuildFormGestureOverlayOpts() {
-    gest_opts := ";"
+_BuildFormGestureOverlayOpts(include_unrecognized:=true, pattern_opts:=false) {
+    unrec_behavior := ""
+    if include_unrecognized {
+        try {
+            if form["UnrecBehaviorDDL"].Value && form["UnrecBehaviorDDL"].Value != 3 {
+                unrec_behavior := form["UnrecBehaviorDDL"].Value + 2
+            }
+        }
+    }
+    gest_opts := pattern_opts
+        ? (unrec_behavior ? ";" . unrec_behavior . ";" : ";")
+        : unrec_behavior . ";"
     for zone in GestureColorZones {
         suffix := "Pool" . zone[2]
         for name in ["ColorInp", "GradLenInp", "GradCycle"] {
@@ -556,15 +636,35 @@ _BuildFormGestureOverlayOpts() {
 
 _LoadFormGestureOverlayOpts(opts_str) {
     opts := StrSplit(opts_str, ";")
+    base_i := GestureOverlayOptsBaseIndex(opts)
+    if IsGesturePatternOpts(opts) {
+        try {
+            form["UnrecBehaviorDDL"].Value := GesturePatternHasUnrecognizedBehavior(opts)
+                ? Integer(opts[7]) - 2
+                : 3
+        }
+    } else {
+        try {
+            form["UnrecBehaviorDDL"].Value := opts.Has(1) && opts[1]
+                ? Max(1, Min(3, Integer(opts[1]) - 2))
+                : 3
+        }
+    }
 
     for zone in GestureColorZones {
         key := zone[2]
         suffix := "Pool" . key
         for j, name in ["ColorInp", "GradLenInp", "GradCycle"] {
-            zi := GetGestureZoneOverrideIndex(key, j - 1)
+            zi := base_i + GetGestureZoneOverrideIndex(key, j - 1)
             val := opts.Has(zi) && opts[zi] ? opts[zi] : ""
             if val {
-                try form[name . suffix].Value := val
+                try {
+                    if name == "GradCycle" {
+                        form[name . suffix].Value := val
+                    } else {
+                        form[name . suffix].Text := val
+                    }
+                }
             }
         }
     }
@@ -586,11 +686,11 @@ SetGesture(*) {
 
 ShowGesture(entries, *) {
     try {
-        scal := form["Scaling"].Text == "" ? CONF.scale_impact.v : Float(form["Scaling"].Text)
+        scal := form["Scaling"].Text == "" ? 0 : Float(form["Scaling"].Text)
     } catch {
         scal := 0
     }
-    rot := form["Rotate"].Value == 1 ? CONF.gest_rotate.v : (form["Rotate"].Value - 1)
+    rot := form["Rotate"].Value - 1
     dirs := form["Direction"].Value
     phase := form["Phase"].Value
 
@@ -616,7 +716,8 @@ ShowGesture(entries, *) {
                 entries.ubase.GetBaseHoldMod(selected_gesture, gui_mod_val, false, true).ubase
             )
         }
-        SetOverlayOpts(_GetFirst(par ? par.ubase : entries.ubase).gesture_opts, gest.opts.pool)
+        SetOverlayOpts(_GetFirst(par ? par.ubase : entries.ubase).gesture_opts,
+            IsNestedGesturePath(current_path) ? 5 : gest.opts.pool)
 
         if gest.opts.dirs = dirs && gest.opts.closed = phase {
             _gest := gest
@@ -624,7 +725,7 @@ ShowGesture(entries, *) {
             _gest := {
                 vec: gest.vec,
                 opts: {
-                    pool: gest.opts.pool,
+                    pool: IsNestedGesturePath(current_path) ? 5 : gest.opts.pool,
                     scaling: Format("{:0.2f}", scal),
                     dirs: dirs,
                     closed: phase
@@ -636,11 +737,12 @@ ShowGesture(entries, *) {
     }
 
     default_opts:={
-        pool: 5, rotate: CONF.gest_rotate.v, scaling: CONF.scale_impact.v,
+        pool: 5, rotate: 0, scaling: 0,
         dirs: 0, closed: 0, len: 1
     }
 
-    gest_str := GestureToStr(form_points, rot, scal, dirs, phase)
+    gest_str := GestureToStr(form_points, rot, scal, dirs, phase,
+        IsNestedGesturePath(current_path) ? 5 : false)
     node_obj := {opts: {}, gesture_opts: gest_str[2]}
     vals := StrSplit(node_obj.gesture_opts, ";")
     for i, name in ["pool", "rotate", "scaling", "dirs", "closed", "len"] {
@@ -664,6 +766,11 @@ ShowGesture(entries, *) {
         }
     }
     DrawExisting(node_obj)
+}
+
+
+IsNestedGesturePath(path) {
+    return path.Length && path[-1] is Array && path[-1][4] && !CheckLRMB(path)
 }
 
 
@@ -711,12 +818,13 @@ ChangeFormPlaceholder(unode, paired, layers, save_type:=0, is_up:=0, is_layer_ed
 
             if val.HasOwnProp("opts") {  ; gesture
                 form["Scaling"].Text := Round(val.opts.scaling, 2)
-                form["Rotate"].Value := val.opts.rotate + 2
+                form["Rotate"].Value := val.opts.rotate + 1
                 form["Direction"].Value := val.opts.dirs
                 if val.opts.closed {
                     form["Phase"].Value := val.opts.closed
                     form["Phase"].Enabled := true
                 }
+                _LoadFormGestureOverlayOpts(val.gesture_opts)
             } else if val.gesture_opts {
                 _LoadFormGestureOverlayOpts(val.gesture_opts)
             }
@@ -1244,17 +1352,22 @@ WriteGesture(as_base, entries, path, *) {
     }
 
     try {
-        scal := form["Scaling"].Text == "" ? CONF.scale_impact.v : Float(form["Scaling"].Text)
+        scal := form["Scaling"].Text == "" ? 0 : Float(form["Scaling"].Text)
     } catch {
         MsgBox("Scale must be a decimal number or left empty.", "Invalid scale value", "Icon!")
         return
     }
-    rot := form["Rotate"].Value == 1 ? CONF.gest_rotate.v : (form["Rotate"].Value - 1)
+    rot := form["Rotate"].Value - 1
     dirs := form["Direction"].Value
     phase := form["Phase"].Value
 
+    nested_pattern := IsNestedGesturePath(path) && !as_base
+    old_gesture_key := as_base ? as_base : selected_gesture
+    save_md := as_base ? path[-1][2] : gui_mod_val
+
     if !from_prev {
-        gest_str := GestureToStr(form_points, rot, scal, dirs, phase)
+        pool_override := nested_pattern ? 5 : old_gesture_key ? GetGestureVecPool(old_gesture_key, false) : false
+        gest_str := GestureToStr(form_points, rot, scal, dirs, phase, pool_override)
     } else {
         if as_base {
             gest := _GetFirst(entries.ubase)
@@ -1264,18 +1377,18 @@ WriteGesture(as_base, entries, path, *) {
             )
         }
         vals := StrSplit(gest.gesture_opts, ";")
-        if scal != 0 && vals[-1] = 1 {
+        gest_len := vals.Has(6) && vals[6] !== "" ? vals[6] : 0
+        if scal != 0 && gest_len = 1 {
             MsgBox("To enable scale impact, the gesture must be redrawn.",
                 "Outdated pattern", "Icon!")
             return
         }
-        opts := vals[1] . ";" . rot - 1 . ";" . scal . ";" . dirs . ";" . phase . ";" . vals[-1]
-        if StrLen(StrSplit(selected_gesture, " ")[1]) !== 1 {
-            gest_str := [vals[1] . " " . selected_gesture, opts]
-        } else {
-            gest_str := [selected_gesture, opts]
-        }
+        pool := nested_pattern ? 5 : GetGestureVecPool(old_gesture_key, vals[1])
+        opts := pool . ";" . rot . ";" . scal . ";" . dirs . ";" . phase . ";" . gest_len
+        gest_str := [ReplaceGesturePoolInVec(old_gesture_key, pool), opts]
     }
+    gest_str[2] .= _BuildFormGestureOverlayOpts(true, true)
+    gest_str[2] := RTrim(gest_str[2], ";")
 
     ToggleFreeze(1)
 
@@ -1305,26 +1418,25 @@ WriteGesture(as_base, entries, path, *) {
         return
     }
 
-    try sc_mp := json_gestures[gest_str[1]][gui_mod_val][-3]
-    try ch_mp := json_gestures[gest_str[1]][gui_mod_val][-2]
+    child_maps := GetExistingGestureChildMaps(json_gestures, old_gesture_key, gest_str[1], save_md)
 
-    if selected_gesture {
-        if json_gestures[selected_gesture].Count !== 1 {
-            json_gestures[selected_gesture].Delete(gui_mod_val)
+    if old_gesture_key && json_gestures.Has(old_gesture_key) {
+        if json_gestures[old_gesture_key].Count !== 1 {
+            json_gestures[old_gesture_key].Delete(save_md)
         } else {
-            json_gestures.Delete(selected_gesture)
+            json_gestures.Delete(old_gesture_key)
         }
     }
 
     if !json_gestures.Has(gest_str[1]) {
         json_gestures[gest_str[1]] := Map()
     }
-    json_gestures[gest_str[1]][gui_mod_val] := [
+    json_gestures[gest_str[1]][save_md] := [
         TYPES.%form["TypeDDL"].Text%, form["ValInp"].Text . "", TYPES.Disabled, "",
         Integer(form["CBInstant"].Value), Integer(form["CBIrrevocable"].Value),
         0, (form["CustomNK"].Text != CONF.MS_NK.v ? Integer(form["CustomNK"].Text || 0) : 0),
         Integer(form["ChildBehaviorDDL"].Value), form["Shortname"].Text || form["ValInp"].Text,
-        gest_str[2], form["WindowRule"].Text, sc_mp ?? Map(), ch_mp ?? Map(), Map(),
+        gest_str[2], form["WindowRule"].Text, child_maps[1], child_maps[2], child_maps[3],
     ]
 
     SerializeMap(json_root, temp_layer)
@@ -1334,6 +1446,45 @@ WriteGesture(as_base, entries, path, *) {
     ChangePath()
     ToggleFreeze(0)
     CloseForm()
+}
+
+
+GetExistingGestureChildMaps(json_gestures, old_key, new_key, md) {
+    for key in [old_key, new_key] {
+        if key && json_gestures.Has(key) && json_gestures[key].Has(md) {
+            try {
+                return [
+                    json_gestures[key][md][-3],
+                    json_gestures[key][md][-2],
+                    json_gestures[key][md][-1],
+                ]
+            }
+        }
+    }
+    return [Map(), Map(), Map()]
+}
+
+
+ReplaceGesturePoolInVec(vec_str, pool) {
+    space_i := InStr(vec_str, " ")
+    if !space_i {
+        return pool . " " . vec_str
+    }
+
+    first_token := SubStr(vec_str, 1, space_i - 1)
+    tail := SubStr(vec_str, space_i + 1)
+    return StrLen(first_token) == 1 ? pool . " " . tail : pool . " " . vec_str
+}
+
+
+GetGestureVecPool(vec_str, fallback) {
+    try {
+        first_token := StrSplit(vec_str, " ")[1]
+        if StrLen(first_token) == 1 {
+            return first_token
+        }
+    }
+    return fallback
 }
 
 

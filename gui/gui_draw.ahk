@@ -57,8 +57,8 @@ DrawLayout(init:=false) {
     UI.SetFont("Norm")
 
     if !init || !CONF.start_minimized.v {
-        UI.Show(Scale(,, 1294))
-        ChangePath(-1, false)
+        UI.Show((init ? "NA " : "") . Scale(,, 1294))
+        ChangePath(-1, false, !init)
     }
 }
 

@@ -602,7 +602,7 @@ FillGestures() {
 
     path := buffer_view ? buffer_path : current_path
 
-    if !path.Length || path[-1][4] || path[-1][3]
+    if !path.Length || path[-1][3]
         || SubStr(path[-1][1], 1, 2) == "Wh" && path[-1][1] !== "WhClick" || AWMods.Has(path[-1][1]) {
         ToggleEnabled(0, UI["BtnAddNewGesture"], UI.gest_toggles)
         _CreateGesturePreviewImageList()
@@ -654,6 +654,7 @@ FillGestures() {
     entries := _GetUnholdEntries()
     parent_opts := ""
     try parent_opts := _GetFirst(entries.ubase).gesture_opts
+    nested_gesture := path.Length && path[-1] is Array && path[-1][4] && !CheckLRMB(path)
     preview_color_cache := Map()
     preview_icon_keys := Map()
     preview_path_key := _GesturePreviewPathKey(path)
@@ -698,7 +699,7 @@ FillGestures() {
             "",
             child_node.gui_shortname,
             val,
-            _GestOptsToText(child_node.gesture_opts),
+            _GestOptsToText(child_node, nested_gesture),
             cnt || "",
             layer_text,
             _GestureSortKey(child_node),
@@ -913,23 +914,45 @@ _CreateGesturePreviewImageList() {
 }
 
 
-_GestOptsToText(opts) {
+_GestOptsToText(node, hide_pool:=false) {
+    opts := node.gesture_opts
     vals := StrSplit(opts, ";")
     pool := ParseGesturePool(vals[1])
-    str := (GesturePoolEnabled(pool) ? "" : "-") . GetGesturePoolShortName(pool)
-    if vals[2] + 1 != CONF.gest_rotate.v {
-        str .= ", rotate: " . ["no", "de-noise", "invar."][Integer(vals[2]) + 1]
+    str := hide_pool ? "" : (GesturePoolEnabled(pool) ? "" : "-") . GetGesturePoolShortName(pool)
+    if vals[2] !== "0" {
+        str .= (str ? ", " : "") . "rotate: " . ["no", "de-noise", "invar."][Integer(vals[2]) + 1]
     }
-    if Float(vals[3]) != CONF.scale_impact.v {
-        str .= ", scale imp.: " . Round(Float(vals[3]), 2)
+    if Float(vals[3]) != 0 {
+        str .= (str ? ", " : "") . "scale imp.: " . Round(Float(vals[3]), 2)
     }
     if vals[4] !== "0" {
-        str .= ", bidir."
+        str .= (str ? ", " : "") . "bidir."
     }
     if vals[5] !== "0" {
-        str .= ", closed."
+        str .= (str ? ", " : "") . "closed."
+    }
+    for mark in _GestureNodeOptionMarks(node) {
+        str .= (str ? ", " : "") . mark
     }
     return str
+}
+
+
+_GestureNodeOptionMarks(node) {
+    marks := []
+    if node.window_rule {
+        marks.Push("win rule")
+    }
+    if GestureHasCustomNestedOptions(node.gesture_opts) {
+        marks.Push("child colors")
+    }
+    if GetGestureUnrecognizedBehavior(node.gesture_opts) !== 5 {
+        marks.Push("unrec.")
+    }
+    if node.custom_nk_time || node.child_behavior !== 4 || node.is_instant || node.is_irrevocable {
+        marks.Push("chain opts")
+    }
+    return marks
 }
 
 

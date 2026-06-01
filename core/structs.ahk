@@ -82,7 +82,12 @@ class UnifiedNode {
                 ? view.gestures
                 : view.scancodes
 
-        return mp.Has(schex) ? mp[schex].Get(md, false) : false
+        if !mp.Has(schex) {
+            return false
+        }
+
+        node := mp[schex].Get(md, false)
+        return node && node.GetActiveVariant(ctx_id).HasAny() ? node : false
     }
 
     GetRawFin() {
@@ -390,7 +395,7 @@ class UnifiedNode {
 
 BuildNode(raw_node, sc, md, down_type:=false) {
     static default_opts:={
-        pool: 5, rotate: CONF.gest_rotate.v, scaling: CONF.scale_impact.v,
+        pool: 5, rotate: 0, scaling: 0,
         dirs: 0, closed: 0, len: 1
     }
 

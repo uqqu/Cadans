@@ -761,6 +761,15 @@ _GetNodeExtraInfo(node, is_gesture:=false) {
         ][node.child_behavior] . "'"
     }
     if node.gesture_opts {
+        unrec_behavior := GetGestureUnrecognizedBehavior(node.gesture_opts)
+        if unrec_behavior !== 5 {
+            res .= "`nUnrecognized gesture behavior is changed to '" . [
+                "Backsearch", "Send current + backsearch",
+                "To root", "Send current + to root", "Ignore"
+            ][unrec_behavior] . "'"
+        }
+    }
+    if node.gesture_opts {
         vals := StrSplit(node.gesture_opts, ";")
         if is_gesture {
             pool := ParseGesturePool(vals[1])
@@ -769,15 +778,9 @@ _GetNodeExtraInfo(node, is_gesture:=false) {
                 res .= "`nWarning: this gesture pool is disabled in the global settings."
             }
             rot := ["disabled", "noise reduction", "fully rotation-invariance"]
-            if vals[2] = 0 {
-                res .= "`n`nRotation: " . rot[CONF.gest_rotate.v] . " (by global conf)"
-            } else {
-                res .= "`n`n> Rotation: " . rot[Integer(vals[2]) + 1]
-            }
+            res .= "`n`n" . (vals[2] ? "> " : "") . "Rotation: " . rot[Integer(vals[2]) + 1]
             if vals[3] {
                 res .= "`n> Scale impact: " . vals[3]
-            } else {
-                res .= "`nScale impact: " . CONF.scale_impact.v . " (by global conf)"
             }
             res .= "`n" . (vals[4] ? "> " : "") . "Bidirectional matching: "
                 . ["disabled", "enabled"][vals[4] ? (Integer(vals[4]) + 1) : 1]
@@ -800,26 +803,12 @@ _GetNodeExtraInfo(node, is_gesture:=false) {
                     res .= "`n   Gradient cycle length " . grad_len
                 }
             }
-        } else {
-            custom := ""
-            for zone in GestureColorZones {
-                color_key := zone[2]
-                colors := GetGestureOverlayOption(vals, color_key, 0)
-                grad_len := GetGestureOverlayOption(vals, color_key, 1)
-                grad_loop := GetGestureOverlayOption(vals, color_key, 2)
-                if colors !== "" || grad_len !== "" || grad_loop !== "" {
-                    custom .= "`n" . GetGesturePoolName(zone[1]) . ":"
-                    if colors !== "" {
-                        custom .= "`n   Color " . colors
-                    }
-                    if grad_loop !== "" && grad_loop != CONF.gest_zone_grad_loop[color_key].v {
-                        custom .= "`n   Gradient cycling is " . ["disabled", "enabled"][grad_loop+1]
-                    }
-                    if grad_len !== "" && grad_len != CONF.gest_zone_grad_len[color_key].v {
-                        custom .= "`n   Gradient cycle length " . grad_len
-                    }
-                }
+            custom := GetGestureCustomNestedOptionsText(vals)
+            if custom {
+                res .= "`n`nCustom for nested gestures:" . custom
             }
+        } else {
+            custom := GetGestureCustomNestedOptionsText(vals)
             if custom {
                 res .= "`n`nCustom for nested gestures:" . custom
             }
@@ -829,8 +818,38 @@ _GetNodeExtraInfo(node, is_gesture:=false) {
 }
 
 
+GestureHasCustomNestedOptions(opts) {
+    return GetGestureCustomNestedOptionsText(opts) !== ""
+}
+
+
+GetGestureCustomNestedOptionsText(opts) {
+    vals := opts is Array ? opts : StrSplit(opts, ";")
+    custom := ""
+    for zone in GestureColorZones {
+        color_key := zone[2]
+        colors := GetGestureOverlayOption(vals, color_key, 0)
+        grad_len := GetGestureOverlayOption(vals, color_key, 1)
+        grad_loop := GetGestureOverlayOption(vals, color_key, 2)
+        if colors !== "" || grad_len !== "" || grad_loop !== "" {
+            custom .= "`n" . GetGesturePoolName(zone[1]) . ":"
+            if colors !== "" {
+                custom .= "`n   Color " . colors
+            }
+            if grad_loop !== "" && grad_loop != CONF.gest_zone_grad_loop[color_key].v {
+                custom .= "`n   Gradient cycling is " . ["disabled", "enabled"][grad_loop+1]
+            }
+            if grad_len !== "" && grad_len != CONF.gest_zone_grad_len[color_key].v {
+                custom .= "`n   Gradient cycle length " . grad_len
+            }
+        }
+    }
+    return custom
+}
+
+
 GetGestureOverlayOption(opts, color_key, zone_offset) {
-    zi := GetGestureZoneOverrideIndex(color_key, zone_offset)
+    zi := GestureOverlayOptsBaseIndex(opts) + GetGestureZoneOverrideIndex(color_key, zone_offset)
     return opts.Has(zi) ? opts[zi] : ""
 }
 
