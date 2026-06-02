@@ -144,7 +144,8 @@ AltHelp() {
             try gst := Integer(gst)
             b := StrLen(gst) > 64
             res := gui_entries.ubase.GetBaseHoldMod(gst, md, false, b, false, false)
-            txt := _GetKeyInfo(gst, md & ~1, res, gui_entries, true, , , b)
+            nested_gesture := path.Length && path[-1] is Array && path[-1][4] && !CheckLRMB(path)
+            txt := _GetKeyInfo(gst, md & ~1, res, gui_entries, true, , , b, , nested_gesture)
         }
     } else if i_sc == "LV_layers" {
         res := GetColumnAtCursor(UI[i_sc], true)
@@ -559,7 +560,8 @@ AltHelp() {
 
 
 _GetKeyInfo(sc, md, cur_entries, prev_entries,
-    only_base:=false, only_hold:=false, is_chord:=false, is_gesture:=false, layer:="") {
+    only_base:=false, only_hold:=false, is_chord:=false, is_gesture:=false,
+    layer:="", hide_gesture_pool:=false) {
     if !is_chord && !is_gesture {
         txt := "Key '" . _GetKeyName(sc, , true) . "'"
         if sc is Number {
@@ -587,7 +589,7 @@ _GetKeyInfo(sc, md, cur_entries, prev_entries,
     } else {
         if b_node {
             txt .= _GetNodeStrInfo(is_chord || is_gesture ? "Action" : "Tap",
-                b_node, cur_entries.ubase, is_gesture, layer)
+                b_node, cur_entries.ubase, is_gesture, layer, hide_gesture_pool)
         }
         if h_node && h_node.down_type == TYPES.Modifier {
             cnt := _CountChild("", 0, 1 << h_node.down_val,
@@ -683,7 +685,7 @@ _GetKeyInfo(sc, md, cur_entries, prev_entries,
 }
 
 
-_GetNodeStrInfo(base, node, unode, is_gesture:=false, layer:="") {
+_GetNodeStrInfo(base, node, unode, is_gesture:=false, layer:="", hide_gesture_pool:=false) {
     res := "`n`n" . base . ": " . _SwitchByActionType(node.down_type, node.down_val)
     if !layer_editing {
         if !layer {
@@ -716,7 +718,7 @@ _GetNodeStrInfo(base, node, unode, is_gesture:=false, layer:="") {
             }
         }
     }
-    res .= _GetNodeExtraInfo(node, is_gesture)
+    res .= _GetNodeExtraInfo(node, is_gesture, hide_gesture_pool)
     scs_cnt := _CountChild(layer, 0, 0, unode.scancodes, Map(), Map())
     chs_cnt := _CountChild(layer, 0, 0, Map(), unode.chords, Map())
     gst_cnt := _CountChild(layer, 0, 0, Map(), Map(), unode.gestures)
@@ -730,7 +732,7 @@ _GetNodeStrInfo(base, node, unode, is_gesture:=false, layer:="") {
 }
 
 
-_GetNodeExtraInfo(node, is_gesture:=false) {
+_GetNodeExtraInfo(node, is_gesture:=false, hide_gesture_pool:=false) {
     res := ""
     if node.gui_shortname && node.gui_shortname !== node.down_val {
         res .= "`nNamed as '" . node.gui_shortname . "'"
@@ -773,9 +775,11 @@ _GetNodeExtraInfo(node, is_gesture:=false) {
         vals := StrSplit(node.gesture_opts, ";")
         if is_gesture {
             pool := ParseGesturePool(vals[1])
-            res .= "`n`n" . GetGesturePoolName(pool) . " pool"
-            if !GesturePoolEnabled(pool) {
-                res .= "`nWarning: this gesture pool is disabled in the global settings."
+            if !hide_gesture_pool {
+                res .= "`n`n" . GetGesturePoolName(pool) . " pool"
+                if !GesturePoolEnabled(pool) {
+                    res .= "`nWarning: this gesture pool is disabled in the global settings."
+                }
             }
             rot := ["disabled", "noise reduction", "fully rotation-invariance"]
             res .= "`n`n" . (vals[2] ? "> " : "") . "Rotation: " . rot[Integer(vals[2]) + 1]

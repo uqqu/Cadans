@@ -423,10 +423,20 @@ DrawIdleFeedback(kind, progress) {
     NumPut("UChar", overlay_opacity, blend, 2)
     NumPut("UChar", 1, blend, 3)
 
-    idle_feedback_overlay.Show("NA")
+    feedback_overlay := idle_feedback_overlay
+    feedback_dc := idle_fb_mem_dc
+    if !(feedback_overlay is Gui) || !feedback_dc {
+        return
+    }
+    try {
+        feedback_hwnd := feedback_overlay.Hwnd
+        feedback_overlay.Show("NA")
+    } catch {
+        return
+    }
     DllCall(
-        "user32\UpdateLayeredWindow", "ptr", idle_feedback_overlay.Hwnd, "ptr", 0,
-        "ptr", dst, "ptr", dims, "ptr", idle_fb_mem_dc, "ptr", src,
+        "user32\UpdateLayeredWindow", "ptr", feedback_hwnd, "ptr", 0,
+        "ptr", dst, "ptr", dims, "ptr", feedback_dc, "ptr", src,
         "UInt", 0, "ptr", blend, "UInt", 2
     )
 }
@@ -574,6 +584,8 @@ StartDraw(gestures:=false, *) {
         return
     }
 
+    SetTimer(DestroyGestOverlay, 0)
+    ResetGestureOverlayFade(FadeGestureOverlay)
     CreateGestOverlay()
     if !gest_overlay {
         return
@@ -879,7 +891,7 @@ TrackMouse() {
         dy := y - prev_y
         d := Sqrt(dx*dx + dy*dy)
         cum_len += d
-        if d >= 3 {
+        if d >= Max(1, CONF.gesture_idle_move_threshold.v) {
             gesture_last_move_tick := A_TickCount
             gesture_waiting_first_move := false
         }
@@ -1004,7 +1016,7 @@ CheckGestureIdlePause() {
     }
 
     elapsed := A_TickCount - gesture_last_move_tick
-    confirm_ms := Max(0, CONF.gesture_idle_confirm_ms.v)
+    confirm_ms := Max(1, CONF.gesture_idle_confirm_ms.v)
     cancel_ms := Max(0, CONF.gesture_idle_cancel_ms.v)
 
     res := cum_len > Max(CONF.min_gesture_len.v, 10) && pool_gestures
@@ -1014,7 +1026,7 @@ CheckGestureIdlePause() {
     has_child_gestures := recognized && GestureHasChildGestures(res[2])
     idle_target_ms := 0
     idle_kind := ""
-    if has_child_gestures && confirm_ms {
+    if has_child_gestures {
         idle_target_ms := confirm_ms
         idle_kind := "confirm"
     } else if !recognized && cancel_ms {
@@ -1051,7 +1063,7 @@ CheckGestureIdlePause() {
         return
     }
 
-    if recognized && (!has_child_gestures || !confirm_ms || elapsed >= confirm_ms) {
+    if recognized && (!has_child_gestures || elapsed >= confirm_ms) {
         gesture_last_move_tick := A_TickCount
     }
     SetTimer(CheckGestureIdlePause, -track_period)

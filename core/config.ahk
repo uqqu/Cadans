@@ -298,9 +298,9 @@ CheckConfig() {
     CONF.gest_opacity := ConfValue("Gestures", "GestureOpacity", "num_step", "int",
         "Gesture &opacity (cumulative):", 42, , true, , [0, 9999, 1], "GestureGeneral")
     CONF.gesture_idle_cancel_ms := ConfValue("Gestures", "GestureIdleCancel", "num_step", "int",
-        "&Unrecognized pause cancel (ms):", 1000, "0 - disabled", true, , [0, 9999, 1], "GestureIdle")
+        "&Unrecognized pause cancel (ms):", 0, "0 - disabled", true, , [0, 9999, 1], "GestureIdle")
     CONF.gesture_idle_confirm_ms := ConfValue("Gestures", "GestureIdleConfirm", "num_step", "int",
-        "&Recognized child pause confirm (ms):", 600, "0 - disabled", true, , [0, 9999, 1], "GestureIdle")
+        "&Recognized child pause confirm (ms):", 600, , true, , [1, 9999, 1], "GestureIdle")
     CONF.gesture_idle_cancel_mode := ConfValue("Gestures", "GestureIdleCancelMode", "ddl", "int",
         "C&ancel pause feedback:", 2, , , , [IdleFeedbackModeChoices, false], "GestureIdle")
     CONF.gesture_idle_confirm_mode := ConfValue("Gestures", "GestureIdleConfirmMode", "ddl", "int",
@@ -311,6 +311,8 @@ CheckConfig() {
         "Con&firm feedback color:", "Green", , , , , "GestureIdle")
     CONF.gesture_idle_feedback_size := ConfValue("Gestures", "GestureIdleFeedbackSize", "num_step", "int",
         "Feedback &box size (px):", 72, , true, , [24, 240, 1], "GestureIdle")
+    CONF.gesture_idle_move_threshold := ConfValue("Gestures", "GestureIdleMoveThreshold", "num_step", "int",
+        "Ignore cursor &jitter below (px):", 1, , true, , [1, 999, 1], "GestureIdle")
     CONF.live_hint_enabled := ConfValue("GestureLiveHint", "LiveHintEnabled", "checkbox", "int",
         "&Enable live hint", 1)
     CONF.gest_live_hint := ConfValue("GestureLiveHint", "LiveHint", "ddl", "int",
@@ -327,7 +329,7 @@ CheckConfig() {
     CONF.live_hint_move_count := ConfValue("GestureLiveHint", "LiveHintMoveCount", "num_step", "int",
         "Moving hint max i&tems:", 6, "0 – hide moving hints", true, , [0, 999, 1])
     CONF.live_hint_min_score := ConfValue("GestureLiveHint", "LiveHintMinScore", "num_step", "float",
-        "Mo&ving hint minimum match:", 0.50, "0–1", , , [0, 100, 100])
+        "Mo&ving hint minimum item match:", 0.50, "0–1", , , [0, 100, 100])
     CONF.live_hint_opacity := ConfValue("GestureLiveHint", "LiveHintOpacity", "num_step", "int",
         "Live hint background &opacity:", 222, , true, , [0, 255, 1])
     CONF.live_hint_box_width := ConfValue("GestureLiveHint", "LiveHintBoxWidth", "num_step", "str",

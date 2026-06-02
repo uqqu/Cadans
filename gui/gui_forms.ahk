@@ -84,6 +84,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         }
     }
     curr_val := prior_layer ? unode.layers[prior_layer][0] : false
+    form_gesture_key := gest_as_base && _current_path.Length ? _current_path[-1][1] : selected_gesture
 
     if !layer_editing {
         form.Add("Text", "x10 y+10 w60", "Layer:")
@@ -179,7 +180,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         form.Add("CheckBox", "x10 y+7 w300 vDirection", "Direction invariance")
         form.Add("CheckBox", "x10 y+7 w300 vPhase",
             "Any start point (for closed figures only)").Enabled := false
-        if !selected_gesture {
+        if !form_gesture_key {
             form["ShowGesture"].Enabled := false
         } else {
             form["ShowGesture"].Text := "👀"
@@ -263,7 +264,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         .OnEvent("Click", (*) => SaveFormWithReturn(fn))
     form.bottom.Push(form["Cancel"], form["Save"], form["SaveWithReturn"])
     if save_type == 3 {
-        if !selected_gesture {
+        if !form_gesture_key {
             ToggleEnabled(0, form["Save"], form["SaveWithReturn"])
         } else {
             from_prev := true
@@ -732,7 +733,7 @@ ShowGesture(entries, *) {
                 }
             }
         }
-        DrawExisting(_gest)
+        ShowFormGesturePlayback(_gest)
         return
     }
 
@@ -765,7 +766,27 @@ ShowGesture(entries, *) {
             node_obj.vec.Push(Float(v))
         }
     }
-    DrawExisting(node_obj)
+    ShowFormGesturePlayback(node_obj)
+}
+
+
+ShowFormGesturePlayback(gesture_obj) {
+    show_btn := false
+    try show_btn := form["ShowGesture"]
+    if show_btn {
+        show_btn.Enabled := false
+    }
+    try {
+        DrawExisting(gesture_obj)
+    } catch Error as err {
+        if show_btn {
+            show_btn.Enabled := true
+        }
+        throw err
+    }
+    if show_btn {
+        show_btn.Enabled := true
+    }
 }
 
 
