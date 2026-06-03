@@ -190,7 +190,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         if save_type == 3 {
             form.Add("Button", "x10 y+10 w150 vInChainToggle", "In-chain behavior")
                 .OnEvent("Click", ShowHideButtons)
-            form.Add("Button", "x+0 yp0 w150 vColorToggle", "Gesture options")
+            form.Add("Button", "x+0 yp0 w150 vColorToggle", "Child gesture options")
                 .OnEvent("Click", ShowHideButtons)
             form["InChainToggle"].GetPos(, &y, , &h)
             _AddChainOptions(y+h)
@@ -216,7 +216,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
                 .OnEvent("Click", ShowHideButtons)
             form.Add("Button", "x+0 yp0 w100 vUpToggle", "Add. key-up action")
                 .OnEvent("Click", ShowHideButtons)
-            form.Add("Button", "x+0 yp0 w100 vColorToggle", "Gesture options")
+            form.Add("Button", "x+0 yp0 w100 vColorToggle", "Child gesture opts")
                 .OnEvent("Click", ShowHideButtons)
         }
         form["InChainToggle"].GetPos(, &y, , &h)

@@ -53,7 +53,7 @@ Or go further and build more complex logic – it’s entirely up to you.
   </tr>
   <tr>
     <td><strong>Window contexts</strong></td>
-    <td>✅ Separate assignments per application/class/title, on demand</td>
+    <td>✅ Separate assignments per application/class/title/tab, on demand</td>
   </tr>
   <tr>
     <td><strong>Layer activity (dynamic)</strong></td>
@@ -90,7 +90,10 @@ Or go further and build more complex logic – it’s entirely up to you.
   </tr>
   <tr>
     <td><strong>Gestures</strong></td>
-    <td>✅ (in 9 independent zones)</td>
+    <td>
+      <p>✅</p>
+      <em>Includes independent gesture pools, continuous gesture chains, advanced recognition controls, <a href="../../wiki/🎨-Gestures">and more</a></em>
+    </td>
   </tr>
   <tr>
     <td><strong><i>Notes:</i></strong></td>

@@ -1,6 +1,3 @@
-temp_pts := []
-temp_opt := 0
-gest_cache := Map()
 PI := 3.141592653589793
 
 
@@ -252,21 +249,19 @@ _VecNorm(a) {
 
 
 Recognize(raw_pts, gestures) {
-    global gest_cache, temp_opt, temp_pts
-
     res := Resample(raw_pts)
     pts := res[1]
     closed := Sqrt((pts[1][1]-pts[-1][1])**2 + (pts[1][2]-pts[-1][2])**2) < (res[2] / 10)
-    gest_cache := Map()
-    gest_cache[1] := Map()
+    cache := Map()
+    cache[1] := Map()
     best_gesture := ""
     best_score := -1
     for gesture in gestures {
-        score := ScoreGestureCandidate(gesture, pts, closed)
-            if score > best_score {
-                best_score := score
-                best_gesture := gesture
-            }
+        score := ScoreGestureCandidate(gesture, pts, closed, cache)
+        if score > best_score {
+            best_score := score
+            best_gesture := gesture
+        }
     }
 
     return [best_score, best_gesture]
@@ -274,8 +269,6 @@ Recognize(raw_pts, gestures) {
 
 
 RankGestures(raw_pts, gestures, limit, min_score:=0) {
-    global gest_cache, temp_opt, temp_pts
-
     out := []
     if !limit {
         return out
@@ -284,10 +277,10 @@ RankGestures(raw_pts, gestures, limit, min_score:=0) {
     res := Resample(raw_pts)
     pts := res[1]
     closed := Sqrt((pts[1][1]-pts[-1][1])**2 + (pts[1][2]-pts[-1][2])**2) < (res[2] / 10)
-    gest_cache := Map()
-    gest_cache[1] := Map()
+    cache := Map()
+    cache[1] := Map()
     for gesture in gestures {
-        score := ScoreGestureCandidate(gesture, pts, closed)
+        score := ScoreGestureCandidate(gesture, pts, closed, cache)
         if score < min_score {
             continue
         }
@@ -297,7 +290,7 @@ RankGestures(raw_pts, gestures, limit, min_score:=0) {
 }
 
 
-ScoreGestureCandidate(gesture, pts, closed) {
+ScoreGestureCandidate(gesture, pts, closed, cache) {
     fin := _GetFin(gesture)
     best_score := -1
     cur_pts := pts
@@ -305,7 +298,7 @@ ScoreGestureCandidate(gesture, pts, closed) {
     loop 2 {
         dir_i := A_Index - 1
         if !(closed && fin.opts.closed) {
-            score := _ScoreAtPhase(0, fin, cur_pts, closed, dir_i)
+            score := _ScoreAtPhase(0, fin, cur_pts, closed, dir_i, cache)
         } else {
             best_phase := 0
             score := -1
@@ -313,7 +306,7 @@ ScoreGestureCandidate(gesture, pts, closed) {
             for step in [16, 4, 1] {  ; 64/4, 16/4, 4/4
                 for delta in [(A_Index == 1 ? 0 : -2*step), -step, step, 2*step] {
                     phase := Mod(best_phase + delta + 64, 64) + 1
-                    s := _ScoreAtPhase(phase, fin, cur_pts, closed, dir_i)
+                    s := _ScoreAtPhase(phase, fin, cur_pts, closed, dir_i, cache)
                     if s > score {
                         score := s
                         best_phase := phase
@@ -364,33 +357,39 @@ Centering(pts) {
 }
 
 
-_ScoreAtPhase(phase, gesture, pts, closed, opt) {
-    global gest_cache, temp_opt, temp_pts
-
+_ScoreAtPhase(phase, gesture, pts, closed, opt, cache) {
     key := phase + 1  ; 1-indexed
 
-    if !gest_cache.Has(key) {
-        gest_cache[key] := Map()
+    if !cache.Has(key) {
+        cache[key] := Map()
     }
 
-    temp_opt := opt
-    temp_pts := PhaseShift(pts, phase)
+    cache_opt := opt
+    cache_pts := PhaseShift(pts, phase)
 
-    _CacheAdd(true, 1, key, Centering, temp_pts)
+    cache_opt += 1
+    cache_pts := _CacheGet(cache, key, cache_opt, Centering, cache_pts)
     r := gesture.opts.rotate == 2
-    _CacheAdd(gesture.opts.rotate, (r ? 2 : 4), key, Rotate, temp_pts, r)
-    _CacheAdd(gesture.opts.scaling = 0, 8, key, Normalize, temp_pts)
-    _CacheAdd(true, 16, key, Flatten, temp_pts)
+    if gesture.opts.rotate {
+        cache_opt += (r ? 2 : 4)
+        cache_pts := _CacheGet(cache, key, cache_opt, Rotate, cache_pts, r)
+    }
+    if gesture.opts.scaling = 0 {
+        cache_opt += 8
+        cache_pts := _CacheGet(cache, key, cache_opt, Normalize, cache_pts)
+    }
+    cache_opt += 16
+    cache_pts := _CacheGet(cache, key, cache_opt, Flatten, cache_pts)
 
-    if gesture.opts.scaling != 0 && !gest_cache[key].Has(temp_opt + 32) {
-        gest_cache[key][temp_opt + 32] := _VecNorm(temp_pts)
+    if gesture.opts.scaling != 0 && !cache[key].Has(cache_opt + 32) {
+        cache[key][cache_opt + 32] := _VecNorm(cache_pts)
     }
 
     if gesture.opts.scaling = 0 {
-        score := CosineSim(gesture.vec, temp_pts)
+        score := CosineSim(gesture.vec, cache_pts)
     } else {
-        score := CosineSim(gesture.vec, temp_pts, gesture.opts.scaling,
-            gesture.opts.len, gest_cache[key][temp_opt + 32])
+        score := CosineSim(gesture.vec, cache_pts, gesture.opts.scaling,
+            gesture.opts.len, cache[key][cache_opt + 32])
     }
 
     return score
@@ -411,16 +410,11 @@ PhaseShift(pts, shft) {
 }
 
 
-_CacheAdd(condition, opt_val, idx, function, args*) {
-    global temp_opt, temp_pts
-
-    if condition {
-        temp_opt += opt_val
-        if !gest_cache[idx].Has(temp_opt) {
-            gest_cache[idx][temp_opt] := function(args*)
-        }
-        temp_pts := gest_cache[idx][temp_opt]
+_CacheGet(cache, idx, cache_opt, function, args*) {
+    if !cache[idx].Has(cache_opt) {
+        cache[idx][cache_opt] := function(args*)
     }
+    return cache[idx][cache_opt]
 }
 
 
