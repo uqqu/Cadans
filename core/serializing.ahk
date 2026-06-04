@@ -52,7 +52,66 @@ DeserializeMap(filename) {
     if ver < 0.82 {
         UpdateLayerVersion(struct, ver)
     }
+    NormalizeGestureStorageKeys(struct)
     return struct
+}
+
+
+NormalizeGestureStorageKeys(root) {
+    for _, node in root {
+        if node is Array {
+            _NormalizeGestureStorageKeysInNode(node)
+        }
+    }
+}
+
+
+_NormalizeGestureStorageKeysInNode(node) {
+    _NormalizeGestureMapKeys(node[-1])
+    for _, child_map in [node[-3], node[-2], node[-1]] {
+        for _, mods in child_map {
+            for _, child_node in mods {
+                _NormalizeGestureStorageKeysInNode(child_node)
+            }
+        }
+    }
+}
+
+
+_NormalizeGestureMapKeys(gestures) {
+    normalized := Map()
+    old_keys := []
+    for key, mods in gestures {
+        old_keys.Push(key)
+        split_legacy_rule_variants := !InStr(key, GestureStorageKeySep())
+            && _GestureMapHasMultipleWindowRules(mods)
+        for md, raw_node in mods {
+            new_key := GestureStorageKeyForNode(key, raw_node)
+            if !normalized.Has(new_key) {
+                normalized[new_key] := Map()
+            }
+            new_md := split_legacy_rule_variants ? 0 : md
+            if normalized[new_key].Has(new_md) {
+                new_md := md
+            }
+            normalized[new_key][new_md] := raw_node
+        }
+    }
+    for key in old_keys {
+        gestures.Delete(key)
+    }
+    for key, mods in normalized {
+        gestures[key] := mods
+    }
+}
+
+
+_GestureMapHasMultipleWindowRules(mods) {
+    seen := Map()
+    for _, raw_node in mods {
+        try seen[raw_node[12]] := true
+    }
+    return seen.Count > 1
 }
 
 

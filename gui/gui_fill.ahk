@@ -742,7 +742,7 @@ _GetGesturePreviewIcon(path_key, node, vec_str, img_w, img_h, preview_colors, us
         . node.gesture_opts . "|" . _GesturePreviewColorsKey(preview_colors)
     used_keys[key] := true
     if !path_cache.Has(key) {
-        path_cache[key] := CreateGesturePreviewHIcon(node, img_w, img_h, true, true, preview_colors)
+        path_cache[key] := CreateGesturePreviewHIcon(node, img_w, img_h, true, true, preview_colors, false, 0.72)
     }
     return path_cache[key]
 }

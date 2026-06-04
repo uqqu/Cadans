@@ -459,6 +459,27 @@ GestureToStr(raw_pts, rot, scaling, dirs, phase, pool_override:=false) {
 }
 
 
+GestureStorageKey(vec_str, window_rule:="") {
+    return vec_str . GestureStorageKeySep() . window_rule
+}
+
+
+GestureVecKey(storage_key) {
+    return StrSplit(storage_key, GestureStorageKeySep())[1]
+}
+
+
+GestureStorageKeyForNode(storage_key, raw_node) {
+    try return GestureStorageKey(GestureVecKey(storage_key), raw_node[12])
+    return storage_key
+}
+
+
+GestureStorageKeySep() {
+    return "\u001f"
+}
+
+
 _CloseGestureSeamPts(pts, blend_portion:=0.2) {
     pts_cnt := pts.Length
     if pts_cnt < 3 {

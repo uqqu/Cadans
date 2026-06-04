@@ -49,7 +49,13 @@ AddNewGesture(*) {
 
 ShowSelectedGesture(*) {
     entries := _GetUnholdEntries()
-    parent_opts := _GetFirst(entries.ubase).gesture_opts
+    parent_opts := ""
+    try {
+        parent_node := _GetFirst(entries.ubase)
+        if parent_node is Object && parent_node.HasOwnProp("gesture_opts") {
+            parent_opts := parent_node.gesture_opts
+        }
+    }
     gest := _GetFirst(
         entries.ubase.GetBaseHoldMod(selected_gesture, gui_mod_val, false, true
     ).ubase)

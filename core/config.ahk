@@ -185,6 +185,7 @@ CheckConfig() {
             . "`r`n[UserDefined]`r`n"
             . "OpenWeatherMapApi=`r`n"
             . "GetGeoApi=`r`n"
+            . "WinHTTPProxy=`r`n"
             . "`r`n[ProcessGroups]`r`n"
             . "browsers=firefox.exe, chrome.exe, msedge.exe, opera.exe, brave.exe, vivaldi.exe`r`n"
             . "editors=notepad.exe, notepad++.exe, sublime_text.exe, code.exe, atom.exe`r`n"
@@ -452,6 +453,9 @@ CheckConfig() {
         if !LANGS.Has(lang) {
             LANGS.Add(lang, GetLayoutNameFromHKL(lang))
         }
+    }
+    if !CONF.UserDefined.Has("WinHTTPProxy") {
+        CONF.UserDefined["WinHTTPProxy"] := ""
     }
 }
 

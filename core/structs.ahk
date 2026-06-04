@@ -414,6 +414,8 @@ BuildNode(raw_node, sc, md, down_type:=false) {
     node_obj.window_override := node_rule.override
 
     if StrLen(sc) > 256 {  ; gesture ^^'
+        sc := GestureVecKey(sc)
+        node_obj.sc := sc
         node_obj.opts := {}
         vals := StrSplit(node_obj.gesture_opts, ";")
         for i, name in ["pool", "rotate", "scaling", "dirs", "closed", "len"] {

@@ -84,7 +84,9 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         }
     }
     curr_val := prior_layer ? unode.layers[prior_layer][0] : false
-    form_gesture_key := gest_as_base && _current_path.Length ? _current_path[-1][1] : selected_gesture
+    form_gesture_key := gest_as_base && _current_path.Length
+        ? GestureVecKey(_current_path[-1][1])
+        : (selected_gesture ? GestureVecKey(selected_gesture) : false)
 
     if !layer_editing {
         form.Add("Text", "x10 y+10 w60", "Layer:")
@@ -184,6 +186,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
             form["ShowGesture"].Enabled := false
         } else {
             form["ShowGesture"].Text := "👀"
+            form["SetGesture"].Text := "Redraw saved gesture"
         }
     }
     if save_type > 1 {
@@ -336,6 +339,34 @@ ValidateFormWindowRule() {
 
     MsgBox(err, "Invalid window rule", "Icon!")
     return false
+}
+
+
+ValidateFormActionValue(type_text, val, field_name:="Value") {
+    if type_text == "Default" || type_text == "Disabled" || type_text == "Text" {
+        return true
+    }
+
+    val := Trim(val)
+    if !StrLen(val) {
+        MsgBox(field_name . " cannot be empty. To leave it empty, use the 'Disabled' type.",
+            "Invalid value", "Icon!")
+        return false
+    }
+
+    if type_text == "KeySimulation" {
+        try {
+            if IsNumber(val) && Integer(val) == 0 {
+                throw
+            }
+        } catch {
+            MsgBox(field_name . " must contain a valid key simulation.",
+                "Invalid key simulation", "Icon!")
+            return false
+        }
+    }
+
+    return true
 }
 
 
@@ -717,7 +748,7 @@ ShowGesture(entries, *) {
                 entries.ubase.GetBaseHoldMod(selected_gesture, gui_mod_val, false, true).ubase
             )
         }
-        SetOverlayOpts(_GetFirst(par ? par.ubase : entries.ubase).gesture_opts,
+        SetOverlayOpts(GetFormParentGestureOpts(par, entries),
             IsNestedGesturePath(current_path) ? 5 : gest.opts.pool)
 
         if gest.opts.dirs = dirs && gest.opts.closed = phase {
@@ -755,7 +786,7 @@ ShowGesture(entries, *) {
         }
     }
 
-    SetOverlayOpts(_GetFirst(par ? par.ubase : entries.ubase).gesture_opts, node_obj.opts.pool)
+    SetOverlayOpts(GetFormParentGestureOpts(par, entries), node_obj.opts.pool)
     vals := StrSplit(gest_str[1], " ")
     node_obj.vec := []
     for v in vals {
@@ -767,6 +798,17 @@ ShowGesture(entries, *) {
         }
     }
     ShowFormGesturePlayback(node_obj)
+}
+
+
+GetFormParentGestureOpts(parent_entries, entries) {
+    try {
+        node := _GetFirst(parent_entries ? parent_entries.ubase : entries.ubase)
+        if node is Object && node.HasOwnProp("gesture_opts") {
+            return node.gesture_opts
+        }
+    }
+    return ""
 }
 
 
@@ -1163,6 +1205,12 @@ WriteValue(is_hold, custom_path:=false, paired:=false, *) {
         try vals[name] := form[name].Value
     }
     vals["TypeDDL"] := vals["TypeDDL"] || "Modifier"
+    vals["UpTypeDDL"] := vals["UpTypeDDL"] || "Disabled"
+
+    if !ValidateFormActionValue(vals["TypeDDL"], vals["ValInp"])
+        || !ValidateFormActionValue(vals["UpTypeDDL"], vals["UpValInp"], "Up value") {
+        return
+    }
 
     if vals["CBIrrevocable"] && vals["ChildBehaviorDDL"] == 5
         && MsgBox("You set irrevocable option with ignoring unassigned children.`n"
@@ -1172,11 +1220,6 @@ WriteValue(is_hold, custom_path:=false, paired:=false, *) {
         return
     }
 
-    if !StrLen(vals["ValInp"]) && vals["TypeDDL"] !== "Default" && vals["TypeDDL"] !== "Disabled" {
-        MsgBox("Enter a value. To leave it empty, use the 'Disabled' type.",
-            "Invalid value", "Icon!")
-        return
-    }
     if vals["TypeDDL"] == "Modifier" {
         try {
             int := Integer(form["ValInp"].Text)
@@ -1224,7 +1267,7 @@ WriteValue(is_hold, custom_path:=false, paired:=false, *) {
         SaveValue(
             is_hold, layer,
             TYPES.%vals["TypeDDL"]%, vals["ValInp"],
-            TYPES.%vals["UpTypeDDL"] || "Disabled"%, vals["UpValInp"],
+            TYPES.%vals["UpTypeDDL"]%, vals["UpValInp"],
             vals["CBInstant"], vals["CBIrrevocable"],
             new_lp,
             (vals["CustomNK"] != CONF.MS_NK.v ? vals["CustomNK"] : false),
@@ -1235,7 +1278,7 @@ WriteValue(is_hold, custom_path:=false, paired:=false, *) {
         SaveValue(
             is_hold, layer,
             TYPES.%vals["TypeDDL"]%, vals["ValInp"],
-            TYPES.%vals["UpTypeDDL"] || "Disabled"%, vals["UpValInp"],
+            TYPES.%vals["UpTypeDDL"]%, vals["UpValInp"],
             vals["CBInstant"], vals["CBIrrevocable"],
             new_lp,
             (vals["CustomNK"] != CONF.MS_NK.v ? vals["CustomNK"] : false),
@@ -1249,6 +1292,7 @@ WriteValue(is_hold, custom_path:=false, paired:=false, *) {
 CloseForm(*) {
     global form, func_form, init_drawing, form_points
 
+    SetTimer(_ReturnButtonText, 0)
     try form.Destroy()
     try func_form.Destroy()
     form := false
@@ -1262,6 +1306,10 @@ WriteChord(chord:=false, *) {
     global form, temp_chord, start_temp_chord
 
     if !ValidateFormWindowRule() {
+        return
+    }
+
+    if !ValidateFormActionValue(form["TypeDDL"].Text, form["ValInp"].Text) {
         return
     }
 
@@ -1372,6 +1420,10 @@ WriteGesture(as_base, entries, path, *) {
         return
     }
 
+    if !ValidateFormActionValue(form["TypeDDL"].Text, form["ValInp"].Text) {
+        return
+    }
+
     try {
         scal := form["Scaling"].Text == "" ? 0 : Float(form["Scaling"].Text)
     } catch {
@@ -1387,14 +1439,14 @@ WriteGesture(as_base, entries, path, *) {
     save_md := as_base ? path[-1][2] : gui_mod_val
 
     if !from_prev {
-        pool_override := nested_pattern ? 5 : old_gesture_key ? GetGestureVecPool(old_gesture_key, false) : false
+        pool_override := nested_pattern ? 5 : false
         gest_str := GestureToStr(form_points, rot, scal, dirs, phase, pool_override)
     } else {
         if as_base {
             gest := _GetFirst(entries.ubase)
         } else {
             gest := _GetFirst(
-                entries.ubase.GetBaseHoldMod(selected_gesture, gui_mod_val, false, true).ubase
+                entries.ubase.GetBaseHoldMod(old_gesture_key, save_md, false, true).ubase
             )
         }
         vals := StrSplit(gest.gesture_opts, ";")
@@ -1404,12 +1456,13 @@ WriteGesture(as_base, entries, path, *) {
                 "Outdated pattern", "Icon!")
             return
         }
-        pool := nested_pattern ? 5 : GetGestureVecPool(old_gesture_key, vals[1])
+        pool := nested_pattern ? 5 : GetGestureVecPool(GestureVecKey(old_gesture_key), vals[1])
         opts := pool . ";" . rot . ";" . scal . ";" . dirs . ";" . phase . ";" . gest_len
-        gest_str := [ReplaceGesturePoolInVec(old_gesture_key, pool), opts]
+        gest_str := [ReplaceGesturePoolInVec(GestureVecKey(old_gesture_key), pool), opts]
     }
     gest_str[2] .= _BuildFormGestureOverlayOpts(true, true)
     gest_str[2] := RTrim(gest_str[2], ";")
+    new_gesture_key := GestureStorageKey(gest_str[1], form["WindowRule"].Text)
 
     ToggleFreeze(1)
 
@@ -1431,15 +1484,15 @@ WriteGesture(as_base, entries, path, *) {
     }
     json_gestures := res[-1]
 
-    if json_gestures.Has(gest_str[1])
+    if json_gestures.Has(new_gesture_key)
         && SubStr(form.Title, 1, 8) !== "Existing"
-        && MsgBox("An identical gesture already exists on this layer. "
+        && MsgBox("An identical gesture with this window rule already exists on this layer. "
         . "Do you want to overwrite it?", "Confirmation", "YesNo Icon?") == "No" {
         ToggleFreeze(0)
         return
     }
 
-    child_maps := GetExistingGestureChildMaps(json_gestures, old_gesture_key, gest_str[1], save_md)
+    child_maps := GetExistingGestureChildMaps(json_gestures, old_gesture_key, new_gesture_key, save_md)
 
     if old_gesture_key && json_gestures.Has(old_gesture_key) {
         if json_gestures[old_gesture_key].Count !== 1 {
@@ -1449,10 +1502,10 @@ WriteGesture(as_base, entries, path, *) {
         }
     }
 
-    if !json_gestures.Has(gest_str[1]) {
-        json_gestures[gest_str[1]] := Map()
+    if !json_gestures.Has(new_gesture_key) {
+        json_gestures[new_gesture_key] := Map()
     }
-    json_gestures[gest_str[1]][save_md] := [
+    json_gestures[new_gesture_key][save_md] := [
         TYPES.%form["TypeDDL"].Text%, form["ValInp"].Text . "", TYPES.Disabled, "",
         Integer(form["CBInstant"].Value), Integer(form["CBIrrevocable"].Value),
         0, (form["CustomNK"].Text != CONF.MS_NK.v ? Integer(form["CustomNK"].Text || 0) : 0),

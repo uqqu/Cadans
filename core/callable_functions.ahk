@@ -60,7 +60,7 @@ ToggleLayers(layers*) {
 }
 
 
-ActivateApp(path, process_name:="") {
+ActivateApp(path:="", process_name:="") {
     try {
         name := "ahk_exe " . process_name
         WinActive(name) ? WinMinimize(name) : WinActivate(name)
@@ -108,6 +108,28 @@ GetCustomDateTime(val, out:="Ouptut: Tooltip", t:=false) {
 }
 
 
+HttpGet(url, timeout_ms:=4000) {
+    req := ComObject("WinHttp.WinHttpRequest.5.1")
+    try {
+        proxy := Trim(CONF.UserDefined.Get("WinHTTPProxy", ""))
+        if proxy {
+            proxy := RegExReplace(proxy, "i)^(?:https?:)?//")
+            req.SetProxy(2, proxy)
+        }
+    }
+    req.SetTimeouts(1000, 2000, 2000, timeout_ms)
+    req.Open("GET", url, true)
+    req.Send()
+    if !req.WaitForResponse(Max(1, Ceil(timeout_ms / 1000))) {
+        throw Error("Request timed out.")
+    }
+    if req.Status >= 400 {
+        throw Error("HTTP " . req.Status . ": " . req.StatusText)
+    }
+    return req
+}
+
+
 GetWeather(city_name, out:="Ouptut: Tooltip", t:=false) {
     static weather_key:=RegRead("HKEY_CURRENT_USER\Environment", "OpenWeatherMapApi", 0)
 
@@ -125,12 +147,15 @@ GetWeather(city_name, out:="Ouptut: Tooltip", t:=false) {
         city_name := InputBox("City name", "Get weather", "h100 w170").Value
     }
 
-    web_request := ComObject("WinHttp.WinHttpRequest.5.1")
-    web_request.Open("GET",
-        "https://api.openweathermap.org/data/2.5/weather?q=" . city_name
-        . "&appid=" . weather_key . "&units=metric"
-    )
-    web_request.Send()
+    try {
+        web_request := HttpGet(
+            "https://api.openweathermap.org/data/2.5/weather?q=" . city_name
+            . "&appid=" . weather_key . "&units=metric"
+        )
+    } catch Error as err {
+        outs[out]("Weather request failed:`n" . err.Message, t)
+        return
+    }
 
     stat := StrTitle(RegExReplace(web_request.ResponseText, '.+"main":"(\w+)".+', "$1"))
     temp := RegExReplace(web_request.ResponseText, '.+"temp":(-?\d+\.\d+).+', "$1")
@@ -154,12 +179,15 @@ ExchRates(from_currency, to_currency, out:="Ouptut: Tooltip", t:=false) {
         }
     }
 
-    web_request := ComObject("WinHttp.WinHttpRequest.5.1")
-    web_request.Open("GET",
-        "https://api.getgeoapi.com/api/v2/currency/convert?api_key="
-        . currency_key . "&from=" . from_currency . "&to=" . to_currency . "&amount=1&format=json"
-    )
-    web_request.Send()
+    try {
+        web_request := HttpGet(
+            "https://api.getgeoapi.com/api/v2/currency/convert?api_key="
+            . currency_key . "&from=" . from_currency . "&to=" . to_currency . "&amount=1&format=json"
+        )
+    } catch Error as err {
+        outs[out]("Currency request failed:`n" . err.Message, t)
+        return
+    }
 
     res := RegExMatch(web_request.ResponseText, '"rate_for_amount":"(\d+\.\d+)"', &m) ? m[1] : 0
     outs[out](from_currency . "–" . to_currency . ": " . Round(res, 2), t)
@@ -168,9 +196,12 @@ ExchRates(from_currency, to_currency, out:="Ouptut: Tooltip", t:=false) {
 
 WikiSummary(lang:="en", inp:="Input: InputBox", out:="Ouptut: Tooltip", t:=false) {
     url := "https://" . lang . ".wikipedia.org/api/rest_v1/page/summary/" . inps[inp]()
-    web_request := ComObject("WinHttp.WinHttpRequest.5.1")
-    web_request.Open("GET", url)
-    web_request.Send()
+    try {
+        web_request := HttpGet(url)
+    } catch Error as err {
+        outs[out]("Wiki request failed:`n" . err.Message, t)
+        return
+    }
     bin := web_request.ResponseBody
 
     stream := ComObject("ADODB.Stream")
@@ -426,10 +457,7 @@ ShortenURL(inp:="Input: InputBox", out:="Ouptut: Tooltip", t:=false) {
     }
 
     try {
-        http := ComObject("WinHttp.WinHttpRequest.5.1")
-        http.Open("GET", "https://tinyurl.com/api-create.php?url=" . url, true)
-        http.Send()
-        http.WaitForResponse()
+        http := HttpGet("https://tinyurl.com/api-create.php?url=" . url)
         if http.ResponseText == "Error" {
             throw
         }
@@ -702,7 +730,7 @@ _ParseFuncArgs(s) {
             if in_array {
                 arr_buf.Push(Trim(buffer))
             } else {
-                args.Push(Trim(buffer))
+                _PushFuncArg(args, buffer)
             }
             buffer := ""
             i += 1
@@ -714,8 +742,25 @@ _ParseFuncArgs(s) {
     }
 
     if Trim(buffer) !== "" {
-        in_array ? arr_buf.Push(Trim(buffer)) : args.Push(Trim(buffer))
+        in_array ? arr_buf.Push(Trim(buffer)) : _PushFuncArg(args, buffer)
+    } else if !in_array && args.Length && SubStr(s, -1) == "," {
+        _PushEmptyFuncArg(args)
     }
 
     return args
+}
+
+
+_PushFuncArg(args, raw_arg) {
+    val := Trim(raw_arg)
+    if val == "" {
+        _PushEmptyFuncArg(args)
+    } else {
+        args.Push(val)
+    }
+}
+
+
+_PushEmptyFuncArg(args) {
+    args.Length += 1
 }

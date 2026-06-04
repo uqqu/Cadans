@@ -134,13 +134,11 @@ AltHelp() {
             }
             by_cursor_pos := true
             prev_hwnd := fake_hwnd
-            res := StrSplit(obj.GetText(r, 8), ";")
-            if !res.Length || !res[1] {
+            gst := obj.GetText(r, 8)
+            if !gst {
                 return
             }
-            gst := res[1]
-            md := 0
-            try md := Integer(res[2])
+            md := gui_mod_val
             try gst := Integer(gst)
             b := StrLen(gst) > 64
             res := gui_entries.ubase.GetBaseHoldMod(gst, md, false, b, false, false)

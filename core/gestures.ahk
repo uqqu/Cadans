@@ -400,7 +400,6 @@ DrawIdleFeedback(kind, progress) {
         DrawIdleFeedbackBackground(g, cx, cy, radius, pen_w)
         DrawIdleFeedbackRing(g, cx, cy, radius, pen_w, feedback_rgb, progress)
     } else if mode == 3 {
-        DrawIdleFeedbackBackground(g, cx, cy, radius, pen_w)
         DrawIdleFeedbackPie(g, cx, cy, radius, feedback_rgb, progress)
     } else if mode == 4 {
         DrawIdleFeedbackShrink(g, cx, cy, radius, feedback_rgb, progress)
@@ -1568,7 +1567,8 @@ GetLiveHintPreviewIcon(node, w, h, colors) {
 
     key := ObjPtr(node) . "|" . w . "x" . h . "|" . GestureColorSignature(colors)
     if !live_hint_icon_cache.Has(key) {
-        live_hint_icon_cache[key] := CreateGesturePreviewHIcon(node, w, h, false, false, colors)
+        render_scale := Max(Min(w / 58, h / 34), 0.75)
+        live_hint_icon_cache[key] := CreateGesturePreviewHIcon(node, w, h, false, false, colors, render_scale)
     }
     return live_hint_icon_cache[key]
 }
@@ -1936,10 +1936,14 @@ ResetGestureOverlayFade(timer_fn) {
 }
 
 
-CreateGesturePreviewHIcon(gesture_obj, w:=58, h:=34, show_pool:=false, bottom_rule:=false, stroke_colors:=false) {
+CreateGesturePreviewHIcon(
+    gesture_obj, w:=58, h:=34, show_pool:=false, bottom_rule:=false, stroke_colors:=false,
+    render_scale:=false, stroke_scale:=1
+) {
     if !GdipStartup() || !gesture_obj.vec.Length {
         return 0
     }
+    render_scale := render_scale == false ? CONF.gui_scale.v : render_scale
 
     if DllCall("gdiplus\GdipCreateBitmapFromScan0", "int", w, "int", h,
         "int", 0, "int", 0xE200B, "ptr", 0, "ptr*", &bmp:=0) {
@@ -1953,10 +1957,12 @@ CreateGesturePreviewHIcon(gesture_obj, w:=58, h:=34, show_pool:=false, bottom_ru
     DllCall("gdiplus\GdipSetSmoothingMode", "ptr", g, "int", 4)
     DllCall("gdiplus\GdipSetPixelOffsetMode", "ptr", g, "int", 3)
 
-    DllCall("gdiplus\GdipCreateSolidFill", "uint", 0x00FFFFFF, "ptr*", &brush_bg:=0)
+    DllCall("gdiplus\GdipSetCompositingMode", "ptr", g, "int", 1)  ; SourceCopy
+    DllCall("gdiplus\GdipCreateSolidFill", "uint", 0x00000000, "ptr*", &brush_bg:=0)
     DllCall("gdiplus\GdipFillRectangle", "ptr", g, "ptr", brush_bg,
         "float", 0, "float", 0, "float", w, "float", h)
     DllCall("gdiplus\GdipDeleteBrush", "ptr", brush_bg)
+    DllCall("gdiplus\GdipSetCompositingMode", "ptr", g, "int", 0)  ; SourceOver
 
     vec := gesture_obj.vec
     min_x := max_x := vec[1]
@@ -1970,7 +1976,7 @@ CreateGesturePreviewHIcon(gesture_obj, w:=58, h:=34, show_pool:=false, bottom_ru
         i += 2
     }
 
-    margin := Max(Round(3.5 * CONF.gui_scale.v), 2)
+    margin := Max(Round(3.5 * render_scale), 2)
     span_x := Max(max_x - min_x, 0.001)
     span_y := Max(max_y - min_y, 0.001)
     scale := Min((w - margin * 2) / span_x, (h - margin * 2) / span_y)
@@ -1990,7 +1996,7 @@ CreateGesturePreviewHIcon(gesture_obj, w:=58, h:=34, show_pool:=false, bottom_ru
         y := map_y(vec[i + 1])
         t := (segment_i - 0.5) / total_segments
         smooth_t := t * t * (3 - 2 * t)
-        width := Max((0.75 + 1.75 * smooth_t) * CONF.gui_scale.v, 0.75)
+        width := Max((1.75 + 2.25 * smooth_t) * render_scale * stroke_scale, 1.1)
         line_color := GesturePreviewStrokeColor(stroke_colors, t)
         DrawGesturePreviewSoftLine(g, prev_x, prev_y, x, y, width, line_color)
         prev_x := x
