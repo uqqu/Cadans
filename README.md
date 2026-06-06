@@ -2,6 +2,13 @@
 <img src="https://raw.githubusercontent.com/uqqu/.other/refs/heads/master/readme_images/Cadans/demo.gif">
 </p>
 
+<details>
+  <summary>Alt demo (.mp4, 4½ min)</summary>
+
+https://github.com/user-attachments/assets/b9ee0e44-52c3-4635-8508-bac268e18b2c
+
+</details>
+
 ##
 
 Welcome to **Cadans** – an input system where interactions can continue beyond a single action.  
