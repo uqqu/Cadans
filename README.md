@@ -5,7 +5,7 @@
 <details>
   <summary>Alt demo (.mp4, 4½ min)</summary>
 
-https://github.com/user-attachments/assets/b9ee0e44-52c3-4635-8508-bac268e18b2c
+https://github.com/user-attachments/assets/554e2946-9497-4977-8e25-e92c8faf9245
 
 </details>
 
