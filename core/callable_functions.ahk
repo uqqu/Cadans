@@ -520,7 +520,7 @@ AutoScrollStart(direction:="down", speed:=100, target:="cursor", accel:=0, stop_
 
     if target == "cursor" {
         MouseGetPos &x, &y, &win, &ctl, 3
-        hwnd := ctl ? ctl : win
+        hwnd := (ctl ?? 0) || (win ?? 0)
     } else {
         hwnd := WinGetID("A")
     }

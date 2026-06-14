@@ -66,6 +66,8 @@ CheckMouse(sc, *) {
     } else if is_drag_mode && active_hwnd == UI.Hwnd {
         if sc == "LButton" {
             MouseGetPos(,, &win_id, &ctrl_hwnd, 2)
+            win_id := win_id ?? 0
+            ctrl_hwnd := ctrl_hwnd ?? 0
             if win_id == UI.Hwnd && ctrl_hwnd {
                 obj := GuiCtrlFromHwnd(ctrl_hwnd)
                 if obj {

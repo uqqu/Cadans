@@ -304,6 +304,8 @@ TrackDrag() {
     global curr_obj
 
     MouseGetPos(,, &win_id, &ctrl_hwnd, 2)
+    win_id := win_id ?? 0
+    ctrl_hwnd := ctrl_hwnd ?? 0
     if ctrl_hwnd && win_id == UI.Hwnd {
         obj := GuiCtrlFromHwnd(ctrl_hwnd)
         if obj {

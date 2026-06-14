@@ -44,11 +44,10 @@ for sc in SYS_MODIFIERS {
 ;Logger.Start()
 ;Logger.level := 3
 
-
 PreCheck(sc, *) {
     global catched_entries, await_hold, await_mod
 
-    if SYS_MODIFIERS.Has(sc) {
+    if SYS_MODIFIERS.Has(sc) && !current_presses.Has(sc) {
         sysmod_state[sc] := 2
     }
 

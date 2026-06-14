@@ -1061,14 +1061,12 @@ RefreshGuiWindowCtxDdl(old_txt:="") {
         return
     }
 
-    SetCurrentWindowContext(active_proc, active_class, active_title)
-    gui_proc_ctx := current_ctx
-
+    gui_proc_ctx := WIN_CTX.other_id
     txt := GetGuiWindowCtxText(gui_proc_ctx)
 
     if !ArrayHasValue(items, txt) {
-        gui_proc_ctx := WIN_CTX.other_id
-        txt := GetGuiWindowCtxText(gui_proc_ctx)
+        txt := items.Length ? items[1] : "*"
+        gui_proc_ctx := GetGuiWindowCtxByText(txt)
     }
 
     UI["DdlProcCtx"].Text := txt

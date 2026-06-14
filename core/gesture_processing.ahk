@@ -132,6 +132,10 @@ GesturePoolEnabled(pool) {
 
 
 Resample(pts) {
+    if !pts.Length {
+        return [[], 0]
+    }
+
     total := 0
     seg_len := []
     loop pts.Length - 1 {
@@ -167,6 +171,9 @@ Resample(pts) {
         target += step
     }
 
+    while out.Length < 63 {
+        out.Push([pts[-1][1], pts[-1][2]])
+    }
     out.Push([pts[-1][1], pts[-1][2]])
 
     return [out, total]
@@ -249,8 +256,12 @@ _VecNorm(a) {
 
 
 Recognize(raw_pts, gestures) {
-    res := Resample(raw_pts)
+    res := Resample(raw_pts.Clone())
     pts := res[1]
+    if pts.Length != 64 {
+        return [-1, ""]
+    }
+
     closed := Sqrt((pts[1][1]-pts[-1][1])**2 + (pts[1][2]-pts[-1][2])**2) < (res[2] / 10)
     cache := Map()
     cache[1] := Map()
@@ -274,8 +285,12 @@ RankGestures(raw_pts, gestures, limit, min_score:=0) {
         return out
     }
 
-    res := Resample(raw_pts)
+    res := Resample(raw_pts.Clone())
     pts := res[1]
+    if pts.Length != 64 {
+        return out
+    }
+
     closed := Sqrt((pts[1][1]-pts[-1][1])**2 + (pts[1][2]-pts[-1][2])**2) < (res[2] / 10)
     cache := Map()
     cache[1] := Map()
@@ -419,6 +434,11 @@ _CacheGet(cache, idx, cache_opt, function, args*) {
 
 
 CosineSim(vec_a, vec_b, beta:=0, len_a?, len_b?) {
+    if !vec_a.Length || vec_a.Length != vec_b.Length
+        || beta && (!len_a || !len_b) {
+        return -1
+    }
+
     s := 0
     for i, a in vec_a {
         s += a * vec_b[i]

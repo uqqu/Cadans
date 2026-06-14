@@ -1353,7 +1353,12 @@ DrawLiveHintList(items, more_count, start_x, start_y) {
     preview_w := has_items ? Round(Max(fs * 2.18, 44)) : 0
     preview_h := Round(Max(fs * 1.15, 23))
     gap := has_items ? Round(Max(fs * 0.40, 8)) : 0
-    score_w := HasLiveHintScores(items) ? Round(Max(fs * 2.48, 53)) : 0
+    score_w := 0
+    if HasLiveHintScores(items) {
+        score_w := CONF.live_hint_min_score.v < 0
+            ? Round(Max(fs * 2.82, 61))
+            : Round(Max(fs * 2.48, 53))
+    }
     pad_x := Round(Max(fs * 0.55, 10))
     pad_y := Round(Max(fs * 0.35, 7))
     row_h := Max(preview_h, Round(fs * 1.36))
@@ -1440,6 +1445,7 @@ DrawLiveHintList(items, more_count, start_x, start_y) {
             NumPut("float", ty, rect_score, 4)
             NumPut("float", score_w, rect_score, 8)
             NumPut("float", row_h, rect_score, 12)
+            DllCall("gdiplus\GdipSetStringFormatAlign", "ptr", fmt, "int", 0)
             DllCall("gdiplus\GdipDrawString", "ptr", g, "wstr", score_text, "int", StrLen(score_text),
                 "ptr", text_font, "ptr", rect_score, "ptr", fmt, "ptr", brush_fg)
         }
