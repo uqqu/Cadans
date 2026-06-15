@@ -128,8 +128,7 @@ GetEntries(sc) {
         return entries
     } else {
         gests := _GetGestures(entries.ubase)
-        CollectPool(gests)
-        if pool_gestures.Length {
+        if CollectPool(gests).Length {
             return entries
         }
         return false
@@ -203,7 +202,8 @@ SendAwaiting(order, sc:=0) {
                     if res !== -1 {
                         if res == false || res[2] == "" || res[1] < CONF.min_cos_similarity.v {
                             if t && t[4] && !chord_presses.Has(t[2]) && (!current_mod || sc == t[2]) {
-                                is_unrecognized := res != false || cum_len > Max(CONF.min_gesture_len.v, 10)
+                                is_unrecognized := res != false
+                                    || GetGestureTravelLength() > Max(CONF.min_gesture_len.v, 10)
                                 ProcessUnrecognizedGesture(t[1], t[2], t[3], is_unrecognized)
                             }
                         } else {
@@ -402,10 +402,10 @@ TreatGest(entries, sc) {
 
     gests := _GetGestures(entries.ubase)
     if entries.ubase && gests.Count {
-        CollectPool(gests)
+        pool_gestures := CollectPool(gests)
         if pool_gestures.Length {
             await_gest := [entries.ubase, sc, false, true]
-            StartDraw()
+            StartDraw(pool_gestures)
         }
     }
 }

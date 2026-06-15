@@ -20,34 +20,76 @@ idle_fb_hbm := 0
 idle_fb_bits := 0
 idle_fb_size := 0
 
-pool_gestures := false
 is_drawing := false
 overlay_opts := false
 zone_preview_mode := "Off"
 live_hint_bbox := false
-live_hint_start_shown := false
-live_hint_last_tick := 0
-live_hint_last_len := 0.0
 live_hint_icon_cache := Map()
-live_hint_draw_sig := ""
 live_hint_res := false
-live_hint_chain_text := ""
-live_hint_origin_x := 0
-live_hint_origin_y := 0
-gesture_cancelled := false
-gesture_last_move_tick := 0
-gesture_segments := []
-gesture_opacity_factor := 1.0
-shake_cancel_points := []
-gesture_waiting_first_move := false
-points := []
-prev_x := 0
-prev_y := 0
-cum_len := 0.0
-cur_grad_len := 0.0
-prev_width := 0
+gesture_session := NewGestureSession()
 
 OnExit(GdipShutdown)
+
+
+NewGestureSession(gestures:=false, hint_generation:=0) {
+    return {
+        gestures: gestures,
+        points: [],
+        prev_x: 0,
+        prev_y: 0,
+        length: 0.0,
+        gradient_len: 0.0,
+        prev_width: 0,
+        cancelled: false,
+        last_move_tick: 0,
+        waiting_first_move: false,
+        shake_points: [],
+        segments: [],
+        opacity_factor: 1.0,
+        hint_start_shown: false,
+        hint_last_tick: 0,
+        hint_last_len: 0.0,
+        hint_draw_sig: "",
+        hint_chain_text: "",
+        hint_origin_x: 0,
+        hint_origin_y: 0,
+        hint_generation: hint_generation,
+    }
+}
+
+
+ResetGestureStroke(session, x, y, waiting_first_move:=false) {
+    session.points := [[x, y]]
+    session.prev_x := x
+    session.prev_y := y
+    session.length := 0.0
+    session.gradient_len := 0.0
+    session.prev_width := 0
+    session.last_move_tick := A_TickCount
+    session.waiting_first_move := waiting_first_move
+    session.shake_points := [[x, y, 0, 0, 0.0]]
+}
+
+
+ResetLiveHintState(session) {
+    session.hint_start_shown := false
+    session.hint_last_tick := 0
+    session.hint_last_len := 0.0
+    session.hint_draw_sig := ""
+}
+
+
+InvalidateLiveHint(session) {
+    session.hint_generation += 1
+    return session.hint_generation
+}
+
+
+GetGestureTravelLength() {
+    global gesture_session
+
+    return gesture_session.length
+}
 
 
 GdipStartup() {
@@ -541,8 +583,6 @@ HideIdleFeedback() {
 
 
 CollectPool(gestures) {
-    global pool_gestures
-
     MouseGetPos(&x, &y)
     pool := GetPool(x, y)
     pool_gestures := []
@@ -552,19 +592,19 @@ CollectPool(gestures) {
             pool_gestures.Push(mod_mp[0])
         }
     }
+    return pool_gestures
 }
 
 
 CollectAllGestures(gestures) {
-    global pool_gestures
-
-    pool_gestures := []
+    all_gestures := []
     for _, mod_mp in gestures {
         node := mod_mp.Has(0) ? _GetFin(mod_mp[0]) : false
         if IsGestureFin(node) {
-            pool_gestures.Push(mod_mp[0])
+            all_gestures.Push(mod_mp[0])
         }
     }
+    return all_gestures
 }
 
 
@@ -574,10 +614,7 @@ IsGestureFin(node) {
 
 
 StartDraw(gestures:=false, *) {
-    global is_drawing, prev_x, prev_y, points, cum_len, prev_width, cur_grad_len, pool_gestures,
-        live_hint_start_shown, live_hint_last_tick, live_hint_last_len, live_hint_draw_sig,
-        live_hint_chain_text, gesture_cancelled, gesture_last_move_tick, gesture_segments,
-        gesture_opacity_factor, gesture_waiting_first_move, live_hint_origin_x, live_hint_origin_y
+    global is_drawing, gesture_session
 
     if is_drawing {
         return
@@ -590,12 +627,16 @@ StartDraw(gestures:=false, *) {
         return
     }
     is_drawing := true
+    gesture_session := NewGestureSession(
+        gestures, gesture_session.hint_generation + 1
+    )
+    session := gesture_session
     ClearOverlay()
     PresentOverlay()
     gest_overlay.Show("NA")
-    MouseGetPos(&prev_x, &prev_y)
-    live_hint_origin_x := prev_x
-    live_hint_origin_y := prev_y
+    MouseGetPos(&mouse_x, &mouse_y)
+    session.hint_origin_x := mouse_x
+    session.hint_origin_y := mouse_y
     g_opts := ""
 
     if init_drawing {
@@ -618,28 +659,14 @@ StartDraw(gestures:=false, *) {
 
     SetOverlayOpts(
         (g_opts || (await_gest ? _GetFin(await_gest[1]).gesture_opts : "")),
-        GetPool(prev_x, prev_y)
+        GetPool(mouse_x, mouse_y)
     )
     SetTimer(TrackMouse, track_period)
-    points := [[prev_x, prev_y]]
-    cum_len := 0.0
-    cur_grad_len := 0.0
-    prev_width := 0
-    live_hint_start_shown := false
-    live_hint_last_tick := 0
-    live_hint_last_len := 0.0
-    live_hint_draw_sig := ""
-    live_hint_chain_text := ""
-    gesture_cancelled := false
-    gesture_last_move_tick := A_TickCount
-    gesture_segments := []
-    gesture_opacity_factor := 1.0
-    gesture_waiting_first_move := false
-    ResetShakeCancel(prev_x, prev_y)
+    ResetGestureStroke(session, mouse_x, mouse_y)
     SetTimer(CheckGestureIdlePause, -track_period)
     if !GetLiveHintStartMove() {
-        ShowStartLiveHint(pool_gestures, live_hint_origin_x, live_hint_origin_y)
-        live_hint_start_shown := true
+        ShowStartLiveHint(session.gestures, session.hint_origin_x, session.hint_origin_y)
+        session.hint_start_shown := true
     }
 }
 
@@ -731,19 +758,20 @@ GetGestureUnrecognizedBehavior(opts, fallback:=5) {
 
 
 EndDraw(*) {
-    global is_drawing, init_drawing, points, overlay_opts, pool_gestures, form_points,
-        gesture_cancelled, gesture_segments
+    global is_drawing, init_drawing, overlay_opts, form_points, gesture_session
 
     if !is_drawing {
         return
     }
 
+    session := gesture_session
     SetTimer(TrackMouse, 0)
     SetTimer(CheckGestureIdlePause, 0)
     is_drawing := false
+    InvalidateLiveHint(session)
     DestroyGestOverlay()
 
-    if gesture_cancelled {
+    if session.cancelled {
         if init_drawing {
             init_drawing := false
             form_points := false
@@ -754,14 +782,14 @@ EndDraw(*) {
             return -1
         }
         overlay_opts := false
-        pool_gestures := false
+        session.gestures := false
         SetTimer(RestoreSettingsGestureZonePreview, -50)
         return -1
     }
 
     if init_drawing {
         form_points := []
-        for pair in points {
+        for pair in session.points {
             form_points.Push([pair[1], pair[2]])
         }
 
@@ -773,7 +801,7 @@ EndDraw(*) {
         try form["SetGesture"].Text := "Saved!"
         SetTimer(_ReturnButtonText, -2000)
 
-        res := Resample(points)
+        res := Resample(session.points)
         pts := res[1]
         if Sqrt((pts[1][1]-pts[-1][1])**2 + (pts[1][2]-pts[-1][2])**2) < (res[2] / 10) {
             try form["Phase"].Enabled := true
@@ -782,10 +810,11 @@ EndDraw(*) {
         return -1
     }
 
-    ret := cum_len > Max(CONF.min_gesture_len.v, 10) ? Recognize(points, pool_gestures) : false
+    ret := session.length > Max(CONF.min_gesture_len.v, 10)
+        ? Recognize(session.points, session.gestures) : false
     overlay_opts := false
-    pool_gestures := false
-    gesture_segments := []
+    session.gestures := false
+    session.segments := []
     SetTimer(RestoreSettingsGestureZonePreview, -50)
     return ret
 }
@@ -816,9 +845,10 @@ ParseAhkColorList(colors) {
 
 
 DrawLine(x1, y1, x2, y2, width) {
-    global cur_grad_len, gesture_opacity_factor
+    global gesture_session
     static pen:=0
 
+    session := gesture_session
     SetTimer(DestroyGestOverlay, 0)
 
     if !g_bits {
@@ -832,7 +862,7 @@ DrawLine(x1, y1, x2, y2, width) {
 
     if !pen {
         if DllCall("gdiplus\GdipCreatePen1",
-            "uint", (_ClampAlpha(CONF.gest_opacity.v * gesture_opacity_factor)<<24)|0,
+            "uint", (_ClampAlpha(CONF.gest_opacity.v * session.opacity_factor)<<24)|0,
             "float", width, "int", 2, "ptr*", &pen:=0) {
             return
         }
@@ -854,9 +884,11 @@ DrawLine(x1, y1, x2, y2, width) {
             t1 := A_Index / parts
             mid := (A_Index - 0.5) / parts
 
-            line_colour := ColorAtProgress((cur_grad_len + seg_len * mid) / overlay_opts.grad_len)
+            line_colour := ColorAtProgress(
+                (session.gradient_len + seg_len * mid) / overlay_opts.grad_len
+            )
             DllCall("gdiplus\GdipSetPenColor", "ptr", pen,
-                "uint", (_ClampAlpha(CONF.gest_opacity.v * gesture_opacity_factor)<<24)|line_colour)
+                "uint", (_ClampAlpha(CONF.gest_opacity.v * session.opacity_factor)<<24)|line_colour)
 
             xa := x1 + dx * t0
             ya := y1 + dy * t0
@@ -869,13 +901,12 @@ DrawLine(x1, y1, x2, y2, width) {
                 "float", xa, "float", ya, "float", xb, "float", yb)
         }
     }
-    cur_grad_len += seg_len
+    session.gradient_len += seg_len
 }
 
 
 TrackMouse() {
-    global prev_x, prev_y, cum_len, prev_width, live_hint_start_shown, live_hint_last_tick, live_hint_last_len
-        , gesture_last_move_tick, gesture_waiting_first_move
+    global gesture_session
 
     if !is_drawing {
         SetTimer(TrackMouse, 0)
@@ -883,48 +914,55 @@ TrackMouse() {
         return
     }
 
+    session := gesture_session
     MouseGetPos(&x, &y)
-    if x !== prev_x || y !== prev_y {
+    if x !== session.prev_x || y !== session.prev_y {
         HideIdleFeedback()
-        dx := x - prev_x
-        dy := y - prev_y
+        dx := x - session.prev_x
+        dy := y - session.prev_y
         d := Sqrt(dx*dx + dy*dy)
-        cum_len += d
+        session.length += d
         if d >= Max(1, CONF.gesture_idle_move_threshold.v) {
-            gesture_last_move_tick := A_TickCount
-            gesture_waiting_first_move := false
+            session.last_move_tick := A_TickCount
+            session.waiting_first_move := false
         }
 
-        target := BrushWidth(cum_len)
+        target := BrushWidth(session.length)
         width := target
-        if target > prev_width {
-            width := Min(target, prev_width + 1)
+        if target > session.prev_width {
+            width := Min(target, session.prev_width + 1)
         }
 
-        DrawLine(prev_x, prev_y, x, y, width)
+        DrawLine(session.prev_x, session.prev_y, x, y, width)
 
-        prev_x := x
-        prev_y := y
-        prev_width := width
-        points.Push([x, y])
+        session.prev_x := x
+        session.prev_y := y
+        session.prev_width := width
+        session.points.Push([x, y])
 
         if CheckShakeCancel(x, y, dx, dy, d) {
             return
         }
 
-        if pool_gestures && CONF.live_hint_enabled.v {
-            if cum_len > Max(CONF.min_gesture_len.v, 10) {
-                live_hint_start_shown := true
-                if CONF.live_hint_move_count.v && ShouldRefreshLiveHint(cum_len) {
-                    live_hint_last_tick := A_TickCount
-                    live_hint_last_len := cum_len
-                    SetTimer(LiveHint.Bind(points, pool_gestures,
-                        live_hint_origin_x, live_hint_origin_y), -1)
+        if session.gestures && CONF.live_hint_enabled.v {
+            if session.length > Max(CONF.min_gesture_len.v, 10) {
+                session.hint_start_shown := true
+                if CONF.live_hint_move_count.v && ShouldRefreshLiveHint(session.length) {
+                    session.hint_last_tick := A_TickCount
+                    session.hint_last_len := session.length
+                    generation := InvalidateLiveHint(session)
+                    SetTimer(LiveHint.Bind(
+                        CloneGesturePoints(session.points), session.gestures.Clone(),
+                        session.hint_origin_x, session.hint_origin_y,
+                        generation
+                    ), -1)
                     return
                 }
-            } else if !live_hint_start_shown && cum_len >= GetLiveHintStartMove() {
-                ShowStartLiveHint(pool_gestures, live_hint_origin_x, live_hint_origin_y)
-                live_hint_start_shown := true
+            } else if !session.hint_start_shown && session.length >= GetLiveHintStartMove() {
+                ShowStartLiveHint(
+                    session.gestures, session.hint_origin_x, session.hint_origin_y
+                )
+                session.hint_start_shown := true
                 return
             }
         }
@@ -933,35 +971,29 @@ TrackMouse() {
 }
 
 
-ResetShakeCancel(x, y) {
-    global shake_cancel_points
-
-    shake_cancel_points := [[x, y, 0, 0, 0.0]]
-}
-
-
 CheckShakeCancel(x, y, dx, dy, seg_len) {
-    global shake_cancel_points, gesture_cancelled
+    global gesture_session
 
-    if !CONF.shake_cancel_enabled.v || gesture_cancelled {
+    session := gesture_session
+    if !CONF.shake_cancel_enabled.v || session.cancelled {
         return false
     }
 
     samples := Max(4, Integer(CONF.shake_cancel_samples.v))
-    shake_cancel_points.Push([x, y, dx, dy, seg_len])
-    while shake_cancel_points.Length > samples {
-        shake_cancel_points.RemoveAt(1)
+    session.shake_points.Push([x, y, dx, dy, seg_len])
+    while session.shake_points.Length > samples {
+        session.shake_points.RemoveAt(1)
     }
-    if shake_cancel_points.Length < samples {
+    if session.shake_points.Length < samples {
         return false
     }
 
-    min_x := max_x := shake_cancel_points[1][1]
-    min_y := max_y := shake_cancel_points[1][2]
+    min_x := max_x := session.shake_points[1][1]
+    min_y := max_y := session.shake_points[1][2]
     path_len := 0.0
     turns := 0
     prev_vec := false
-    for pt in shake_cancel_points {
+    for pt in session.shake_points {
         min_x := Min(min_x, pt[1])
         max_x := Max(max_x, pt[1])
         min_y := Min(min_y, pt[2])
@@ -989,9 +1021,10 @@ CheckShakeCancel(x, y, dx, dy, seg_len) {
 
 
 CancelCurrentGesture() {
-    global gesture_cancelled
+    global gesture_session
 
-    gesture_cancelled := true
+    gesture_session.cancelled := true
+    InvalidateLiveHint(gesture_session)
     SetTimer(TrackMouse, 0)
     SetTimer(CheckGestureIdlePause, 0)
     ClearLiveHintBox()
@@ -1000,26 +1033,26 @@ CancelCurrentGesture() {
 
 
 CheckGestureIdlePause() {
-    global is_drawing, gesture_cancelled, gesture_last_move_tick, pool_gestures, points, cum_len
-        , gesture_waiting_first_move
+    global is_drawing, gesture_session
 
-    if !is_drawing || gesture_cancelled {
+    session := gesture_session
+    if !is_drawing || session.cancelled {
         HideIdleFeedback()
         return
     }
 
-    if gesture_waiting_first_move {
+    if session.waiting_first_move {
         HideIdleFeedback()
         SetTimer(CheckGestureIdlePause, -track_period)
         return
     }
 
-    elapsed := A_TickCount - gesture_last_move_tick
+    elapsed := A_TickCount - session.last_move_tick
     confirm_ms := Max(1, CONF.gesture_idle_confirm_ms.v)
     cancel_ms := Max(0, CONF.gesture_idle_cancel_ms.v)
 
-    res := cum_len > Max(CONF.min_gesture_len.v, 10) && pool_gestures
-        ? Recognize(points, pool_gestures)
+    res := session.length > Max(CONF.min_gesture_len.v, 10) && session.gestures
+        ? Recognize(session.points, session.gestures)
         : false
     recognized := res && res[2] !== "" && res[1] >= CONF.min_cos_similarity.v
     has_child_gestures := recognized && GestureHasChildGestures(res[2])
@@ -1042,7 +1075,7 @@ CheckGestureIdlePause() {
         HideIdleFeedback()
         reset_ms := confirm_ms || cancel_ms
         if recognized && reset_ms && elapsed >= reset_ms {
-            gesture_last_move_tick := A_TickCount
+            session.last_move_tick := A_TickCount
         }
     }
 
@@ -1063,26 +1096,24 @@ CheckGestureIdlePause() {
     }
 
     if recognized && (!has_child_gestures || elapsed >= confirm_ms) {
-        gesture_last_move_tick := A_TickCount
+        session.last_move_tick := A_TickCount
     }
     SetTimer(CheckGestureIdlePause, -track_period)
 }
 
 
 ConfirmGestureIdleTransition(gesture) {
-    global await_gest, prev_x, prev_y, points, cum_len, prev_width, cur_grad_len,
-        live_hint_start_shown, live_hint_last_tick, live_hint_last_len, live_hint_draw_sig,
-        live_hint_chain_text, gesture_last_move_tick, overlay_opts, pool_gestures,
-        gesture_waiting_first_move, live_hint_origin_x, live_hint_origin_y
+    global await_gest, overlay_opts, gesture_session
 
+    session := gesture_session
     node := _GetFin(gesture)
     if !node || !GestureHasChildGestures(gesture) {
         return false
     }
 
     HideIdleFeedback()
-    CollectAllGestures(gesture.gestures)
-    if !pool_gestures.Length {
+    child_gestures := CollectAllGestures(gesture.gestures)
+    if !child_gestures.Length {
         return false
     }
     if node.is_instant {
@@ -1094,25 +1125,18 @@ ConfirmGestureIdleTransition(gesture) {
     if await_gest {
         await_gest[1] := gesture
     }
+    session.gestures := child_gestures
     FadeGestureSegments()
-    live_hint_chain_text .= node.gui_shortname . " → "
+    session.hint_chain_text .= node.gui_shortname . " → "
     SetOverlayOpts(node.gesture_opts, 5)
-    MouseGetPos(&prev_x, &prev_y)
-    points := [[prev_x, prev_y]]
-    cum_len := 0.0
-    cur_grad_len := 0.0
-    prev_width := 0
-    live_hint_start_shown := false
-    live_hint_last_tick := 0
-    live_hint_last_len := 0.0
-    live_hint_draw_sig := ""
-    gesture_last_move_tick := A_TickCount
-    gesture_waiting_first_move := true
-    ResetShakeCancel(prev_x, prev_y)
+    MouseGetPos(&mouse_x, &mouse_y)
+    ResetGestureStroke(session, mouse_x, mouse_y, true)
+    ResetLiveHintState(session)
+    InvalidateLiveHint(session)
     ClearLiveHintBox()
     if CONF.live_hint_enabled.v {
-        ShowStartLiveHint(pool_gestures, live_hint_origin_x, live_hint_origin_y)
-        live_hint_start_shown := true
+        ShowStartLiveHint(session.gestures, session.hint_origin_x, session.hint_origin_y)
+        session.hint_start_shown := true
     }
     PresentOverlay()
     return true
@@ -1120,25 +1144,26 @@ ConfirmGestureIdleTransition(gesture) {
 
 
 FadeGestureSegments() {
-    global gesture_segments, points, overlay_opts, cur_grad_len, prev_width, gesture_opacity_factor
+    global gesture_session, overlay_opts
 
-    if points.Length > 1 {
-        gesture_segments.Push({
-            pts: CloneGesturePoints(points),
+    session := gesture_session
+    if session.points.Length > 1 {
+        session.segments.Push({
+            pts: CloneGesturePoints(session.points),
             opts: CloneGestureOverlayOpts(overlay_opts),
             fade: 1.0,
         })
     }
-    for segment in gesture_segments {
+    for segment in session.segments {
         segment.fade *= 0.333
     }
 
     ClearOverlay()
-    for segment in gesture_segments {
+    for segment in session.segments {
         overlay_opts := segment.opts
-        gesture_opacity_factor := segment.fade
-        cur_grad_len := 0.0
-        prev_width := 0
+        session.opacity_factor := segment.fade
+        session.gradient_len := 0.0
+        session.prev_width := 0
         seg_len := 0.0
         for i, pt in segment.pts {
             if i == 1 {
@@ -1149,12 +1174,13 @@ FadeGestureSegments() {
             dy := pt[2] - prev_pt[2]
             seg_len += Sqrt(dx*dx + dy*dy)
             target := BrushWidth(seg_len)
-            width := target > prev_width ? Min(target, prev_width + 1) : target
+            width := target > session.prev_width
+                ? Min(target, session.prev_width + 1) : target
             DrawLine(prev_pt[1], prev_pt[2], pt[1], pt[2], width)
-            prev_width := width
+            session.prev_width := width
         }
     }
-    gesture_opacity_factor := 1.0
+    session.opacity_factor := 1.0
 }
 
 
@@ -1194,13 +1220,14 @@ GestureHasChildGestures(gesture) {
 
 
 ShouldRefreshLiveHint(len) {
-    global live_hint_last_tick, live_hint_last_len, live_hint_period
+    global live_hint_period, gesture_session
 
-    if !live_hint_last_tick {
+    session := gesture_session
+    if !session.hint_last_tick {
         return true
     }
-    return A_TickCount - live_hint_last_tick >= live_hint_period
-        || len - live_hint_last_len >= 60
+    return A_TickCount - session.hint_last_tick >= live_hint_period
+        || len - session.hint_last_len >= 60
 }
 
 
@@ -1214,31 +1241,36 @@ BrushWidth(len) {
 }
 
 
-LiveHint(pts, gestures, hint_x:=0, hint_y:=0) {
+LiveHint(pts, gestures, hint_x:=0, hint_y:=0, generation:=0) {
     static busy:=false
-    global live_hint_draw_sig, live_hint_bbox, live_hint_chain_text
+    global live_hint_bbox, gesture_session
 
-    if busy || !CONF.live_hint_enabled.v {
+    session := gesture_session
+    if busy || !is_drawing || generation != session.hint_generation
+        || !CONF.live_hint_enabled.v {
         return
     }
 
     busy := true
-
-    items := GetLiveHintMovingItems(pts, gestures)
-    if !items.Length && !live_hint_chain_text {
-        ClearLiveHintBox()
+    try {
+        items := GetLiveHintMovingItems(pts, gestures)
+        if generation != gesture_session.hint_generation || !is_drawing {
+            return
+        }
+        if !items.Length && !session.hint_chain_text {
+            ClearLiveHintBox()
+            return
+        }
+        sig := GetLiveHintDrawSignature(items, 0)
+        if live_hint_bbox && sig == session.hint_draw_sig {
+            PresentOverlay()
+            return
+        }
+        DrawLiveHintList(items, 0, hint_x, hint_y)
+        session.hint_draw_sig := sig
+    } finally {
         busy := false
-        return
     }
-    sig := GetLiveHintDrawSignature(items, 0)
-    if live_hint_bbox && sig == live_hint_draw_sig {
-        PresentOverlay()
-        busy := false
-        return
-    }
-    DrawLiveHintList(items, 0, hint_x, hint_y)
-    live_hint_draw_sig := sig
-    busy := false
 }
 
 
@@ -1263,7 +1295,7 @@ GetLiveHintMovingItems(pts, gestures) {
 
 
 ShowStartLiveHint(gestures, start_x, start_y) {
-    global live_hint_draw_sig
+    global gesture_session
 
     if !CONF.live_hint_enabled.v || !CONF.live_hint_start_count.v || !gestures || !gestures.Length {
         return
@@ -1285,15 +1317,15 @@ ShowStartLiveHint(gestures, start_x, start_y) {
     }
 
     more := gestures.Length - items.Length
-    live_hint_draw_sig := GetLiveHintDrawSignature(items, more)
+    gesture_session.hint_draw_sig := GetLiveHintDrawSignature(items, more)
     DrawLiveHintList(items, more, start_x, start_y)
 }
 
 
 GetLiveHintDrawSignature(items, more_count) {
-    global live_hint_chain_text
+    global gesture_session
 
-    sig := more_count . "|" . live_hint_chain_text . "|"
+    sig := more_count . "|" . gesture_session.hint_chain_text . "|"
     for item in items {
         sig .= ObjPtr(item.node) . ":"
         sig .= item.HasProp("score") ? Format("{:.2f}", item.score) : ""
@@ -1339,8 +1371,9 @@ GetLiveHintStartMove() {
 
 
 DrawLiveHintList(items, more_count, start_x, start_y) {
-    global live_hint_bbox, g_mem_dc, live_hint_chain_text
+    global live_hint_bbox, g_mem_dc, gesture_session
 
+    session := gesture_session
     g := GetOverlayGraphics()
     if !g {
         return
@@ -1362,7 +1395,7 @@ DrawLiveHintList(items, more_count, start_x, start_y) {
     pad_x := Round(Max(fs * 0.55, 10))
     pad_y := Round(Max(fs * 0.35, 7))
     row_h := Max(preview_h, Round(fs * 1.36))
-    header_h := live_hint_chain_text ? Round(fs * 1.18) : 0
+    header_h := session.hint_chain_text ? Round(fs * 1.18) : 0
     footer_h := more_count > 0 ? Round(fs * 1.12) : 0
 
     res := GetLiveHintResources(fs)
@@ -1378,7 +1411,9 @@ DrawLiveHintList(items, more_count, start_x, start_y) {
     DllCall("gdiplus\GdipSetStringFormatLineAlign", "ptr", fmt, "int", 1)
     DllCall("gdiplus\GdipSetStringFormatTrimming", "ptr", fmt, "int", 3)
 
-    text_w := GetLiveHintTextWidth(g, fnt, fnt_bold, fmt, items, more_count, live_hint_chain_text)
+    text_w := GetLiveHintTextWidth(
+        g, fnt, fnt_bold, fmt, items, more_count, session.hint_chain_text
+    )
     try {
         fixed_w := Max(0, Integer(CONF.live_hint_box_width.v))
     } catch {
@@ -1416,15 +1451,15 @@ DrawLiveHintList(items, more_count, start_x, start_y) {
         tx += score_w + gap
     }
     ty := y + pad_y
-    if live_hint_chain_text {
+    if session.hint_chain_text {
         rect_header := Buffer(16, 0)
         NumPut("float", x + pad_x, rect_header, 0)
         NumPut("float", ty, rect_header, 4)
         NumPut("float", box_w - pad_x * 2, rect_header, 8)
         NumPut("float", header_h, rect_header, 12)
         DllCall("gdiplus\GdipSetStringFormatAlign", "ptr", fmt, "int", 1)
-        DllCall("gdiplus\GdipDrawString", "ptr", g, "wstr", live_hint_chain_text,
-            "int", StrLen(live_hint_chain_text), "ptr", fnt_bold, "ptr", rect_header,
+        DllCall("gdiplus\GdipDrawString", "ptr", g, "wstr", session.hint_chain_text,
+            "int", StrLen(session.hint_chain_text), "ptr", fnt_bold, "ptr", rect_header,
             "ptr", fmt, "ptr", brush_fg)
         ty += header_h
     }
@@ -1748,14 +1783,14 @@ GetCoarseLiveHintPool(pool) {
 
 
 ClearLiveHintBox() {
-    global live_hint_draw_sig
+    global gesture_session
 
     g := GetOverlayGraphics()
     if g {
         _ClearLiveHintBox(g)
         PresentOverlay()
     }
-    live_hint_draw_sig := ""
+    gesture_session.hint_draw_sig := ""
 }
 
 
@@ -1777,8 +1812,10 @@ _ClearLiveHintBox(g) {
 
 
 DrawExisting(gesture_obj) {
-    global cur_grad_len
+    global gesture_session
 
+    gesture_session.gradient_len := 0.0
+    gesture_session.opacity_factor := 1.0
     SetTimer(DestroyGestOverlay, 0)
     ResetGestureOverlayFade(FadeGestureOverlay)
     CreateGestOverlay()
@@ -1891,7 +1928,7 @@ DrawExisting(gesture_obj) {
         }
         b := !b
     }
-    cur_grad_len := 0
+    gesture_session.gradient_len := 0.0
     SetTimer(FadeGestureOverlay, -300)
 }
 
