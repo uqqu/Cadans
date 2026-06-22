@@ -78,6 +78,11 @@ class DefaultKeyMap extends Map {
 }
 
 
+NormalizeLayerName(name) {
+    return StrReplace(Trim(name), "/", "\")
+}
+
+
 ArraySort(arr, cmp) {
     n := arr.Length
     if n < 2 {

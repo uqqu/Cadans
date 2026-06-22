@@ -237,7 +237,8 @@ AltHelp() {
                         true, , path[-1][3], path[-1][4], layer)
                 } else if c == 6 && val {
                     entries := _GetUnholdEntries()
-                    txt := _GetKeyInfo(path[-1][1], path[-1][2] & ~1, entries, entries,
+                    prev_entries := _GetEntriesForPath("before-tail")
+                    txt := _GetKeyInfo(path[-1][1], path[-1][2] & ~1, entries, prev_entries,
                         , true, , , layer)
                 }
             }
@@ -438,12 +439,17 @@ AltHelp() {
         if path[-1][2] & 1 {
             txt .= "`n(The current view shows hold-side nested assignments!)"
         }
+    } else if i_sc == "BtnBaseNeighbor" {
+        txt := obj.Enabled
+            ? "Switch the current path to the paired tap event and view its nested assignments."
+            : "The current path already uses the tap side."
     } else if i_sc == "BtnHold" {
         if path[-1][3] || path[-1][4] {
             txt := "Chords and gestures don't have a hold event"
         } else {
             entries := _GetUnholdEntries()
-            txt := _GetKeyInfo(path[-1][1], path[-1][2] & ~1, entries, entries, , true)
+            prev_entries := _GetEntriesForPath("before-tail")
+            txt := _GetKeyInfo(path[-1][1], path[-1][2] & ~1, entries, prev_entries, , true)
         }
     } else if i_sc == "TextHold" {
         if path[-1][3] || path[-1][4] {
@@ -473,6 +479,10 @@ AltHelp() {
         if !(path[-1][2] & 1) {
             txt .= "`n(The current view shows tap-side nested assignments!)"
         }
+    } else if i_sc == "BtnHoldNeighbor" {
+        txt := obj.Enabled
+            ? "Switch the current path to the paired hold event and view its nested assignments."
+            : "The current path already uses the hold side."
     } else if UI && UI.extra_tags.Length && obj == UI.extra_tags[1] {
         txt := (obj.Text == "▴" ? "Hide" : "Show") . " all tags"
     } else if SubStr(i_sc, 1, 8) == "LayerTag" {
@@ -590,11 +600,11 @@ _GetKeyInfo(sc, md, cur_entries, prev_entries,
                 b_node, cur_entries.ubase, is_gesture, layer, hide_gesture_pool)
         }
         if h_node && h_node.down_type == TYPES.Modifier {
-            cnt := _CountChild("", 0, 1 << h_node.down_val,
+            cnt := _CountChild(layer, 0, 1 << h_node.down_val,
                 prev_entries.ubase.scancodes,
                 prev_entries.ubase.chords,
                 prev_entries.ubase.gestures)
-            cnt_combined := _CountChild("", 0, 1 << h_node.down_val,
+            cnt_combined := _CountChild(layer, 0, 1 << h_node.down_val,
                 prev_entries.ubase.scancodes,
                 prev_entries.ubase.chords,
                 prev_entries.ubase.gestures, true)
@@ -604,18 +614,15 @@ _GetKeyInfo(sc, md, cur_entries, prev_entries,
                 txt .= " (+" . cnt_combined - cnt . " from combined modifiers)"
             }
             if !layer_editing {
-                act_cnt := 1
+                act_layers := layer ? layer : ""
+                inact_layers := ""
+                act_cnt := layer ? 1 : 0
                 inact_cnt := 0
-                if layer {
-                    layers := layer
-                } else {
-                    act_layers := ""
-                    inact_layers := ""
-                    act_cnt := 0
+                if !layer {
                     t_unode := cur_entries.uhold
                     for l in t_unode.layers.order {
                         t_node := _GetFirst(t_unode, l)
-                        if t_node.down_type == TYPES.Default || EqualNodes(t_node, h_node) {
+                        if IsObject(t_node) && (t_node.down_type == TYPES.Default || EqualNodes(t_node, h_node)) {
                             if ActiveLayers.Has(l) {
                                 act_layers .= l . ", "
                                 act_cnt += 1
@@ -631,7 +638,7 @@ _GetKeyInfo(sc, md, cur_entries, prev_entries,
                 if !buffer_view {
                     txt .= "`nAssigned on the active layer" . (act_cnt == 1 ? ": " : "s: ")
                         . act_layers
-                    if inact_cnt {
+                    if CONF.show_inactive_hint_layers.v && inact_cnt {
                         txt .= "`n… and on the inactive layer" . (inact_cnt == 1 ? ": " : "s: ")
                             . inact_layers
                     }
@@ -687,14 +694,13 @@ _GetNodeStrInfo(base, node, unode, is_gesture:=false, layer:="", hide_gesture_po
     res := "`n`n" . base . ": " . _SwitchByActionType(node.down_type, node.down_val)
     if !layer_editing {
         if !layer {
-            act_cnt := 1
-            inact_cnt := 0
             act_layers := ""
             inact_layers := ""
             act_cnt := 0
+            inact_cnt := 0
             for l in unode.layers.order {
                 t_node := _GetFirst(unode, l)
-                if t_node.down_type == TYPES.Default || EqualNodes(t_node, node) {
+                if IsObject(t_node) && (t_node.down_type == TYPES.Default || EqualNodes(t_node, node)) {
                     if ActiveLayers.Has(l) {
                         act_layers .= l . ", "
                         act_cnt += 1
@@ -709,7 +715,7 @@ _GetNodeStrInfo(base, node, unode, is_gesture:=false, layer:="", hide_gesture_po
             if !buffer_view {
                 res .= "`nAssigned on the active layer" . (act_cnt == 1 ? ": " : "s: ")
                     . act_layers
-                if inact_cnt {
+                if CONF.show_inactive_hint_layers.v && inact_cnt {
                     res .= "`n… and on the inactive layer" . (inact_cnt == 1 ? ": " : "s: ")
                         . inact_layers
                 }
@@ -738,12 +744,13 @@ _GetNodeExtraInfo(node, is_gesture:=false, hide_gesture_pool:=false) {
     if node.up_type !== TYPES.Disabled {
         res .= "`nAdditional action on release: " . _SwitchByActionType(node.up_type, node.up_val)
     }
-    if node.is_instant && node.is_irrevocable {
-        res .= "`nInstant and irrevocable execution is indicated"
-    } else if node.is_instant {
+    if node.is_instant {
         res .= "`nInstant execution is indicated"
-    } else if node.is_irrevocable {
-        res .= "`nIrrevocable execution is indicated"
+    }
+    if node.root_return_ms == -1 {
+        res .= "`nAutomatic return to root is disabled"
+    } else if node.root_return_ms > 0 {
+        res .= "`nReturn delay after resolution: " . node.root_return_ms . " ms without further events"
     }
     if node.custom_lp_time {
         res .= "`nHas a custom hold threshold – " . node.custom_lp_time

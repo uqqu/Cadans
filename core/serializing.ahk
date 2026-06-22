@@ -3,13 +3,18 @@
         _CleanMap(values)
     }
     m := LayersMeta[filename]
-    m["version"] := 0.82
+    m["version"] := 0.83
+    filepath := "layers/" . filename . ".json"
+    SplitPath(filepath, , &dir)
+    if dir && !DirExist(dir) {
+        DirCreate(dir)
+    }
 
-    try FileDelete("layers/" . filename . ".json")
+    try FileDelete(filepath)
     FileAppend(
-        "// 0.82`r`n// " . m["rtags"] . "`r`n// "
+        "// 0.83`r`n// " . m["rtags"] . "`r`n// "
         . m["rdescription"] . "`r`n// " . m["rprocesses"] . "`r`n" . Dump(mp, "", conv),
-        "layers/" . filename . ".json", "UTF-8"
+        filepath, "UTF-8"
     )
 }
 
@@ -49,7 +54,7 @@ DeserializeMap(filename) {
     data := FileRead("layers/" . filename . ".json")
     ver := LayersMeta[filename]["version"]
     struct := Load(StripLineComments(data))
-    if ver < 0.82 {
+    if ver < 0.83 {
         UpdateLayerVersion(struct, ver)
     }
     NormalizeGestureStorageKeys(struct)
@@ -556,6 +561,9 @@ UpdateLayerVersion(data, from) {
         if from < 0.82 && p.Length !== 4 {
             p.InsertAt(12, "")  ; node window rule
             p[11] := CompactGestureOverlayOpts(p[11])
+        }
+        if from < 0.83 && p.Length !== 4 && p[6] {
+            p[6] := -1  ; irrevocable flag -> return to root int
         }
     }
 }

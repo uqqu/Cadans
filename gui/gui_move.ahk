@@ -127,6 +127,50 @@ ResetHold() {
 }
 
 
+SwitchCurrentTapHoldSide(*) {
+    if buffer_view || !current_path.Length {
+        return
+    }
+
+    p := current_path[-1]
+    if p[3] || p[4] || CheckLRMB(current_path) || ONLY_BASE_SCS.Has(p[1]) {
+        return
+    }
+
+    current_path[-1] := [p[1], p[2] ^ 1, p[3], p[4]]
+    ChangePath(, false)
+}
+
+
+SwitchPathTapHoldSide(index, *) {
+    path := buffer_view ? buffer_path : current_path
+    if temp_chord || index < 1 || index > path.Length {
+        return
+    }
+
+    p := path[index]
+    prefix := path.Clone()
+    prefix.Length := index
+    if p[3] || p[4] || CheckLRMB(prefix) || ONLY_BASE_SCS.Has(p[1]) {
+        return
+    }
+
+    UI["Hidden"].Focus()
+    path[index] := [p[1], p[2] ^ 1, p[3], p[4]]
+    ChangePath(, false)
+}
+
+
+_GetUnholdPath() {
+    path := (buffer_view ? buffer_path : current_path).Clone()
+    if path.Length && path[-1][2] & 1 {
+        p := path[-1]
+        path[-1] := [p[1], p[2] & ~1, p[3], p[4]]
+    }
+    return path
+}
+
+
 _TransferModifiers() {
     global gui_mod_val, gui_sysmods
 

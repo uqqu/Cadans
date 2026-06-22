@@ -402,7 +402,7 @@ BuildNode(raw_node, sc, md, down_type:=false) {
     is_root := raw_node.Length == 4
     node_obj := {sc: sc, md: md}
     for i, name in [
-        "down_type", "down_val", "up_type", "up_val", "is_instant", "is_irrevocable",
+        "down_type", "down_val", "up_type", "up_val", "is_instant", "root_return_ms",
         "custom_lp_time", "custom_nk_time", "child_behavior", "gui_shortname", "gesture_opts",
         "window_rule",
     ] {
@@ -450,7 +450,7 @@ GetDefaultNode(sc, md) {
         down_type: TYPES.Default,  ; NTT?
         down_val: (sc is Number ? "{Blind}" . SC_STR_BR[sc] : "{Blind}{" . sc . "}"),
         up_type: TYPES.Disabled, up_val: "",
-        is_instant: 0, is_irrevocable: 0,
+        is_instant: 0, root_return_ms: 0,
         custom_lp_time: 0, custom_nk_time: 0,
         child_behavior: 4, gui_shortname: "", gesture_opts: "", window_rule: "",
         window_processes: [], window_override: false,
@@ -496,7 +496,7 @@ NodeSig(node) {
         . node.up_type . "|"
         . node.up_val . "|"
         . node.is_instant . "|"
-        . node.is_irrevocable . "|"
+        . node.root_return_ms . "|"
         . node.custom_lp_time . "|"
         . node.custom_nk_time . "|"
         . node.child_behavior
@@ -618,9 +618,6 @@ MergeLayer(layer, raw_roots:=false) {
     AllLayers.Set(layer, CountLangMappings(raw_roots))
     for lang, root in raw_roots {
         if !LANGS.Has(lang) {
-            if !CONF.unfam_layouts.v {
-                continue
-            }
             LANGS.Add(lang, GetLayoutLangFromHKL(lang) . " (" . lang . ")")
             ROOTS[lang] := UnifiedNode()
         }

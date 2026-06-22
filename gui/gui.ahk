@@ -26,6 +26,8 @@ gui_entries := {ubase: ROOTS[gui_lang], uhold: false, umod: false}
 selected_layer := ""
 last_selected_layer := ""
 selected_layer_priority := 0
+layer_sort_col := 0
+layer_sort_desc := false
 layer_editing := 0
 layer_path := []
 
@@ -134,9 +136,19 @@ ChangeLang(lang, *) {
 
 ClearCurrentValue(is_hold, layer:="", *) {
     ToggleFreeze(1)
-    new_dtype := !current_path[-1][2] && !is_hold ? TYPES.Default : TYPES.Disabled
+    path := _GetUnholdPath()
+    entries := _GetUnholdEntries()
+    unode := is_hold ? entries.uhold : entries.ubase
+    if !unode {
+        ToggleFreeze(0)
+        return
+    }
+    new_dtype := !path[-1][2] && !is_hold ? TYPES.Default : TYPES.Disabled
     if layer_editing {
-        SaveValue(is_hold, selected_layer, new_dtype)
+        SaveValue(
+            is_hold, selected_layer, new_dtype, "", false, "", false, 0,
+            false, false, false, "", "", "", path
+        )
         return
     }
 
@@ -144,8 +156,8 @@ ClearCurrentValue(is_hold, layer:="", *) {
         selected_layers := ActiveLayers.order
     } else {
         layers := []
-        checked_node := _GetFirst(is_hold ? gui_entries.uhold : gui_entries.ubase)
-        for comb_node in (is_hold ? gui_entries.uhold : gui_entries.ubase).layers.GetAll() {
+        checked_node := _GetFirst(unode)
+        for comb_node in unode.layers.GetAll() {
             if EqualNodes(comb_node[0], checked_node) {
                 layers.Push(comb_node[0].layer_name)
             }
@@ -158,7 +170,10 @@ ClearCurrentValue(is_hold, layer:="", *) {
     }
 
     for layer in selected_layers {
-        SaveValue(is_hold, layer, new_dtype)
+        SaveValue(
+            is_hold, layer, new_dtype, "", false, "", false, 0,
+            false, false, false, "", "", "", path
+        )
     }
 }
 
@@ -169,6 +184,13 @@ ClearNested(is_hold, layer:="", *) {
         return
     }
     ToggleFreeze(1)
+    path := _GetUnholdPath()
+    entries := _GetUnholdEntries()
+    unode := is_hold ? entries.uhold : entries.ubase
+    if !unode {
+        ToggleFreeze(0)
+        return
+    }
 
     if layer_editing {
         selected_layers := [selected_layer]
@@ -176,8 +198,8 @@ ClearNested(is_hold, layer:="", *) {
         selected_layers := ActiveLayers.order
     } else {
         layers := []
-        checked_node := _GetFirst(is_hold ? gui_entries.uhold : gui_entries.ubase)
-        for comb_node in (is_hold ? gui_entries.uhold : gui_entries.ubase).layers.GetAll() {
+        checked_node := _GetFirst(unode)
+        for comb_node in unode.layers.GetAll() {
             if EqualNodes(comb_node[0], checked_node) {
                 layers.Push(comb_node[0].layer_name)
             }
@@ -195,7 +217,7 @@ ClearNested(is_hold, layer:="", *) {
         if !json_root.Has(gui_lang) {
             json_root[gui_lang] := ["", Map(), Map(), Map()]
         }
-        json_node := _WalkJson(json_root[gui_lang], current_path, is_hold)
+        json_node := _WalkJson(json_root[gui_lang], path, is_hold)
         json_node[-3] := Map()
         json_node[-2] := Map()
         json_node[-1] := Map()
@@ -336,25 +358,35 @@ _GetFirst(node, certain_layer:="", ctx_id:=0) {
 }
 
 
+_GetEntriesForPath(tail_mode:="full") {
+    path := buffer_view ? buffer_path : current_path
+    entries := {
+        ubase: ROOTS[buffer_view ? (buffer_view == 1 ? "buffer" : "buffer_h") : gui_lang],
+        uhold: (buffer_view == 1 ? ROOTS["buffer_h"] : false),
+        umod: false
+    }
+
+    for arr in path {
+        if tail_mode == "before-tail" && A_Index == path.Length {
+            break
+        }
+        if tail_mode == "unhold-tail" && A_Index == path.Length {
+            entries := entries.ubase.GetBaseHoldMod(arr[1], arr[2] & ~1, arr[3], arr[4])
+        } else {
+            entries := entries.ubase.GetBaseHoldMod(arr*)
+        }
+    }
+
+    return entries
+}
+
+
 _GetUnholdEntries() {
     path := buffer_view ? buffer_path : current_path
     if path.Length && path[-1][2] & 1 {
-        _gui_entries := {
-            ubase: ROOTS[buffer_view ? (buffer_view == 1 ? "buffer" : "buffer_h") : gui_lang],
-        }
-        for arr in path {
-            if A_Index !== path.Length {
-                _gui_entries := _gui_entries.ubase.GetBaseHoldMod(arr*)
-            } else {
-                _gui_entries := _gui_entries.ubase.GetBaseHoldMod(
-                    arr[1], arr[2] & ~1, arr[3], arr[4]
-                )
-            }
-        }
-    } else {
-        _gui_entries := gui_entries.Clone()
+        return _GetEntriesForPath("unhold-tail")
     }
-    return _gui_entries
+    return gui_entries.Clone()
 }
 
 

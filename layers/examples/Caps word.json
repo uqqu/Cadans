@@ -1,4 +1,4 @@
-﻿// 0.80
+﻿// 0.83
 // supportive
 // Called from other layers. Automatically toggle caps at the next space and turns itself off.
 // 
@@ -11,12 +11,13 @@
           4,
           "{Blind}{CapsLock}{Space}",
           5,
-          "ToggleLayers([1, One word caps])",
+          "ToggleLayers([1, examples/Caps word])",
           0,
           0,
           0,
           0,
           4,
+          null,
           null,
           null,
           {},

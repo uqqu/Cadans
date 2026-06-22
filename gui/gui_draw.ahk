@@ -167,6 +167,7 @@ DrawLayersLV() {
     UI["LV_layers"].OnEvent("DoubleClick", LVLayerDoubleClick)
     UI["LV_layers"].OnEvent("Click", LVLayerClick)
     UI["LV_layers"].OnEvent("ContextMenu", LVLayerClick)
+    UI["LV_layers"].OnEvent("ColClick", LVLayerColClick)
     UI["LV_layers"].SetImageList(icons)
 
     for i, w in [20, 20, 110, 95, 30, 95, 30] {
@@ -263,8 +264,10 @@ DrawCurrentValues() {
     UI.current_values.Push(
         UI.Add("Text", Scale(1270 - sh, 0, 50, 23) . " +0x200 Center vTextBase"),
         UI.Add("Text", Scale(1270 - sh, 23, 50, 23) . " +0x200 Center vTextHold"),
-        UI.Add("Button", Scale(1325 - sh, 0, 160, 23) . " vBtnBase"),
-        UI.Add("Button", Scale(1325 - sh, 23, 160, 23) . " vBtnHold"),
+        UI.Add("Button", Scale(1325 - sh, 0, 145, 23) . " vBtnBase"),
+        UI.Add("Button", Scale(1325 - sh, 23, 145, 23) . " vBtnHold"),
+        UI.Add("Button", Scale(1470 - sh, 0, 15, 23) . " vBtnBaseNeighbor", "→"),
+        UI.Add("Button", Scale(1470 - sh, 23, 15, 23) . " vBtnHoldNeighbor", "→"),
         UI.Add("Button", Scale(1490 - sh, 0, 25, 23) . " vBtnBaseClear", "✕"),
         UI.Add("Button", Scale(1490 - sh, 23, 25, 23) . " vBtnHoldClear", "✕"),
         UI.Add("Button", Scale(1515 - sh, 0, 25, 23) . " vBtnBaseClearNest", "🕳"),
@@ -272,6 +275,8 @@ DrawCurrentValues() {
     )
     UI["BtnBase"].OnEvent("Click", OpenForm.Bind(0))
     UI["BtnHold"].OnEvent("Click", OpenForm.Bind(1))
+    UI["BtnBaseNeighbor"].OnEvent("Click", SwitchCurrentTapHoldSide)
+    UI["BtnHoldNeighbor"].OnEvent("Click", SwitchCurrentTapHoldSide)
     UI["BtnBaseClear"].OnEvent("Click", ClearCurrentValue.Bind(0))
     UI["BtnHoldClear"].OnEvent("Click", ClearCurrentValue.Bind(1))
     UI["BtnBaseClearNest"].OnEvent("Click", ClearNested.Bind(0))

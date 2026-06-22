@@ -47,8 +47,6 @@ SYS_MODIFIERS := Map(
     0x15C, ">#"
 )
 
-AWMods := Map(56, 0, 312, 0, 347, 0, 348, 0)
-
 NUM_VK := Map(
     0x047, ["vk67", "vk24"],  ; 7 / Home
     0x048, ["vk68", "vk26"],  ; 8 / Up
@@ -221,8 +219,6 @@ CheckConfig() {
         "Use extra &f-row (F13-F24)", 0)
     CONF.extra_k_row := ConfValue("Main", "ExtraKRow", "checkbox", "int",
         "&Use special keys (media, browser, app keys)", 0)
-    CONF.unfam_layouts := ConfValue("Main", "CollectUnfamiliarLayouts", "checkbox", "int",
-        "&Collect unknown keyboard layouts from layers", 1)
     CONF.sendtext_output := ConfValue("Main", "UseSendTextOutput", "h_checkbox", "int",
         "Use S&endText mode", 0, , ,
         , ["Temporary test option."
@@ -266,6 +262,10 @@ CheckConfig() {
         "GUI hotkey for 'Set &hold':", "nEnter", , , , , , "allow")
     CONF.hide_alias_warnings := ConfValue("GUI", "HideAliasWarnings", "checkbox", "int",
         "Hide &warnings about changes in aliased layouts", 0)
+    CONF.show_inactive_hint_layers := ConfValue(
+        "GUI", "ShowInactiveLayersInAltHints", "checkbox", "int",
+        "Show &inactive layers in Alt hints", 0
+    )
 
     CONF.gest_color_mode := ConfValue("Gestures", "ColorMode", "ddl", "str",
         "Color &mode:", "HSV", , , , [["RGB", "Gamma-correct", "HSV"], true], "GestureColorSettings")
@@ -409,8 +409,8 @@ CheckConfig() {
 
     CONF.changed_name_ind_color := ConfValue("Colors", "ChangedName", "color", "str",
         "Custom GUI &name:", "Silver")
-    CONF.irrevocable_ind_color := ConfValue("Colors", "Irrevocable", "color", "str",
-        "&Irrevocable:", "E1E1E1")
+    CONF.root_return_ind_color := ConfValue("Colors", "RootReturn", "color", "str",
+        "&Root return:", "E1E1E1")
     CONF.instant_ind_color := ConfValue("Colors", "Instant", "color", "str",
         "Ins&tant:", "Teal")
     CONF.additional_up_ind_color := ConfValue("Colors", "AdditionalUp", "color", "str",
@@ -564,7 +564,7 @@ ShowSettings(*) {
     IniWrite(is_startup, "config.ini", "Main", "Autostart")
     CONF.autostart.v := is_startup
 
-    s_gui.Add("Text", "x361 y484 BackgroundTrans CGray", "v0.82")
+    s_gui.Add("Text", "x361 y484 BackgroundTrans CGray", "v0.83")
         .OnEvent("Click", (*) => Run("https://github.com/uqqu/Cadans/releases"))
     s_gui.Add("Picture", "x388 y474 BackgroundTrans", "ico/github.png")
         .OnEvent("Click", (*) => Run("https://github.com/uqqu/Cadans"))

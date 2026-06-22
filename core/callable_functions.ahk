@@ -32,6 +32,10 @@ SetActiveLayers(layers*) {
 
     ActiveLayers := OrderedMap()
     for layer in layers {
+        layer := NormalizeLayerName(layer)
+        if !AllLayers.Has(layer) {
+            continue
+        }
         ActiveLayers.Add(layer)
         if AllLayers[layer] is Integer {
             MergeLayer(layer)
@@ -46,7 +50,10 @@ ToggleLayers(layers*) {
 
     for layer in layers {
         layer_pos := layer[1] || -1
-        layer_name := layer[2]
+        layer_name := NormalizeLayerName(layer[2])
+        if !AllLayers.Has(layer_name) {
+            continue
+        }
         if ActiveLayers.Has(layer_name) {
             ActiveLayers.Remove(layer_name)
         } else {

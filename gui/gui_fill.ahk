@@ -17,6 +17,14 @@ FillPathline() {
             )
             UI.path.Push(dir_text)
 
+            if !val[3] && !val[4] && !ONLY_BASE_SCS.Has(val[1]) {
+                prefix := path.Clone()
+                prefix.Length := i
+                if !CheckLRMB(prefix) {
+                    dir_text.OnEvent("Click", SwitchPathTapHoldSide.Bind(i))
+                }
+            }
+
             UI.path.Push(UI.Add("Button", "x+3 yp-"
                 . (6 * CONF.gui_scale.v), val[3] || val[4] || _GetKeyName(val[1], true, true)))
             UI.path[-1].OnEvent("Click", ChangePath.Bind(i))
@@ -48,11 +56,15 @@ FillSetButtons() {
         ToggleVisibility(0, UI.current_values)
         ToggleEnabled(0, UI["BtnBase"], UI["BtnHold"])
         if buffer_path.Length {
-            ToggleVisibility(1, UI["TextBase"], UI["BtnBase"], UI["TextHold"], UI["BtnHold"])
+            ToggleVisibility(1,
+                UI["TextBase"], UI["BtnBase"], UI["BtnBaseNeighbor"],
+                UI["TextHold"], UI["BtnHold"], UI["BtnHoldNeighbor"])
         } else if saved_level[1] == 1 {
-            ToggleVisibility(1, UI["TextBase"], UI["BtnBase"])
+            ToggleVisibility(1, UI["TextBase"], UI["BtnBase"], UI["BtnBaseNeighbor"])
         } else if saved_level[1] == 2 {
-            ToggleVisibility(1, UI["TextBase"], UI["BtnBase"], UI["TextHold"], UI["BtnHold"])
+            ToggleVisibility(1,
+                UI["TextBase"], UI["BtnBase"], UI["BtnBaseNeighbor"],
+                UI["TextHold"], UI["BtnHold"], UI["BtnHoldNeighbor"])
         }
         if saved_level[1] == 2 {
             UI["SwapBufferView"].Visible := true
@@ -64,13 +76,31 @@ FillSetButtons() {
         path := current_path
     }
 
+    ResetTapHoldNeighborButtons()
+
     if CheckLRMB(path) || (path.Length && (path[-1][3] || path[-1][4])) {
-        ToggleVisibility(0, UI["TextHold"], UI["BtnHold"], UI["BtnHoldClear"], UI["BtnHoldClearNest"])
+        ToggleVisibility(0, UI["TextHold"], UI["BtnHold"], UI["BtnHoldNeighbor"],
+            UI["BtnHoldClear"], UI["BtnHoldClearNest"])
     }
 
     entries := _GetUnholdEntries()
     hnode := _GetFirst(entries.uhold)
     ignore_hold_count := buffer_view && !path.Length && hnode && hnode.down_type == TYPES.Modifier
+
+    has_neighbor_navigation := !buffer_view && path.Length && !CheckLRMB(path)
+        && !path[-1][3] && !path[-1][4] && !ONLY_BASE_SCS.Has(path[-1][1])
+
+    if has_neighbor_navigation {
+        current_name := path[-1][2] & 1 ? "Hold" : "Base"
+        UI["Text" . current_name].SetFont("w600")
+        UI["Btn" . current_name . "Neighbor"].Enabled := false
+        if !temp_chord {
+            neighbor_name := path[-1][2] & 1 ? "Base" : "Hold"
+            UI["Btn" . neighbor_name . "Neighbor"].Enabled := true
+        }
+    } else {
+        HideTapHoldNeighborButtons()
+    }
 
     if !buffer_view || saved_level[1] || path.Length {
         for arr in [["Base", entries.ubase], ["Hold", entries.uhold]] {
@@ -88,11 +118,13 @@ FillSetButtons() {
                 ToggleEnabled(false, UI["Btn" . txt . "Clear"], UI["Btn" . txt . "ClearNest"])
                 continue
             } else if !curr_node.down_type {
-                ToggleVisibility(false, [UI["Text" . txt], UI["Btn" . txt]])
+                ToggleVisibility(false, [
+                    UI["Text" . txt], UI["Btn" . txt], UI["Btn" . txt . "Neighbor"]
+                ])
                 continue
             } else if curr_node.down_type == (md ? 1 : 2) && curr_node.up_type == 1
                 && !curr_node.custom_lp_time && !curr_node.custom_nk_time && !curr_node.is_instant
-                && !curr_node.is_irrevocable && curr_node.child_behavior == 4 {
+                && !curr_node.root_return_ms && curr_node.child_behavior == 4 {
                 ToggleEnabled(false, UI["Btn" . txt . "Clear"], UI["Btn" . txt . "ClearNest"])
             }
             _AddIndicators(arr[2], UI["Btn" . txt], false, ignore_hold_count)
@@ -122,16 +154,37 @@ FillSetButtons() {
         }
     }
 
-    if path.Length && AWMods.Has(path[-1][1]) {
-        UI["BtnBase"].Enabled := false
-    }
     UI.SetFont("Norm")
 }
 
 
+ResetTapHoldNeighborButtons() {
+    for name in ["Base", "Hold"] {
+        btn := UI["Btn" . name]
+        neighbor := UI["Btn" . name . "Neighbor"]
+        btn.GetPos(&btn_x)
+        neighbor.GetPos(&neighbor_x)
+        btn.Move(,, neighbor_x - btn_x)
+        neighbor.Enabled := false
+        UI["Text" . name].SetFont("w400")
+    }
+}
+
+
+HideTapHoldNeighborButtons() {
+    for name in ["Base", "Hold"] {
+        btn := UI["Btn" . name]
+        neighbor := UI["Btn" . name . "Neighbor"]
+        btn.GetPos(&btn_x)
+        neighbor.GetPos(&neighbor_x, , &neighbor_w)
+        btn.Move(,, neighbor_x + neighbor_w - btn_x)
+        neighbor.Visible := false
+    }
+}
+
+
 FillKeyboard() {
-    b := CheckLRMB(current_path) || current_path.Length
-        && !(current_path[-1][2] & 1) && AWMods.Has(current_path[-1][1])
+    b := CheckLRMB(current_path)
     for sc, btn in UI.buttons {
         if sc == "CurrMod" {
             btn.SetFont("Italic")
@@ -269,7 +322,7 @@ _AddIndicators(unode, btn, is_hold:=false, ignore_hold_count:=false) {
     }
     for arr in [
         [node.gui_shortname, CONF.changed_name_ind_color.v],
-        [node.is_irrevocable, CONF.irrevocable_ind_color.v],
+        [node.root_return_ms, CONF.root_return_ind_color.v],
         [node.is_instant, CONF.instant_ind_color.v],
         [node.up_type !== TYPES.Disabled, CONF.additional_up_ind_color.v],
         [node.custom_lp_time, CONF.custom_hold_time_ind_color.v],
@@ -405,7 +458,9 @@ FillLayers() {
         }
     }
 
-    folder_name := ""
+    folders := Map()
+    folder_items := []
+    visible_layers := []
 
     for name, v in temp_all_layers {
         if name !== selected_layer {
@@ -464,33 +519,37 @@ FillLayers() {
         }
 
         if split.Length > lvl {
-            if !folder_name {
-                folder_name := split[lvl]
+            folder_name := split[lvl]
+            if !folders.Has(folder_name) {
                 folder_cnt := 0
                 loop Files, path . "*", "FR" {
                     folder_cnt += 1
                 }
-            } else if split[lvl] !== folder_name {
-                UI["LV_layers"].Add("Icon3", , , folder_name, folder_cnt || "")
-                folder_name := split[lvl]
-                folder_cnt := 0
-                loop Files, path . "*", "FR" {
-                    folder_cnt += 1
-                }
+                folders[folder_name] := folder_cnt
+                folder_items.Push({
+                    opt: "Icon3",
+                    row: ["", "", folder_name, folder_cnt || "", "", "", ""],
+                })
             }
             continue
         } else if split.Length < lvl {
             continue
         }
 
-        if folder_name {
-            UI["LV_layers"].Add("Icon3", , , folder_name, folder_cnt || "")
-            folder_name := ""
-            folder_cnt := 0
-        }
+        visible_layers.Push([name, v, split])
+    }
 
+    layer_items := []
+
+    for layer in visible_layers {
+        name := layer[1]
+        v := layer[2]
+        split := layer[3]
         if !v && AllLayers[name] is Integer {
-            UI["LV_layers"].Add("Icon1", , , split[-1])
+            layer_items.Push({
+                opt: "Icon1",
+                row: ["", "", split[-1], "", "", "", ""],
+            })
             continue
         }
         cnt := [0, 0]
@@ -504,10 +563,10 @@ FillLayers() {
             ] {
                 UI["LV_layers"].ModifyCol(2+i, val[2] * CONF.gui_scale.v, val[1])
             }
-            UI["LV_layers"].Add(
-                ActiveLayers.Has(name) ? "Icon2" : "Icon1", "", v || "",
-                split[-1], cnt[1] || "", "", cnt[2] || "", ""
-            )
+            layer_items.Push({
+                opt: ActiveLayers.Has(name) ? "Icon2" : "Icon1",
+                row: ["", v || "", split[-1], cnt[1] || "", "", cnt[2] || "", ""],
+            })
             continue
         }
 
@@ -546,15 +605,71 @@ FillLayers() {
         for i, val in [["Layer", 110], ["Base", 95], ["→", 30], ["Hold", 95], ["→", 30]] {
             UI["LV_layers"].ModifyCol(2+i, val[2] * CONF.gui_scale.v, val[1])
         }
-        UI["LV_layers"].Add(
-            ActiveLayers.Has(name) ? "Icon2" : "Icon1", "", v || "",
-            split[-1], txt[1], cnt[1] || "", txt[2], cnt[2] || ""
-        )
+        layer_items.Push({
+            opt: ActiveLayers.Has(name) ? "Icon2" : "Icon1",
+            row: ["", v || "", split[-1], txt[1], cnt[1] || "", txt[2], cnt[2] || ""],
+        })
     }
 
-    if folder_name {
-        UI["LV_layers"].Add("Icon3", , , folder_name, folder_cnt || "")
+    SortLayerListItems(folder_items)
+    SortLayerListItems(layer_items)
+    for item in folder_items {
+        UI["LV_layers"].Add(item.opt, item.row*)
     }
+    for item in layer_items {
+        UI["LV_layers"].Add(item.opt, item.row*)
+    }
+
+    UI["LV_layers"].ModifyCol(2, "AutoHdr")
+}
+
+
+SortLayerListItems(items) {
+    global layer_sort_col, layer_sort_desc
+
+    if !layer_sort_col {
+        return
+    }
+
+    ArraySort(items, (left_item, right_item) => CompareLayerListItems(left_item, right_item))
+}
+
+
+CompareLayerListItems(left_item, right_item) {
+    global layer_sort_col, layer_sort_desc
+
+    left_value := left_item.row[layer_sort_col]
+    right_value := right_item.row[layer_sort_col]
+    res := layer_sort_col == 2
+        ? CompareLayerPriorityValues(left_value, right_value)
+        : CompareLayerListValues(left_value, right_value)
+    if !res {
+        res := CompareLayerListValues(left_item.row[3], right_item.row[3])
+    }
+    return layer_sort_desc ? -res : res
+}
+
+
+CompareLayerPriorityValues(left_value, right_value) {
+    left_value := Trim(String(left_value))
+    right_value := Trim(String(right_value))
+    if !left_value && right_value {
+        return 1
+    }
+    if left_value && !right_value {
+        return -1
+    }
+    return CompareLayerListValues(left_value, right_value)
+}
+
+
+CompareLayerListValues(left_value, right_value) {
+    left_value := Trim(String(left_value))
+    right_value := Trim(String(right_value))
+    if IsNumber(left_value) && IsNumber(right_value) {
+        return Float(left_value) - Float(right_value)
+    }
+    return StrCompare(left_value, right_value)
 }
 
 
@@ -603,7 +718,7 @@ FillGestures() {
     path := buffer_view ? buffer_path : current_path
 
     if !path.Length || path[-1][3]
-        || SubStr(path[-1][1], 1, 2) == "Wh" && path[-1][1] !== "WhClick" || AWMods.Has(path[-1][1]) {
+        || SubStr(path[-1][1], 1, 2) == "Wh" && path[-1][1] !== "WhClick" {
         ToggleEnabled(0, UI["BtnAddNewGesture"], UI.gest_toggles)
         _CreateGesturePreviewImageList()
         for i, val in [["Has nested gestures", 220], ["→", 190], ["", 0], ["", 0], ["", 0], ["", 0], ["", 0]] {
@@ -949,7 +1064,7 @@ _GestureNodeOptionMarks(node) {
     if GetGestureUnrecognizedBehavior(node.gesture_opts) !== 5 {
         marks.Push("unrec.")
     }
-    if node.custom_nk_time || node.child_behavior !== 4 || node.is_instant || node.is_irrevocable {
+    if node.custom_nk_time || node.child_behavior !== 4 || node.is_instant || node.root_return_ms {
         marks.Push("chain opts")
     }
     return marks

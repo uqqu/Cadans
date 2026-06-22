@@ -17,10 +17,12 @@ is_key_processing := false
 current_ctx := 1
 current_mod := 0
 taphold_fn := false
+pending_root_return_ms := 0
 
 current_presses := Map()
 chord_presses := OrderedMap()
 up_actions := Map()
+masked_win_taps := Map()
 stack := []  ; queue of overlapping presses
 
 ;#Include "core\logger.ahk"
@@ -29,6 +31,12 @@ stack := []  ; queue of overlapping presses
 #Include "core\structs.ahk"
 #Include "core\processes.ahk"
 #Include "core\config.ahk"
+
+sysmod_state := Map()
+for sc in SYS_MODIFIERS {
+    sysmod_state[sc] := 0
+}
+
 #Include "core\gesture_processing.ahk"
 #Include "core\gestures.ahk"
 #Include "core\callable_functions.ahk"
@@ -36,16 +44,14 @@ stack := []  ; queue of overlapping presses
 #Include "core\keys.ahk"
 #Include "user_functions.ahk"
 
-sysmod_state := Map()
-for sc in SYS_MODIFIERS {
-    sysmod_state[sc] := 0
-}
-
 ;Logger.Start()
 ;Logger.level := 3
 
+
 PreCheck(sc, *) {
     global catched_entries, await_hold, await_mod
+
+    RefreshReturnToRootTimer()
 
     if SYS_MODIFIERS.Has(sc) && !current_presses.Has(sc) {
         sysmod_state[sc] := 2
@@ -53,7 +59,7 @@ PreCheck(sc, *) {
 
     if current_presses.Has(sc) || is_key_processing
         || await_hold || await_gest || await_nest || chord_presses.count
-        || is_drawing || GuiCheck(sc) {
+        || current_mod || is_drawing || GuiCheck(sc) {
         return true
     }
 
@@ -141,16 +147,59 @@ TimerSendCurrent() {
 
     if await_nest {
         fin := _GetFin(await_nest[1])
-        t := fin && fin.is_irrevocable
         SendAwaiting("n")
-        if !t {
-            ToRoot()
-        }
+        ScheduleReturnToRoot(fin)
     }
 }
 
 
-SendAwaiting(order, sc:=0) {
+TimerReturnToRoot() {
+    global await_nest, pending_root_return_ms
+
+    SetTimer(TimerReturnToRoot, 0)
+    await_nest := false
+    pending_root_return_ms := 0
+    ToRoot()
+}
+
+
+ClearReturnToRootTimer() {
+    global pending_root_return_ms
+
+    SetTimer(TimerReturnToRoot, 0)
+    pending_root_return_ms := 0
+}
+
+
+RefreshReturnToRootTimer() {
+    global pending_root_return_ms
+
+    if pending_root_return_ms > 0 {
+        SetTimer(TimerReturnToRoot, -pending_root_return_ms)
+    }
+}
+
+
+ScheduleReturnToRoot(fin) {
+    global pending_root_return_ms
+
+    if !fin {
+        return
+    }
+
+    if fin.root_return_ms == 0 {
+        pending_root_return_ms := 0
+        ToRoot()
+    } else if fin.root_return_ms > 0 {
+        pending_root_return_ms := fin.root_return_ms
+        RefreshReturnToRootTimer()
+    } else {
+        ClearReturnToRootTimer()
+    }
+}
+
+
+SendAwaiting(order, sc:=0, forced:=false) {
     global await_hold, await_nest, await_gest, await_mod
 
     b := false
@@ -184,8 +233,7 @@ SendAwaiting(order, sc:=0) {
             await_nest := false
             if !b {
                 if t[2] !== -1 && fin {
-                    SendKbd(fin.down_type, t[3] && fin.down_type == TYPES.Default
-                        ? t[3] : fin.down_val)
+                    SendTransitionDown(fin, t[2], t[3])
                     if up_actions.Has(t[2]) {
                         SendKbd(up_actions[t[2]].up_type, up_actions[t[2]].up_val)
                         up_actions.Delete(t[2])
@@ -204,7 +252,9 @@ SendAwaiting(order, sc:=0) {
                             if t && t[4] && !chord_presses.Has(t[2]) && (!current_mod || sc == t[2]) {
                                 is_unrecognized := res != false
                                     || GetGestureTravelLength() > Max(CONF.min_gesture_len.v, 10)
-                                ProcessUnrecognizedGesture(t[1], t[2], t[3], is_unrecognized)
+                                ProcessUnrecognizedGesture(
+                                    t[1], t[2], t[3], is_unrecognized, t[5]
+                                )
                             }
                         } else {
                             if t {
@@ -221,8 +271,8 @@ SendAwaiting(order, sc:=0) {
         if symb == "m" && await_mod {
             t := await_mod
             await_mod := false
-            if !b && t[2] == sc {
-                TransitionProcessing(t*)
+            if !b && (forced || t[2] == sc) {
+                TransitionProcessing(t[1], t[2])
                 b := true
             }
         }
@@ -230,15 +280,22 @@ SendAwaiting(order, sc:=0) {
 }
 
 
-ProcessUnrecognizedGesture(node, sc:=0, snapshot:=false, is_unrecognized:=true) {
+ProcessUnrecognizedGesture(
+    node, sc:=0, snapshot:=false, is_unrecognized:=true, gesture_opts:=false
+) {
     fin := _GetFin(node)
     if !fin {
         return
     }
 
-    ch_bh := is_unrecognized
-        ? GetGestureUnrecognizedBehavior(fin.gesture_opts)
-        : fin.child_behavior || 4
+    if !is_unrecognized {
+        TransitionProcessing(node, sc, snapshot)
+        return
+    }
+
+    ch_bh := GetGestureUnrecognizedBehavior(
+        gesture_opts is String ? gesture_opts : fin.gesture_opts
+    )
     if ch_bh == 5 {
         return
     }
@@ -259,6 +316,9 @@ ProcessUnrecognizedGesture(node, sc:=0, snapshot:=false, is_unrecognized:=true) 
 
 ToRoot() {
     global curr_unode, prev_unode
+
+    SetTimer(TimerSendCurrent, 0)
+    ClearReturnToRootTimer()
     curr_unode := ROOTS[current_layout]
     prev_unode := false
     TransferModifiers()
@@ -297,7 +357,9 @@ TreatMod(entries, sc) {
     val := fin.down_val
     child_behavior := fin.child_behavior
 
-    await_mod := entries.ubase ? [entries.ubase, sc] : GetDefaultSim(sc, true)
+    await_mod := entries.ubase
+        ? [entries.ubase, sc, entries.umod]
+        : [GetDefaultSim(sc, true)[1], sc, entries.umod]
     current_mod |= 1 << val
 
     mfin := _GetFin(await_mod[1])
@@ -309,11 +371,18 @@ TreatMod(entries, sc) {
 TimerResetMod() {
     global prev_unode, await_mod
 
-    try up_actions.Delete(await_mod[2])
+    t := await_mod
+    if t {
+        MaskAltMenu(t[2])
+    }
+    try up_actions.Delete(t[2])
     await_mod := false
     prev_unode := false
-    if await_gest {
-        await_gest[4] := false
+
+    ; A real modifier hold replaces the pending tap as the gesture fallback.
+    ; A fake modifier has no hold assignment, so the base fallback remains.
+    if await_gest && t && t[3] && await_gest[2] == t[2] {
+        await_gest[1] := t[3]
     }
 }
 
@@ -332,6 +401,9 @@ TimerResetChord(sc) {
 TransitionProcessing(checked_unode, sc:=0, snapshot:=false) {
     global curr_unode, prev_unode, await_nest
 
+    SetTimer(TimerSendCurrent, 0)
+    ClearReturnToRootTimer()
+
     if is_drawing {
         return
     }
@@ -347,12 +419,12 @@ TransitionProcessing(checked_unode, sc:=0, snapshot:=false) {
     TreatUpAction(checked_unode, sc)
 
     if !scs.Count && !chs.Count {
-        if !SYS_MODIFIERS.Has(sc) || fin.down_type !== TYPES.Default {
-            SendKbd(fin.down_type,
-                snapshot && fin.down_type == TYPES.Default ? snapshot : fin.down_val)
-        }
-        if !fin.is_irrevocable && curr_unode !== ROOTS[current_layout] && !chord_presses.count {
-            ToRoot()
+        SendTransitionDown(fin, sc, snapshot)
+        if curr_unode !== ROOTS[current_layout] && !chord_presses.count {
+            ScheduleReturnToRoot(fin)
+            if fin.root_return_ms != 0 && sc && !chord_presses.Has(sc) {
+                try current_presses.Delete(sc)
+            }
         } else if sc && !chord_presses.Has(sc) {
             try current_presses.Delete(sc)
         }
@@ -360,18 +432,13 @@ TransitionProcessing(checked_unode, sc:=0, snapshot:=false) {
     }
 
     if fin.is_instant {
-        if !SYS_MODIFIERS.Has(sc) || fin.down_type !== TYPES.Default {
-            SendKbd(fin.down_type,
-                snapshot && fin.down_type == TYPES.Default ? snapshot : fin.down_val)
-        }
+        SendTransitionDown(fin, sc, snapshot)
         await_nest := [checked_unode, -1, snapshot]
     } else {
         await_nest := [checked_unode, sc, snapshot]
     }
 
-    if !fin.is_irrevocable {
-        SetTimer(TimerSendCurrent, -((fin.custom_nk_time) || CONF.MS_NK.v))
-    }
+    SetTimer(TimerSendCurrent, -((fin.custom_nk_time) || CONF.MS_NK.v))
     if curr_unode !== checked_unode {
         prev_unode := curr_unode
         curr_unode := checked_unode
@@ -381,14 +448,34 @@ TransitionProcessing(checked_unode, sc:=0, snapshot:=false) {
 }
 
 
+SendTransitionDown(fin, sc, snapshot:=false) {
+    replay_win_tap := masked_win_taps.Get(sc, false)
+    if SYS_MODIFIERS.Has(sc) && fin.down_type == TYPES.Default && !replay_win_tap {
+        return
+    }
+
+    action_val := snapshot && fin.down_type == TYPES.Default ? snapshot : fin.down_val
+    if replay_win_tap && fin.down_type == TYPES.Default {
+        SendNativeWinTap()
+    } else {
+        SendKbd(fin.down_type, action_val)
+    }
+    if replay_win_tap {
+        masked_win_taps[sc] := false
+    }
+}
+
+
 TransferModifiers() {
-    global current_mod
+    global current_mod, child_behavior
 
     current_mod := 0
+    child_behavior := false
     for sc in current_presses {
         res_md := curr_unode.GetModFin(sc, true)
         if res_md {
             current_mod |= 1 << res_md.down_val
+            child_behavior := res_md.child_behavior
             if sysmod_state.Get(sc, false) {
                 sysmod_state[sc] := 1
             }
@@ -404,7 +491,8 @@ TreatGest(entries, sc) {
     if entries.ubase && gests.Count {
         pool_gestures := CollectPool(gests)
         if pool_gestures.Length {
-            await_gest := [entries.ubase, sc, false, true]
+            fin := _GetFin(entries.ubase)
+            await_gest := [entries.ubase, sc, false, true, fin ? fin.gesture_opts : ""]
             StartDraw(pool_gestures)
         }
     }
@@ -480,9 +568,11 @@ _TapHoldHandler(sc, is_hold, snapshot, manual:=false) {
     if is_hold && await_hold {
         SendAwaiting("h", sc)
     } else if !is_hold && await_hold {
+        MaskAltMenu(sc)
         TreatUpAction(await_hold[3], sc)
         if is_drawing {
-            await_gest := [await_hold[3], sc, snapshot, true]
+            gesture_opts := await_gest && await_gest[2] == sc ? await_gest[5] : ""
+            await_gest := [await_hold[3], sc, snapshot, true, gesture_opts]
         } else {
             TransitionProcessing(await_hold[3], 0, snapshot)
         }
@@ -539,6 +629,10 @@ OnKeyDown(sc, rec:=false, forced:=false, *) {
         return
     } else if is_drag_mode && active_hwnd == UI.Hwnd && (sc == "LButton" || sc == "RButton") {
         return
+    }
+    if !rec && (sc == 0x15B || sc == 0x15C) {
+        masked_win_taps[sc] := true
+        SendInput("{vkE8 down}")
     }
 
     wh := !(sc is Number) && SubStr(sc, 1, 5) == "Wheel"
@@ -604,7 +698,9 @@ OnKeyDown(sc, rec:=false, forced:=false, *) {
 
     if !catched_entries {
         cfin := _GetFin(curr_unode)
-        ch_bh := child_behavior || (cfin ? cfin.child_behavior : 0)
+        ch_bh := current_mod
+            ? (child_behavior || 4)
+            : (cfin ? cfin.child_behavior : 0)
 
         if curr_unode !== ROOTS[current_layout] {
             if ch_bh == 5 {
@@ -619,6 +715,13 @@ OnKeyDown(sc, rec:=false, forced:=false, *) {
                 ToRoot()
             }
             catched_entries := GetEntries(sc)
+        } else if current_mod {
+            if ch_bh == 5 {
+                OnKeyDownRec()
+                return
+            } else if ch_bh == 2 || ch_bh == 4 {
+                SendAwaiting("m", , true)
+            }
         }
     }
 
@@ -654,11 +757,18 @@ OnKeyDown(sc, rec:=false, forced:=false, *) {
         sim := GetDefaultNode(sc, current_mod)
         if !rec {
             stack.Push(sc)
-        } else {
+        } else if !SYS_MODIFIERS.Has(sc) {
             SendKbd(sim.down_type, sim.down_val)
         }
         OnKeyDownRec()
         return
+    }
+
+    if !rec && (sc == 0x038 || sc == 0x138) {
+        base_fin := _GetFin(catched_entries.ubase)
+        if base_fin && base_fin.down_type !== TYPES.Default {
+            MaskAltMenu(sc)
+        }
     }
 
     if !wh {
@@ -690,7 +800,8 @@ OnKeyDown(sc, rec:=false, forced:=false, *) {
         ) {
             if SYS_MODIFIERS.Has(sc) {  ; fake mod
                 await_mod := catched_entries.ubase
-                    ? [catched_entries.ubase, sc] : GetDefaultSim(sc, true)
+                    ? [catched_entries.ubase, sc, false]
+                    : [GetDefaultSim(sc, true)[1], sc, false]
                 mfin := _GetFin(await_mod[1])
                 SetTimer(TimerResetMod, -((mfin && mfin.custom_lp_time) || CONF.MS_LP.v))
             } else {
@@ -699,10 +810,6 @@ OnKeyDown(sc, rec:=false, forced:=false, *) {
         } else {
             TreatTapHold(catched_entries, sc)
         }
-    }
-
-    if await_nest && AWMods.Has(sc) && (f := _GetFin(await_nest[1])) && (!f.is_instant || f.down_type < 3) {
-        SendInput("{vkE8}")
     }
 
     OnKeyDownRec()
@@ -786,6 +893,8 @@ GetDefaultSim(sc, extended:=false) {
 OnKeyUp(sc, *) {
     global current_mod, child_behavior
 
+    RefreshReturnToRootTimer()
+
     if SYS_MODIFIERS.Has(sc) {
         sysmod_state[sc] := 0
     }
@@ -811,12 +920,32 @@ OnKeyUp(sc, *) {
         current_mod &= ~(1 << md.down_val)
         child_behavior := false
         if !await_nest && !current_mod && curr_unode !== ROOTS[current_layout]
-            && !md.is_irrevocable {
-            b := true
+            && md.root_return_ms >= 0 {
+            if md.root_return_ms == 0 {
+                b := true
+            } else {
+                ScheduleReturnToRoot(md)
+            }
         }
     }
     if b || SYS_MODIFIERS.Has(sc) && !await_nest {
         ToRoot()
+    }
+    if masked_win_taps.Has(sc) {
+        SendInput("{vkE8 up}")
+        masked_win_taps.Delete(sc)
+    }
+}
+
+
+SendNativeWinTap() {
+    SendInput("^{Esc}")
+}
+
+
+MaskAltMenu(sc) {
+    if sc == 0x038 || sc == 0x138 {
+        SendInput("{vkE8}")
     }
 }
 

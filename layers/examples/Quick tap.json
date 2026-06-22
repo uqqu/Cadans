@@ -1,0 +1,69 @@
+﻿// 0.83
+// 
+// Tap-hold on the root level. Double tap with held – default behavior with repetition through holding
+// 
+{
+  "0": [
+    null,
+    {
+      "14": {
+        "0": [
+          2,
+          null,
+          1,
+          null,
+          1,
+          0,
+          0,
+          0,
+          4,
+          null,
+          null,
+          null,
+          {
+            "14": {
+              "0": [
+                4,
+                "{Backspace}",
+                1,
+                null,
+                0,
+                300,
+                0,
+                0,
+                4,
+                null,
+                null,
+                null,
+                {},
+                {},
+                {}
+              ]
+            }
+          },
+          {},
+          {}
+        ],
+        "1": [
+          4,
+          "^{Backspace}",
+          1,
+          null,
+          0,
+          0,
+          0,
+          0,
+          4,
+          "Delete word",
+          null,
+          null,
+          {},
+          {},
+          {}
+        ]
+      }
+    },
+    {},
+    {}
+  ]
+}

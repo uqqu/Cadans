@@ -35,6 +35,19 @@ LVLayerClick(lv, row, is_right_click:=false, *) {
 }
 
 
+LVLayerColClick(lv, col, *) {
+    global layer_sort_col, layer_sort_desc
+
+    if layer_sort_col == col {
+        layer_sort_desc := !layer_sort_desc
+    } else {
+        layer_sort_col := col
+        layer_sort_desc := false
+    }
+    FillLayers()
+}
+
+
 LVLayerDoubleClick(lv, row, from_selected:=false) {
     global layer_editing, root_text, selected_layer, last_selected_layer, buffer_view, layer_path
 
@@ -85,9 +98,48 @@ LVLayerDoubleClick(lv, row, from_selected:=false) {
         if AllLayers[selected_layer] is Integer {
             MergeLayer(selected_layer)
         }
+        SelectFirstLayerLayoutIfCurrentEmpty()
     }
 
     ChangePath(, false)
+}
+
+
+SelectFirstLayerLayoutIfCurrentEmpty() {
+    global gui_lang
+
+    counts := AllLayers[selected_layer]
+    if counts.Get(gui_lang, 0) {
+        return false
+    }
+
+    for lang in LANGS.order {
+        if counts.Get(lang, 0) {
+            gui_lang := lang
+            UI["Langs"].Delete()
+            UI["Langs"].Add(LANGS.GetAll())
+            UI["Langs"].Text := LANGS[lang]
+            FlashLayoutDDL()
+            return true
+        }
+    }
+    return false
+}
+
+
+FlashLayoutDDL() {
+    SetTimer(RestoreLayoutDDL, 0)
+    UI["Langs"].SetFont("Bold")
+    UI["Langs"].Redraw()
+    SetTimer(RestoreLayoutDDL, -1000)
+}
+
+
+RestoreLayoutDDL(*) {
+    try {
+        UI["Langs"].SetFont("Norm")
+        UI["Langs"].Redraw()
+    }
 }
 
 
@@ -146,26 +198,26 @@ _WriteActiveLayersToConfig(without_upd:=false) {
 AddNewLayer(*) {
     ToggleFreeze(1)
     name := "new layer"
-    layer_str := "layers\"
+    layer_prefix := ""
     for folder in layer_path {
-        layer_str .= folder . "\"
+        layer_prefix .= folder . "\"
     }
-    if FileExist(layer_str . "new layer.json") {
+    if FileExist("layers\" . layer_prefix . "new layer.json") {
         i := 2
-        while FileExist(layer_str . "new layer (" . i . ").json") {
+        while FileExist("layers\" . layer_prefix . "new layer (" . i . ").json") {
             i++
         }
         name := "new layer (" . i . ")"
     }
-    LayersMeta[name] := Map("version", 0.82, "rtags", "", "rdescription", "", "rprocesses", "",
+    layer_name := layer_prefix . name
+    LayersMeta[layer_name] := Map("version", 0.83, "rtags", "", "rdescription", "", "rprocesses", "",
         "tags", [], "processes", [{invert: false, kind: "*", val: "*", children: []}])
-    SerializeMap(Map(), name)
-    AllLayers.Add(name, true)
+    SerializeMap(Map(), layer_name)
+    AllLayers.Add(layer_name, true)
     UpdLayers()
     UpdateKeys()
     ToggleFreeze(0)
 }
-
 
 EditSelectedLayer(*) {
     global r_gui
@@ -244,7 +296,8 @@ EditSelectedLayer(*) {
         }
 
         ToggleFreeze(1)
-        new_filepath := "layers/" . r_gui["Name"].Text . ".json"
+        new_name := NormalizeLayerName(r_gui["Name"].Text)
+        new_filepath := "layers/" . new_name . ".json"
         old_filepath := "layers/" . last_selected_layer . ".json"
         if new_filepath !== old_filepath {
             if FileExist(new_filepath) && MsgBox(
@@ -252,6 +305,10 @@ EditSelectedLayer(*) {
                 "Confirmation", "YesNo Icon?") == "No" {
                 ToggleFreeze(0)
                 return
+            }
+            SplitPath(new_filepath, , &new_dir)
+            if new_dir && !DirExist(new_dir) {
+                DirCreate(new_dir)
             }
             FileMove("layers/" . last_selected_layer . ".json", new_filepath, true)
         }
@@ -308,7 +365,7 @@ EditSelectedLayer(*) {
         if new_filepath !== old_filepath && ActiveLayers.Has(last_selected_layer) {
             p := ActiveLayers[last_selected_layer]
             ActiveLayers.Remove(last_selected_layer)
-            ActiveLayers.Add(r_gui["Name"].Text, , p)
+            ActiveLayers.Add(new_name, , p)
             _WriteActiveLayersToConfig(true)
         }
 
@@ -365,7 +422,7 @@ MoveDownSelectedLayer(*) {
 _MoveSelectedLayer(sign, to_the_end:=false, *) {
     lv := UI["LV_layers"]
     loop lv.GetCount() {
-        if lv.GetText(A_Index, 3) == last_selected_layer {
+        if _GetLayerNameFromLVRow(A_Index) == last_selected_layer {
             try {
                 prior := Integer(UI["LV_layers"].GetText(A_Index, 2))
             } catch {
@@ -402,7 +459,7 @@ _FocusLastLayerLV() {
         lv := UI["LV_layers"]
         lv.Focus()
         loop lv.GetCount() {
-            if lv.GetText(A_Index, 3) == last_selected_layer {
+            if _GetLayerNameFromLVRow(A_Index) == last_selected_layer {
                 p := lv.GetText(A_Index, 2) != ""
                 lv.Modify(0, "-Select")
                 lv.Modify(A_Index, "Select Focus Vis")
@@ -412,6 +469,15 @@ _FocusLastLayerLV() {
         ToggleEnabled(p, UI.layer_move_btns)
         ToggleEnabled(1, UI.layer_ctrl_btns)
     }
+}
+
+
+_GetLayerNameFromLVRow(row) {
+    layer_name := ""
+    for folder in layer_path {
+        layer_name .= folder . "\"
+    }
+    return layer_name . UI["LV_layers"].GetText(row, 3)
 }
 
 

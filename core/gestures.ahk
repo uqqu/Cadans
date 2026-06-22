@@ -1124,6 +1124,7 @@ ConfirmGestureIdleTransition(gesture) {
 
     if await_gest {
         await_gest[1] := gesture
+        await_gest[5] := node.gesture_opts
     }
     session.gestures := child_gestures
     FadeGestureSegments()

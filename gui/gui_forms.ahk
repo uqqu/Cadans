@@ -36,6 +36,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
     func_form := false
 
     form := Gui("-SysMenu", "Set assignment")
+    form.root_level_assignment := false
     form.OnEvent("Close", CloseForm)
     form.OnEvent("Escape", CloseForm)
 
@@ -122,7 +123,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         form.Add("DropDownList", "x-1000 y-1000 w0 h0 vTypeDDL Choose1", ["Default"])
         form.Add("DropDownList", "x-1000 y-1000 w0 h0 vUpTypeDDL Choose1", ["Disabled"])
         form.Add("CheckBox", "x-1000 y-1000 w0 h0 vCBInstant")
-        form.Add("CheckBox", "x-1000 y-1000 w0 h0 vCBIrrevocable")
+        form.Add("Edit", "x-1000 y-1000 w0 h0 vRootReturnMS")
 
         form["Cancel"].OnEvent("Click", CloseForm)
         form["Save"].OnEvent("Click", WriteValue.Bind(save_type, _current_path, false))
@@ -139,7 +140,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         ["Disabled", "Default", "Text", "KeySimulation", "Function", "Modifier"],  ; hold
         ["Disabled", "Text", "KeySimulation", "Function"],  ; chords
         ["Text", "KeySimulation", "Function"]  ; gestures
-    ][save_type == 1 && _current_path[-1][2] ? 1 : save_type + 1]
+    ][save_type == 1 && _current_path.Length && _current_path[-1][2] ? 1 : save_type + 1]
 
     form.Add("Text", "x10 y+10 w60", "Action type:")
     form.Add("DropDownList", "x+5 yp-2 w235 vTypeDDL", type_list)
@@ -148,6 +149,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
     form.color_buttons := []
     form.colors := [[]]
     nested_gesture := save_type == 3 && IsNestedGesturePath(_current_path)
+    root_level_assignment := IsRootLevelFormAssignment(save_type, _current_path)
 
     if save_type < 2 {
         form.Add("Text", "x10 y+10 w150", "Tap🡒hold threshold (ms):")
@@ -196,7 +198,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
             form.Add("Button", "x+0 yp0 w150 vColorToggle", "Child gesture options")
                 .OnEvent("Click", ShowHideButtons)
             form["InChainToggle"].GetPos(, &y, , &h)
-            _AddChainOptions(y+h)
+            _AddChainOptions(y+h, root_level_assignment)
             form.chain_options.RemoveAt(1)
             form.up_fields := []
             form.Add("Text", "x10 y" . (13 + y + h) . " w0 h0 vGestureOverlayAnchor")
@@ -206,24 +208,17 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
             form.Add("Button", "x10 y+10 w300 vBtnChainOptions", "In-chain behavior ▾")
                 .OnEvent("Click", ShowChainOptions)
             form["BtnChainOptions"].GetPos(, &y, , &h)
-            _AddChainOptions(y)
+            _AddChainOptions(y, root_level_assignment)
         }
     } else {
-        if AWMods.Has(_current_path[-1][1]) {
-            form.Add("Button", "x10 y+10 w150 vInChainToggle", "In-chain behavior")
-                .OnEvent("Click", ShowHideButtons)
-            form.Add("Button", "x+0 yp0 w150 vUpToggle", "Add. key-up action")
-                .OnEvent("Click", ShowHideButtons)
-        } else {
-            form.Add("Button", "x10 y+10 w100 vInChainToggle", "In-chain behavior")
-                .OnEvent("Click", ShowHideButtons)
-            form.Add("Button", "x+0 yp0 w100 vUpToggle", "Add. key-up action")
-                .OnEvent("Click", ShowHideButtons)
-            form.Add("Button", "x+0 yp0 w100 vColorToggle", "Child gesture opts")
-                .OnEvent("Click", ShowHideButtons)
-        }
+        form.Add("Button", "x10 y+10 w100 vInChainToggle", "In-chain behavior")
+            .OnEvent("Click", ShowHideButtons)
+        form.Add("Button", "x+0 yp0 w100 vUpToggle", "Add. key-up action")
+            .OnEvent("Click", ShowHideButtons)
+        form.Add("Button", "x+0 yp0 w100 vColorToggle", "Child gesture opts")
+            .OnEvent("Click", ShowHideButtons)
         form["InChainToggle"].GetPos(, &y, , &h)
-        _AddChainOptions(y+h)
+        _AddChainOptions(y+h, root_level_assignment)
         form.chain_options.RemoveAt(1)
 
         form.up_fields := [
@@ -236,7 +231,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
 
         form.Add("Text", "x10 y" . (13 + y + h) . " w0 h0 vGestureOverlayAnchor")
             .Visible := false
-        _AddFormGestureOverlay(0)
+        _AddFormGestureOverlay(0, save_type == 1)
 
         form["UpTypeDDL"]
             .OnEvent("Change", ChangeFormPlaceholder.Bind(unode, false, layers, save_type, 1, 0, 0))
@@ -266,6 +261,7 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
     form.Add("Button", "x+0 yp+0 w100 h20 vSaveWithReturn", "↩ Save and back")
         .OnEvent("Click", (*) => SaveFormWithReturn(fn))
     form.bottom.Push(form["Cancel"], form["Save"], form["SaveWithReturn"])
+    CaptureFormBottomLayout()
     if save_type == 3 {
         if !form_gesture_key {
             ToggleEnabled(0, form["Save"], form["SaveWithReturn"])
@@ -278,11 +274,11 @@ OpenForm(save_type, _path:=false, _mod_val:=false, _entries:=false, *) {
         ChangeFormPlaceholder.Bind(unode, false, layers, save_type, 0, 0, 0))
     form["TypeDDL"].Text := curr_val ? TYPES_R[curr_val.down_type] : "Text"
     form["Save"].GetPos(, &y, , &h)
-    form.Show("w320 h" . y+h+10)
+    form.Show("w320 h" . (y + h + 10))
     ChangeFormPlaceholder(unode, paired, layers, save_type, , , 1)
     if curr_val {
         has_chain_options := curr_val.custom_nk_time || curr_val.child_behavior !== 4
-            || curr_val.is_instant || curr_val.is_irrevocable
+            || curr_val.is_instant || (!root_level_assignment && curr_val.root_return_ms)
         has_gesture_options := save_type < 2 && (
             curr_val.gesture_opts
             || GetGestureUnrecognizedBehavior(curr_val.gesture_opts) !== 5
@@ -370,6 +366,50 @@ ValidateFormActionValue(type_text, val, field_name:="Value") {
 }
 
 
+ValidateRootReturnMS(raw_value, &result) {
+    raw_value := Trim(raw_value)
+    if !StrLen(raw_value) {
+        result := 0
+        return true
+    }
+
+    try {
+        val := Integer(raw_value)
+        if val < -1 || val . "" !== raw_value {
+            throw
+        }
+        result := val
+        return true
+    } catch {
+        MsgBox("Return-to-root value must be -1 or a non-negative integer.",
+            "Invalid value", "Icon!")
+        return false
+    }
+}
+
+
+IsRootLevelFormAssignment(save_type, path) {
+    if save_type < 2 {
+        return path.Length <= 1
+    }
+    return path.Length <= 0
+}
+
+
+GetKeyboardFirstRepeatDelayMS() {
+    delay := 0
+    if DllCall("SystemParametersInfo", "UInt", 0x0016, "UInt", 0, "UInt*", &delay, "UInt", 0) {
+        return (delay + 1) * 250
+    }
+
+    try {
+        delay := Integer(RegRead("HKCU\Control Panel\Keyboard", "KeyboardDelay"))
+        return (delay + 1) * 250
+    }
+    return "unknown"
+}
+
+
 SaveFormWithReturn(fn) {
     fn()
     if !form {
@@ -378,7 +418,8 @@ SaveFormWithReturn(fn) {
 }
 
 
-_AddChainOptions(y) {
+_AddChainOptions(y, root_level_assignment:=false) {
+    form.root_level_assignment := root_level_assignment
     form.chain_options := [
         form.Add("Text", "x10 y" . y . " w300 h1 0x10"),
         form.Add("Text", "x10 y+10 w150", "Next event timeout (ms):"),
@@ -386,36 +427,103 @@ _AddChainOptions(y) {
 
         form.Add("Text", "x10 y+10 w150", "Unassigned child behavior:"),
         form.Add("DropDownList", "x+0 yp-2 w150 vChildBehaviorDDL Choose4", child_behavior_opts),
-
-        form.Add("Button", "x10 y+10 w15 h15 vHelpInstant", "?"),
-        form.Add("CheckBox", "x+3 yp+1 w130 vCBInstant", "Instant"),
-
-        form.Add("Button", "x160 yp-1 w15 h15 vHelpIrrevocable", "?"),
-        form.Add("CheckBox", "x+3 yp+1 w130 vCBIrrevocable", "Irrevocable")
     ]
+    form.root_return_controls := []
+    if !root_level_assignment {
+        form.root_return_controls := [
+            form.Add("Text", "x10 y+10 w150", "Return delay (ms):"),
+            form.Add("Edit", "x+0 yp-3 w126 vRootReturnMS +Center"),
+            form.Add("Button", "x+4 yp+0 w20 h20 vHelpRootReturn", "?"),
+        ]
+        form.chain_options.Push(form.root_return_controls*)
+    }
+
+    form.chain_options.Push(
+        form.Add("Button", "x10 y+10 w15 h15 vHelpInstant", "?"),
+        form.Add("CheckBox", "x+3 yp+1 w130 vCBInstant", "Instant")
+    )
+    if root_level_assignment {
+        form.Add("Edit", "x-1000 y-1000 w0 h0 vRootReturnMS")
+    }
     form["HelpInstant"].OnEvent("Click", (*) => MsgBox(
         "The action will be performed immediately upon reaching the assignment.`n"
         . "It doesn't break the chain of transitions, and you can go deeper,`n"
         . "just as without this option.`nInterrupting at this assignment or treating as "
         . "the final node will not trigger a repeat action.", "Help"))
-    form["HelpIrrevocable"].OnEvent("Click", (*) => MsgBox(
-        "Interrupting the chain at this assignment or executing it as the final node"
-        . "`nwill not return to the root."
-        . "`nYou will remain at your current transition level until the next event."
-        , "Help"))
+    if !root_level_assignment {
+        form["HelpRootReturn"].OnEvent("Click", (*) => MsgBox(
+            "Controls the return delay after this assignment is resolved."
+            . "`nApplies only when this assignment is final or interrupted."
+            . "`n`n0 – return immediately;"
+            . "`n-1 – never return automatically;"
+            . "`nN – return after N ms without further events."
+            . "`n`nIf a resolved node receives a child event during the return delay, both actions are performed."
+            . "`n`nHold behavior:"
+            . "`nwith 0, the key remains locked until released, even after returning to root;"
+            . "`nwith a value between 0 and the OS repeat delay, holding the key may trigger an additional event at root;"
+            . "`nto keep quick-tap autorepeat on the current level (for final nodes), set this value higher than the system delay."
+            . "`n`nCurrent system first key repeat delay: "
+            . GetKeyboardFirstRepeatDelayMS() . " ms."
+            , "Help"))
+    }
 
     SendMessage(0x1501, true, StrPtr("Empty – follow global"), form["CustomNK"].Hwnd)
+    if !root_level_assignment {
+        SendMessage(0x1501, true, StrPtr("0 immediately; -1 never"), form["RootReturnMS"].Hwnd)
+    }
     ToggleVisibility(0, form.chain_options)
 }
 
 
 ShowChainOptions(*) {
-    ToggleVisibility(2, form.chain_options, form["BtnChainOptions"])
+    ToggleVisibility(0, form["BtnChainOptions"])
+    ToggleVisibility(1, form.chain_options)
+    MoveFormBottomAfter(form.chain_options)
+}
+
+
+MoveFormBottomTo(sh) {
+    for i, elem in form.bottom {
+        elem.Move(, sh + form.bottom_offsets[i])
+        elem.Text := elem.Text
+    }
+}
+
+
+MoveFormBottomAfter(ctrls, gap:=10) {
+    block_bottom := GetVisibleControlsBottom(ctrls)
+    if !block_bottom {
+        return
+    }
+
+    MoveFormBottomTo(block_bottom + gap)
+    ResizeFormToBottom()
+}
+
+
+GetVisibleControlsBottom(ctrls) {
+    block_bottom := 0
+    for elem in ctrls {
+        try {
+            if !elem.Visible {
+                continue
+            }
+            elem.GetPos(, &elem_y, , &elem_h)
+            block_bottom := Max(block_bottom, elem_y + elem_h)
+        }
+    }
+
+    return block_bottom
+}
+
+
+CaptureFormBottomLayout() {
+    form.bottom_offsets := []
+    form.bottom[1].GetPos(, &base_y)
     for elem in form.bottom {
         elem.GetPos(, &y)
-        elem.Move(, y + 65)
+        form.bottom_offsets.Push(y - base_y)
     }
-    form.Show("AutoSize")
 }
 
 
@@ -429,7 +537,8 @@ ShowHideButtons(obj, *) {
         _FormHideGestureColorEditors()
         try ToggleVisibility(0, form.up_fields)
         ToggleVisibility(1, form.chain_options)
-        form["CBIrrevocable"].GetPos(, &sh)
+        MoveFormBottomAfter(form.chain_options)
+        return
     } else if obj.Name == "UpToggle" {
         ToggleVisibility(0, form.color_controls)
         _FormHideGestureColorEditors()
@@ -452,21 +561,14 @@ ShowHideButtons(obj, *) {
     }
     sh += 30
 
-    b := true
-    for elem in form.bottom {
-        if b {
-            b := false
-            elem.GetPos(, &y)
-            elem.Move(, sh)
-            sh := y - sh
-        } else {
-            elem.GetPos(, &y)
-            elem.Move(, y - sh)
-        }
-        elem.Text := elem.Text
-    }
+    MoveFormBottomTo(sh)
+    ResizeFormToBottom()
+}
 
-    form.Show("AutoSize")
+
+ResizeFormToBottom() {
+    form["Save"].GetPos(, &y, , &h)
+    form.Show("w320 h" . (y + h + 10))
 }
 
 
@@ -493,7 +595,7 @@ ShowFormGestureZonePreview(*) {
 }
 
 
-_AddFormGestureOverlay(is_visible:=0) {
+_AddFormGestureOverlay(is_visible:=0, shared_with_tap:=false) {
     form.color_buttons := []
     form.color_controls := []
     form.colors := Map()
@@ -504,6 +606,13 @@ _AddFormGestureOverlay(is_visible:=0) {
     try {
         form["GestureOverlayAnchor"].GetPos(, &y, , &anchor_h)
         y += anchor_h - 3
+    }
+    if shared_with_tap {
+        form.color_controls.Push(
+            form.Add("Text", "x10 y" . y . " w300 h18 Center cGray",
+                "These are the paired tap assignment's gesture options.")
+        )
+        y += 20
     }
     form.color_controls.Push(
         form.Add("Text", "x10 y" . y . " w150 h20", "Unrecognized gest. behavior:"),
@@ -901,7 +1010,7 @@ ChangeFormPlaceholder(unode, paired, layers, save_type:=0, is_up:=0, is_layer_ed
             form["WindowRule"].Text := val.window_rule
             form["ChildBehaviorDDL"].Value := val.child_behavior
 
-            form["CBIrrevocable"].Value := val.is_irrevocable
+            form["RootReturnMS"].Text := val.root_return_ms || ""
             form["CBInstant"].Value := val.is_instant
 
             try {
@@ -921,7 +1030,7 @@ ChangeFormPlaceholder(unode, paired, layers, save_type:=0, is_up:=0, is_layer_ed
         title := "Existing" . name . "for layer '" . layer . "'"
     }
 
-    if !is_up && paired && paired.layers.count
+    if !is_up && save_type == 1 && paired && paired.layers.count
         && paired.layers.Has(layer) && paired.layers[layer][0] {
         p := paired.layers[layer][0]
         try form["CustomLP"].Text := p.custom_lp_time || ""
@@ -1193,13 +1302,13 @@ WriteValue(is_hold, custom_path:=false, paired:=false, *) {
     vals := Map()
     for name in [
         "LayersDDL", "TypeDDL", "ValInp", "UpTypeDDL", "UpValInp", "CustomLP", "CustomNK",
-        "Shortname", "WindowRule",
+        "RootReturnMS", "Shortname", "WindowRule",
     ] {
         vals[name] := false
         try vals[name] := form[name].Text
     }
     for name in [
-        "CBIrrevocable", "CBInstant", "ChildBehaviorDDL",
+        "CBInstant", "ChildBehaviorDDL",
     ] {
         vals[name] := false
         try vals[name] := form[name].Value
@@ -1212,8 +1321,15 @@ WriteValue(is_hold, custom_path:=false, paired:=false, *) {
         return
     }
 
-    if vals["CBIrrevocable"] && vals["ChildBehaviorDDL"] == 5
-        && MsgBox("You set irrevocable option with ignoring unassigned children.`n"
+    if !ValidateRootReturnMS(vals["RootReturnMS"], &root_return_ms) {
+        return
+    }
+    if form.root_level_assignment {
+        root_return_ms := 0
+    }
+
+    if root_return_ms == -1 && vals["ChildBehaviorDDL"] == 5
+        && MsgBox("You set 'never return to root' with ignoring unassigned children.`n"
             . "If you don't add an assignment for exiting from this level, "
             . "you'll be stuck there permanently.`n`n"
             . "Proceed with this setting?", "Confirmation", "YesNo Icon?") == "No" {
@@ -1251,12 +1367,12 @@ WriteValue(is_hold, custom_path:=false, paired:=false, *) {
             p := GetDefaultNode(current_path[-1][1], current_path[-1][2] & ~1)
         }
         if p && (p.custom_lp_time && p.custom_lp_time != new_lp
-            || is_hold && new_gest_opts && new_gest_opts != p.gesture_opts) {
+            || is_hold && new_gest_opts != p.gesture_opts) {
             SaveValue(
                 !is_hold, layer,
                 p.down_type, p.down_val,
                 p.up_type, p.up_val,
-                p.is_instant, p.is_irrevocable,
+                p.is_instant, p.root_return_ms,
                 new_lp,
                 p.custom_nk_time,
                 p.child_behavior, p.gui_shortname,
@@ -1268,7 +1384,7 @@ WriteValue(is_hold, custom_path:=false, paired:=false, *) {
             is_hold, layer,
             TYPES.%vals["TypeDDL"]%, vals["ValInp"],
             TYPES.%vals["UpTypeDDL"]%, vals["UpValInp"],
-            vals["CBInstant"], vals["CBIrrevocable"],
+            vals["CBInstant"], root_return_ms,
             new_lp,
             (vals["CustomNK"] != CONF.MS_NK.v ? vals["CustomNK"] : false),
             vals["ChildBehaviorDDL"], vals["Shortname"],
@@ -1279,7 +1395,7 @@ WriteValue(is_hold, custom_path:=false, paired:=false, *) {
             is_hold, layer,
             TYPES.%vals["TypeDDL"]%, vals["ValInp"],
             TYPES.%vals["UpTypeDDL"]%, vals["UpValInp"],
-            vals["CBInstant"], vals["CBIrrevocable"],
+            vals["CBInstant"], root_return_ms,
             new_lp,
             (vals["CustomNK"] != CONF.MS_NK.v ? vals["CustomNK"] : false),
             vals["ChildBehaviorDDL"], vals["Shortname"],
@@ -1313,8 +1429,15 @@ WriteChord(chord:=false, *) {
         return
     }
 
-    if Integer(form["CBIrrevocable"].Value) && Integer(form["ChildBehaviorDDL"].Value) == 5
-        && MsgBox("You set irrevocable option with ignoring unassigned children.`n"
+    if !ValidateRootReturnMS(form["RootReturnMS"].Text, &root_return_ms) {
+        return
+    }
+    if form.root_level_assignment {
+        root_return_ms := 0
+    }
+
+    if root_return_ms == -1 && Integer(form["ChildBehaviorDDL"].Value) == 5
+        && MsgBox("You set 'never return to root' with ignoring unassigned children.`n"
             . "If you don't add an assignment for exiting from this level, "
             . "you'll be stuck there permanently.`n`n"
             . "Proceed with this setting?", "Confirmation", "YesNo Icon?") == "No" {
@@ -1374,7 +1497,7 @@ WriteChord(chord:=false, *) {
     nk := Integer(form["CustomNK"].Value || 0)
     json_chords[chord_txt][gui_mod_val] := [
         TYPES.%form["TypeDDL"].Text%, form["ValInp"].Text . "", TYPES.Disabled, "",
-        Integer(form["CBInstant"].Value), Integer(form["CBIrrevocable"].Value),
+        Integer(form["CBInstant"].Value), root_return_ms,
         (lp != CONF.MS_LP.v ? lp : false),
         (nk != CONF.MS_NK.v ? nk : false),
         Integer(form["ChildBehaviorDDL"].Value),
@@ -1422,6 +1545,12 @@ WriteGesture(as_base, entries, path, *) {
 
     if !ValidateFormActionValue(form["TypeDDL"].Text, form["ValInp"].Text) {
         return
+    }
+    if !ValidateRootReturnMS(form["RootReturnMS"].Text, &root_return_ms) {
+        return
+    }
+    if form.root_level_assignment {
+        root_return_ms := 0
     }
 
     try {
@@ -1507,7 +1636,7 @@ WriteGesture(as_base, entries, path, *) {
     }
     json_gestures[new_gesture_key][save_md] := [
         TYPES.%form["TypeDDL"].Text%, form["ValInp"].Text . "", TYPES.Disabled, "",
-        Integer(form["CBInstant"].Value), Integer(form["CBIrrevocable"].Value),
+        Integer(form["CBInstant"].Value), root_return_ms,
         0, (form["CustomNK"].Text != CONF.MS_NK.v ? Integer(form["CustomNK"].Text || 0) : 0),
         Integer(form["ChildBehaviorDDL"].Value), form["Shortname"].Text || form["ValInp"].Text,
         gest_str[2], form["WindowRule"].Text, child_maps[1], child_maps[2], child_maps[3],
@@ -1564,7 +1693,7 @@ GetGestureVecPool(vec_str, fallback) {
 
 SaveValue(
     is_hold, layer, down_type, down_val:="", up_type:=false, up_val:="",
-    is_instant:=false, is_irrevocable:=false, custom_lp_time:=false, custom_nk_time:=false,
+    is_instant:=false, root_return_ms:=0, custom_lp_time:=false, custom_nk_time:=false,
     child_behavior:=false, shortname:="", gest_opts:="", window_rule:="", custom_path:=false
 ) {
     ToggleFreeze(1)
@@ -1579,7 +1708,7 @@ SaveValue(
     json_node[3] := up_type || TYPES.Disabled
     json_node[4] := up_type == TYPES.Default || json_node[3] == TYPES.Disabled ? "" : up_val . ""
     json_node[5] := Integer(is_instant)
-    json_node[6] := Integer(is_irrevocable)
+    json_node[6] := Integer(root_return_ms)
     json_node[7] := Integer(custom_lp_time || 0)
     json_node[8] := Integer(custom_nk_time || 0)
     json_node[9] := child_behavior == false ? 4 : Integer(child_behavior)
